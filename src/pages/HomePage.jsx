@@ -85,26 +85,38 @@ export default function HomePage() {
                             {/* Content Overlay */}
                             <div className="absolute inset-0 p-12 lg:p-20 flex flex-col justify-end">
                                 <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                                    <span className="inline-block px-4 py-1.5 bg-primary/10 backdrop-blur-md text-primary rounded-full text-[10px] font-black uppercase tracking-[.3em] mb-6 border border-primary/20">
-                                        Colección Exclusiva 2026
-                                    </span>
+                                    {activeSliders[currentSlider]?.subtitle && (
+                                        <span className="inline-block px-4 py-1.5 bg-primary/10 backdrop-blur-md text-primary rounded-full text-[10px] font-black uppercase tracking-[.3em] mb-6 border border-primary/20">
+                                            {activeSliders[currentSlider].subtitle}
+                                        </span>
+                                    )}
                                     <h1 className="text-4xl md:text-5xl lg:text-8xl font-black text-white uppercase italic leading-[0.85] tracking-tighter mb-8 lg:mb-12">
-                                        La Luz que <br />
-                                        <span className="text-white/40 italic">Define Tu</span> <br className="md:hidden" /> <span className="text-primary italic">Estilo</span>
+                                        {activeSliders[currentSlider]?.title ? (
+                                            activeSliders[currentSlider].title.split('<br />').map((text, i) => (
+                                                <span key={i}>
+                                                    {i > 0 && <br />}
+                                                    {text}
+                                                </span>
+                                            ))
+                                        ) : (
+                                            <>La Luz que <br /><span className="text-white/40 italic">Define Tu</span> <br className="md:hidden" /> <span className="text-primary italic">Estilo</span></>
+                                        )}
                                     </h1>
                                     <div className="flex flex-wrap gap-4">
                                         <Link
-                                            to="/search"
+                                            to={activeSliders[currentSlider]?.link_url || '/search'}
                                             className="px-8 lg:px-12 py-4 lg:py-6 bg-white text-brand-carbon rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30"
                                         >
-                                            Ver Boutique
+                                            {activeSliders[currentSlider]?.button_text || 'Ver Boutique'}
                                         </Link>
-                                        <Link
-                                            to="/proyectos"
-                                            className="px-8 lg:px-12 py-4 lg:py-6 glass text-white rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-white/10 transition-all border border-white/20"
-                                        >
-                                            Proyectos
-                                        </Link>
+                                        {activeSliders[currentSlider]?.secondary_button_text && (
+                                            <Link
+                                                to={activeSliders[currentSlider]?.secondary_button_link || '#'}
+                                                className="px-8 lg:px-12 py-4 lg:py-6 glass text-white rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-white/10 transition-all border border-white/20"
+                                            >
+                                                {activeSliders[currentSlider].secondary_button_text}
+                                            </Link>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -149,7 +161,7 @@ export default function HomePage() {
                                 <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                 <div className="absolute top-8 left-8">
                                     <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-widest rounded-lg border border-white/10">
-                                        New Arrival
+                                        {activeSideBanner.title || activeSideBanner.subtitle || 'New Arrival'}
                                     </span>
                                 </div>
                             </a>

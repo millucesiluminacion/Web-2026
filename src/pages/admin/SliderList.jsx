@@ -16,6 +16,10 @@ export default function SliderList() {
         image_url: '',
         link_url: '',
         title: '',
+        subtitle: '',
+        button_text: 'Ver Más',
+        secondary_button_text: '',
+        secondary_button_link: '',
         order_index: 0,
         is_active: true,
         type: 'main_slider'
@@ -56,6 +60,10 @@ export default function SliderList() {
             image_url: slider.image_url,
             link_url: slider.link_url || '',
             title: slider.title || '',
+            subtitle: slider.subtitle || '',
+            button_text: slider.button_text || 'Ver Más',
+            secondary_button_text: slider.secondary_button_text || '',
+            secondary_button_link: slider.secondary_button_link || '',
             order_index: slider.order_index || 0,
             is_active: slider.is_active,
             type: slider.type || 'main_slider'
@@ -69,6 +77,10 @@ export default function SliderList() {
             image_url: '',
             link_url: '',
             title: '',
+            subtitle: '',
+            button_text: 'Ver Más',
+            secondary_button_text: '',
+            secondary_button_link: '',
             order_index: sliders.length,
             is_active: true,
             type: 'main_slider'
@@ -262,15 +274,72 @@ export default function SliderList() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="col-span-2">
-                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Título (Referencia Interna)</label>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Título Principal (H1)</label>
                                     <input
                                         required
                                         type="text"
                                         className="w-full border rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-blue-500 focus:outline-none font-bold text-sm"
-                                        placeholder="Ej: Campaña Invierno 2024"
+                                        placeholder="Ej: La Luz que Define Tu Estilo"
                                         value={formData.title}
                                         onChange={e => setFormData({ ...formData, title: e.target.value })}
                                     />
+                                </div>
+
+                                <div className="col-span-2">
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Subtítulo (Etiqueta superior)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full border rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-blue-500 focus:outline-none font-bold text-sm"
+                                        placeholder="Ej: Colección Exclusiva 2026"
+                                        value={formData.subtitle}
+                                        onChange={e => setFormData({ ...formData, subtitle: e.target.value })}
+                                    />
+                                </div>
+
+                                <div className="col-span-2 grid grid-cols-2 gap-4 border-t pt-4 mt-2">
+                                    <div className="col-span-2">
+                                        <p className="text-[10px] font-black text-primary uppercase tracking-widest mb-4">Configuración de Botones</p>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Texto Botón 1 (Principal)</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-bold"
+                                            placeholder="Ver Boutique"
+                                            value={formData.button_text}
+                                            onChange={e => setFormData({ ...formData, button_text: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Enlace Botón 1</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-mono"
+                                            placeholder="/search"
+                                            value={formData.link_url}
+                                            onChange={e => setFormData({ ...formData, link_url: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Texto Botón 2 (Opcional)</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-bold"
+                                            placeholder="Proyectos"
+                                            value={formData.secondary_button_text}
+                                            onChange={e => setFormData({ ...formData, secondary_button_text: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Enlace Botón 2</label>
+                                        <input
+                                            type="text"
+                                            className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-mono"
+                                            placeholder="/proyectos"
+                                            value={formData.secondary_button_link}
+                                            onChange={e => setFormData({ ...formData, secondary_button_link: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="col-span-2">
