@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings } from 'lucide-react';
+import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import Papa from 'papaparse';
 
 export default function UsersAdmin() {
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [isUpdating, setIsUpdating] = useState(null);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [editingUser, setEditingUser] = useState(null);
+    const [formData, setFormData] = useState({
+        full_name: '',
+        email: '',
+        role: 'editor'
+    });
 
     useEffect(() => {
         fetchUsers();
@@ -46,6 +55,119 @@ export default function UsersAdmin() {
         }
     }
 
+    function openCreate() {
+        setEditingUser(null);
+        setFormData({ full_name: '', email: '', role: 'editor' });
+        setIsModalOpen(true);
+    }
+
+    function openEdit(user) {
+        setEditingUser(user);
+        setFormData({
+            full_name: user.full_name || '',
+            email: user.email || '',
+            role: user.role || 'editor'
+        });
+        setIsModalOpen(true);
+    }
+
+    async function handleSaveUser(e) {
+        e.preventDefault();
+        try {
+            setIsSaving(true);
+            if (editingUser) {
+                // Update
+                const { error } = await supabase
+                    .from('profiles')
+                    .update(formData)
+                    .eq('id', editingUser.id);
+                if (error) throw error;
+            } else {
+                // For "Creating" a user without auth (not recommended but for CRM/team list purposes)
+                // In a real app, this should probably be an invitation
+                alert('La creación de usuarios requiere que se registren primero para obtener un ID de seguridad. Por ahora puedes editar los perfiles existentes.');
+                return;
+            }
+            fetchUsers();
+            setIsModalOpen(false);
+        } catch (error) {
+            alert('Error al guardar: ' + error.message);
+        } finally {
+            setIsSaving(false);
+        }
+    }
+
+    async function sendPasswordReset(email) {
+        if (!confirm(`¿Enviar email de restablecimiento de contraseña a ${email}?`)) return;
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: `${window.location.origin}/reset-password`,
+            });
+            if (error) throw error;
+            alert('Email de restablecimiento enviado correctamente.');
+        } catch (error) {
+            alert('Error al enviar email: ' + error.message);
+        }
+    }
+
+    const handleExport = () => {
+        const csv = Papa.unparse(users.map(u => ({
+            ID: u.id,
+            Nombre: u.full_name,
+            Email: u.email,
+            Rol: u.role,
+            Creado: u.created_at
+        })));
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `equipo_mil_luces_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+    };
+
+    const handleImport = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+                const importedData = results.data;
+                let count = 0;
+                let errors = 0;
+
+                for (const row of importedData) {
+                    const id = row.ID;
+                    if (!id) continue;
+
+                    const updates = {};
+                    if (row.Nombre) updates.full_name = row.Nombre;
+                    if (row.Rol) updates.role = row.Rol;
+
+                    if (Object.keys(updates).length > 0) {
+                        const { error } = await supabase.from('profiles').update(updates).eq('id', id);
+                        if (error) errors++;
+                        else count++;
+                    }
+                }
+                alert(`Importación finalizada: ${count} actualizados, ${errors} errores.`);
+                fetchUsers();
+            }
+        });
+    };
+
+    async function deleteUser(id) {
+        if (!confirm('¿Estás seguro de que quieres eliminar este perfil de administrador? (Nota: Esto no elimina la cuenta de Auth, solo el perfil)')) return;
+        try {
+            const { error } = await supabase.from('profiles').delete().eq('id', id);
+            if (error) throw error;
+            setUsers(users.filter(u => u.id !== id));
+        } catch (error) {
+            alert('Error al eliminar: ' + error.message);
+        }
+    }
+
     const filteredUsers = users.filter(u =>
         u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.email?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -66,11 +188,30 @@ export default function UsersAdmin() {
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block font-outfit">Access Control</span>
                     <h1 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
-                        Gestión de <span className="text-primary/40">Usuarios</span>
+                        Gestión de <span className="text-primary/40">Equipo</span>
                     </h1>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-100 uppercase italic tracking-widest font-outfit flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-4">
+                    <button
+                        onClick={openCreate}
+                        className="flex items-center gap-3 bg-brand-carbon text-white px-8 py-4 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
+                    >
+                        <Plus className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform" />
+                        Registrar Miembro
+                    </button>
+                    <label className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-6 py-3 rounded-xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary transition-all cursor-pointer font-outfit">
+                        <Upload className="w-4 h-4 text-primary" />
+                        Importar CSV
+                        <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                    </label>
+                    <button
+                        onClick={handleExport}
+                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-6 py-3 rounded-xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary transition-all font-outfit"
+                    >
+                        <Download className="w-4 h-4 text-primary" />
+                        Exportar CSV
+                    </button>
+                    <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-3 rounded-xl border border-blue-100 uppercase italic tracking-widest font-outfit flex items-center gap-2 shadow-sm">
                         <UserCheck className="w-4 h-4" />
                         {users.length} Administradores
                     </div>
@@ -156,10 +297,28 @@ export default function UsersAdmin() {
                                             </div>
                                         </td>
                                         <td className="p-8 text-right">
-                                            <div className="flex items-center justify-end gap-3">
-                                                <span className="text-[9px] font-black text-emerald-500 uppercase italic tracking-widest bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100">
-                                                    Activo
-                                                </span>
+                                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={() => openEdit(user)}
+                                                    className="p-3 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
+                                                    title="Editar Datos"
+                                                >
+                                                    <Edit2 className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => sendPasswordReset(user.email)}
+                                                    className="p-3 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                                                    title="Resetear Contraseña"
+                                                >
+                                                    <Key className="w-4 h-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => deleteUser(user.id)}
+                                                    className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                                    title="Eliminar Perfil"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
                                             </div>
                                         </td>
                                     </tr>
@@ -181,36 +340,90 @@ export default function UsersAdmin() {
             </div>
 
             {/* Permissions Widget */}
-            <div className="mt-12 bg-neutral-900 rounded-[2.5rem] p-12 flex flex-col lg:flex-row items-center justify-between gap-12 text-white relative overflow-hidden group">
-                <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-1000"></div>
+            {/* Modal de Edición */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-12">
+                    <div className="absolute inset-0 bg-brand-carbon/40 backdrop-blur-md" onClick={() => setIsModalOpen(false)}></div>
+                    <div className="relative bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                        <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                            <div>
+                                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-brand-carbon font-outfit">
+                                    {editingUser ? 'Editar' : 'Registrar'} <span className="text-primary/40">Miembro</span>
+                                </h3>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1 font-outfit">
+                                    {editingUser ? 'Actualizar credenciales de acceso' : 'Añadir nuevo integrante al sistema'}
+                                </p>
+                            </div>
+                            <button onClick={() => setIsModalOpen(false)} className="p-4 hover:bg-gray-100 rounded-full transition-all">
+                                <X className="w-6 h-6 text-gray-400" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveUser} className="p-10 space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre Completo</label>
+                                    <div className="relative">
+                                        <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                        <input
+                                            required
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.full_name}
+                                            onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+                                            placeholder="Ej: Marc Pérez"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Email Corporativo</label>
+                                    <div className="relative">
+                                        <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                        <input
+                                            required
+                                            type="email"
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.email}
+                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                            placeholder="email@mil-luces.com"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
 
-                <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
-                    <div className="w-20 h-20 bg-white/10 rounded-[2rem] flex items-center justify-center text-primary shadow-luxury border border-white/5">
-                        <Settings className="w-10 h-10 animate-spin-slow" />
-                    </div>
-                    <div>
-                        <p className="text-lg font-black uppercase italic tracking-widest font-outfit text-white">Seguridad de Infraestructura</p>
-                        <p className="text-[11px] text-white/40 font-bold uppercase tracking-widest mt-2 leading-relaxed font-outfit max-w-2xl">
-                            Estás visualizando los privilegios de acceso basados en roles (RBAC). Cualquier cambio en esta sección impactará directamente en los permisos de visualización y edición dentro del panel administrativo.
-                        </p>
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nivel de Acceso</label>
+                                <div className="grid grid-cols-1 gap-3">
+                                    {[
+                                        { id: 'admin', label: 'Administrador Full', desc: 'Control total de la boutique' },
+                                        { id: 'manager', label: 'Gestor de Boutique', desc: 'Gestión de productos y stock' },
+                                        { id: 'editor', label: 'Editor de Contenido', desc: 'Solo edición visual y blog' }
+                                    ].map((role) => (
+                                        <button
+                                            key={role.id}
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, role: role.id })}
+                                            className={`flex flex-col p-4 rounded-2xl border-2 transition-all text-left ${formData.role === role.id ? 'border-primary bg-primary/5' : 'border-gray-50 bg-white hover:border-gray-100'
+                                                }`}
+                                        >
+                                            <span className="text-[10px] font-black uppercase italic tracking-widest">{role.label}</span>
+                                            <span className="text-[9px] font-bold text-gray-400 uppercase mt-1 tracking-tighter">{role.desc}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="pt-6">
+                                <button
+                                    disabled={isSaving}
+                                    className="w-full bg-brand-carbon text-white py-5 rounded-[1.5rem] font-black uppercase italic text-xs shadow-2xl hover:bg-primary transition-all flex items-center justify-center gap-3 font-outfit active:scale-95"
+                                >
+                                    {isSaving ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <Shield className="w-5 h-5 text-primary" />}
+                                    {editingUser ? 'Confirmar Privilegios' : 'Enviar Invitación'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
-
-                <div className="flex flex-wrap justify-center gap-6 relative z-10">
-                    <div className="bg-white/5 border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-purple-400"></div>
-                        <span className="text-[9px] font-black uppercase tracking-widest">Admin Control</span>
-                    </div>
-                    <div className="bg-white/5 border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-cyan-400"></div>
-                        <span className="text-[9px] font-black uppercase tracking-widest">Manager View</span>
-                    </div>
-                    <div className="bg-white/5 border border-white/10 px-6 py-4 rounded-2xl flex items-center gap-3">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
-                        <span className="text-[9px] font-black uppercase tracking-widest">Editor Access</span>
-                    </div>
-                </div>
-            </div>
+            )}
         </div>
     );
 }

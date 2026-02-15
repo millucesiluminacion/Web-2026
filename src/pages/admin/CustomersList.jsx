@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, User, Mail, Calendar, Trash2, Edit2, ShoppingBag, X, Star, Plus } from 'lucide-react';
+import { Search, Loader2, User, Mail, Calendar, Trash2, Edit2, ShoppingBag, X, Star, Plus, Download, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import Papa from 'papaparse';
 
 export default function CustomersList() {
     const [customers, setCustomers] = useState([]);
@@ -90,6 +91,65 @@ export default function CustomersList() {
             alert('Error al eliminar: ' + error.message);
         }
     }
+
+    const handleExport = () => {
+        const csv = Papa.unparse(customers.map(c => ({
+            ID: c.id,
+            Nombre: c.full_name,
+            Email: c.email,
+            Teléfono: c.phone || '',
+            Dirección: c.address || '',
+            Creado: c.created_at
+        })));
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `clientes_mil_luces_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+    };
+
+    const handleImport = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: async (results) => {
+                const importedData = results.data;
+                let created = 0;
+                let updated = 0;
+                let errors = 0;
+
+                for (const row of importedData) {
+                    const email = row.Email;
+                    if (!email) continue;
+
+                    const customerData = {
+                        full_name: row.Nombre || 'Sin Nombre',
+                        email: email,
+                        phone: row.Teléfono || '',
+                        address: row.Dirección || ''
+                    };
+
+                    const id = row.ID;
+                    if (id) {
+                        // Intentar actualizar por ID
+                        const { error } = await supabase.from('customers').update(customerData).eq('id', id);
+                        if (error) errors++;
+                        else updated++;
+                    } else {
+                        // Insertar nuevo
+                        const { error } = await supabase.from('customers').insert([customerData]);
+                        if (error) errors++;
+                        else created++;
+                    }
+                }
+                alert(`Importación finalizada: ${created} creados, ${updated} actualizados, ${errors} errores.`);
+                fetchCustomers();
+            }
+        });
+    };
 
     const filteredCustomers = customers.filter(c =>
         c.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -222,9 +282,20 @@ export default function CustomersList() {
                         </p>
                     </div>
                 </div>
-                <button className="px-10 py-4 bg-white text-black rounded-[1.2rem] font-black uppercase italic text-xs hover:bg-blue-400 hover:text-white transition-all shadow-xl shadow-black/50 font-outfit">
-                    Exportar Base (.CSV)
-                </button>
+                <div className="flex flex-wrap justify-center gap-6 relative z-10">
+                    <label className="px-8 py-4 bg-white/5 border border-white/10 text-white rounded-[1.2rem] font-black uppercase italic text-xs hover:bg-primary hover:border-primary transition-all cursor-pointer font-outfit shadow-xl flex items-center gap-3">
+                        <Upload className="w-4 h-4" />
+                        Importar (.CSV)
+                        <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
+                    </label>
+                    <button
+                        onClick={handleExport}
+                        className="px-10 py-4 bg-white text-black rounded-[1.2rem] font-black uppercase italic text-xs hover:bg-blue-400 hover:text-white transition-all shadow-xl shadow-black/50 font-outfit flex items-center gap-3"
+                    >
+                        <Download className="w-4 h-4" />
+                        Exportar Base (.CSV)
+                    </button>
+                </div>
             </div>
 
             {/* Modal de Cliente */}
