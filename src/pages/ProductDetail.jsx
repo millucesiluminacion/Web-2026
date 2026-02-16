@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, ChevronRight, Zap, Package, BadgePercent } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 
 const COLOR_MAP = {
@@ -21,6 +22,7 @@ const COLOR_MAP = {
 export default function ProductDetail() {
     const { id } = useParams();
     const { addToCart } = useCart();
+    const { isPro, discountPercent: proDiscountPercent } = useAuth();
     const [qty, setQty] = useState(1);
 
     // State management
@@ -161,9 +163,14 @@ export default function ProductDetail() {
 
     // Compute discount percentage
     const originalPrice = parseFloat(displayProduct?.price || parentProduct?.price || 0);
-    const discountPrice = parseFloat(displayProduct?.discount_price || parentProduct?.discount_price || 0);
-    const hasDiscount = discountPrice > 0 && discountPrice < originalPrice;
-    const discountPercent = hasDiscount ? Math.round(((originalPrice - discountPrice) / originalPrice) * 100) : 0;
+    const dbDiscountPrice = parseFloat(displayProduct?.discount_price || parentProduct?.discount_price || 0);
+    const hasDbDiscount = dbDiscountPrice > 0 && dbDiscountPrice < originalPrice;
+
+    // Pro logic
+    const proPrice = isPro ? originalPrice * (1 - proDiscountPercent / 100) : originalPrice;
+    const isShowingProDiscount = isPro && proDiscountPercent > 0;
+    const finalPrice = isPro ? proPrice : (hasDbDiscount ? dbDiscountPrice : originalPrice);
+    const displayDiscountPercent = isShowingProDiscount ? proDiscountPercent : (hasDbDiscount ? Math.round(((originalPrice - dbDiscountPrice) / originalPrice) * 100) : 0);
 
     // Gallery images: if product has extra_images array, use it; otherwise single image
     const productImages = displayProduct?.extra_images && Array.isArray(displayProduct.extra_images) && displayProduct.extra_images.length > 0
@@ -223,17 +230,17 @@ export default function ProductDetail() {
                         {/* Main Image */}
                         <div className="bg-white rounded-[3rem] p-12 lg:p-20 shadow-luxury border border-gray-100/50 flex items-center justify-center min-h-[500px] lg:h-[700px] overflow-hidden group relative">
                             {/* Discount Badge */}
-                            {hasDiscount && (
-                                <div className="absolute top-8 left-8 z-10 bg-red-500 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg">
+                            {(isShowingProDiscount || hasDbDiscount) && (
+                                <div className={`absolute top-8 left-8 z-10 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
                                     <BadgePercent className="w-4 h-4" />
-                                    <span className="font-black text-sm italic">-{discountPercent}%</span>
+                                    <span className="font-black text-sm italic">-{displayDiscountPercent}% {isShowingProDiscount ? 'PRO' : ''}</span>
                                 </div>
                             )}
 
                             {/* Stock Badge */}
                             <div className={`absolute top-8 right-8 z-10 px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2 shadow-sm ${parseInt(displayProduct?.stock) > 0
-                                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                                    : 'bg-amber-50 text-amber-600 border border-amber-200'
+                                ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                                : 'bg-amber-50 text-amber-600 border border-amber-200'
                                 }`}>
                                 <Package className="w-3.5 h-3.5" />
                                 {parseInt(displayProduct?.stock) > 0 ? 'En Stock' : 'Bajo Pedido'}
@@ -258,8 +265,8 @@ export default function ProductDetail() {
                                         key={idx}
                                         onClick={() => setActiveImageIndex(idx)}
                                         className={`w-20 h-20 rounded-2xl border-2 overflow-hidden transition-all bg-white p-2 ${activeImageIndex === idx
-                                                ? 'border-brand-carbon shadow-lg scale-105'
-                                                : 'border-gray-100 hover:border-gray-300 opacity-60 hover:opacity-100'
+                                            ? 'border-brand-carbon shadow-lg scale-105'
+                                            : 'border-gray-100 hover:border-gray-300 opacity-60 hover:opacity-100'
                                             }`}
                                     >
                                         <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-contain" />
@@ -292,22 +299,24 @@ export default function ProductDetail() {
                             </div>
 
                             <div className="mb-10">
-                                <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2 leading-none">Inversión Exclusiva</span>
-                                {hasDiscount ? (
+                                <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2 leading-none">
+                                    {isShowingProDiscount ? 'Inversión Profesional' : 'Inversión Exclusiva'}
+                                </span>
+                                {(isShowingProDiscount || hasDbDiscount) ? (
                                     <div>
                                         <div className="flex items-baseline gap-3 mb-1">
                                             <span className="text-2xl font-bold text-gray-300 line-through italic tracking-tighter">
                                                 {originalPrice.toFixed(2)}€
                                             </span>
-                                            <span className="px-2 py-0.5 bg-red-500 text-white text-[10px] font-black rounded-lg uppercase italic">
-                                                Ahorra {discountPercent}%
+                                            <span className={`px-2 py-0.5 text-white text-[10px] font-black rounded-lg uppercase italic ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
+                                                {isShowingProDiscount ? `Pro -${proDiscountPercent}%` : `Ahorra ${displayDiscountPercent}%`}
                                             </span>
                                         </div>
                                         <div className="flex items-baseline gap-2">
-                                            <span className="text-5xl font-black text-red-600 italic tracking-tighter">
-                                                {discountPrice.toFixed(2)}
+                                            <span className={`text-5xl font-black italic tracking-tighter ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                                {finalPrice.toFixed(2)}
                                             </span>
-                                            <span className="text-2xl font-black text-red-600 italic tracking-tighter">€</span>
+                                            <span className={`text-2xl font-black italic tracking-tighter ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>€</span>
                                             <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">+ IVA Incluido</span>
                                         </div>
                                     </div>

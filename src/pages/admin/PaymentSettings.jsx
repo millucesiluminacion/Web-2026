@@ -119,14 +119,14 @@ export default function PaymentSettings() {
     return (
         <div className="max-w-4xl pb-20">
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+            <div className="flex justify-between items-end mb-10 font-outfit">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900 uppercase italic tracking-tighter">Conexión de Pagos</h1>
-                    <p className="text-[10px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Vincula tus cuentas para recibir cobros reales</p>
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Conexión de Pagos</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-3">Pasarelas y Cobros en Vivo</p>
                 </div>
                 <div className="flex items-center gap-3">
                     {message.text && message.type === 'success' && (
-                        <div className="bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-100 flex items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                        <div className="bg-green-50 text-green-700 h-14 px-6 rounded-2xl border border-green-100 flex items-center gap-3 animate-in fade-in slide-in-from-right-4 shadow-sm">
                             <CheckCircle className="w-4 h-4" />
                             <span className="text-[10px] font-black uppercase italic">{message.text}</span>
                         </div>
@@ -134,9 +134,9 @@ export default function PaymentSettings() {
                     <button
                         onClick={handleSave}
                         disabled={saving}
-                        className="bg-neutral-900 text-white px-8 py-3 rounded-2xl font-black uppercase italic text-xs shadow-xl hover:bg-black transition-all disabled:opacity-50 flex items-center gap-2"
+                        className="bg-brand-carbon text-white h-14 px-8 rounded-2xl font-black uppercase italic text-[10px] shadow-xl shadow-brand-carbon/10 hover:bg-primary transition-all disabled:opacity-50 flex items-center gap-3 font-outfit"
                     >
-                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Save className="w-4 h-4 text-primary" />}
                         Guardar Cambios
                     </button>
                 </div>

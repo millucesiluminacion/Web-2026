@@ -461,34 +461,40 @@ export default function ProductList() {
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-black text-gray-800 uppercase italic">Gestión de Productos</h1>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 font-outfit">
+                <div>
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Gestión de Productos</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-3">Inventario Maestro v2.6</p>
+                </div>
 
-                <div className="flex gap-2">
-                    <label className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 transition-colors font-bold uppercase italic shadow-sm cursor-pointer text-xs">
-                        <Upload className="w-4 h-4" /> Importar CSV
+                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                    <label className="bg-white border border-gray-200 text-gray-600 h-14 px-6 rounded-2xl flex items-center gap-3 hover:border-primary transition-all font-black uppercase italic shadow-sm cursor-pointer text-[10px] font-outfit">
+                        <Upload className="w-4 h-4 text-primary" /> Importar CSV
                         <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
                     </label>
-                    <button onClick={handleExport} className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-gray-700 transition-colors font-bold uppercase italic shadow-sm text-xs">
-                        <Download className="w-4 h-4" /> Exportar CSV
+                    <button
+                        onClick={handleExport}
+                        className="bg-white border border-gray-200 text-gray-600 h-14 px-6 rounded-2xl flex items-center gap-3 hover:border-primary transition-all font-black uppercase italic shadow-sm text-[10px] font-outfit"
+                    >
+                        <Download className="w-4 h-4 text-primary" /> Exportar CSV
                     </button>
                     <button
                         onClick={openCreate}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors font-bold uppercase italic shadow-sm text-xs"
+                        className="bg-brand-carbon text-white h-14 px-8 rounded-2xl flex items-center gap-3 hover:bg-primary transition-all font-black uppercase italic text-[10px] shadow-xl shadow-brand-carbon/10 group font-outfit"
                     >
-                        <Plus className="w-4 h-4" /> Nuevo Producto
+                        <Plus className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform" /> Nuevo Producto
                     </button>
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm overflow-hidden border border-gray-100">
-                <div className="p-4 border-b border-gray-100">
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-3 top-2.5 text-gray-400 w-4 h-4" />
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden mb-12">
+                <div className="p-6 border-b border-gray-50 flex items-center gap-4 bg-gray-50/30">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <input
                             type="text"
-                            placeholder="Buscar por nombre, SKU..."
-                            className="pl-10 w-full border border-gray-200 rounded-lg py-2 px-4 focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm"
+                            placeholder="Buscar por nombre, referencia o SKU..."
+                            className="w-full h-14 pl-14 pr-6 bg-white border-none rounded-2xl text-[11px] font-bold tracking-tight focus:ring-2 focus:ring-primary/20 transition-all font-outfit shadow-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
@@ -502,70 +508,73 @@ export default function ProductList() {
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left text-sm text-gray-600">
-                            <thead className="bg-gray-50 uppercase text-[10px] font-black text-gray-500 border-b">
+                        <table className="w-full text-left font-outfit">
+                            <thead className="bg-gray-50/50 uppercase text-[9px] font-black text-gray-400 border-b border-gray-100 tracking-[0.2em]">
                                 <tr>
-                                    <th className="p-4">Producto</th>
-                                    <th className="p-4">Atributos / Var</th>
-                                    <th className="p-4">Precio / Stock</th>
-                                    <th className="p-4 text-right">Acciones</th>
+                                    <th className="p-6">Producto Maestro</th>
+                                    <th className="p-6">Inteligencia / Categorías</th>
+                                    <th className="p-6">Rendimiento (€)</th>
+                                    <th className="p-6 text-right">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-100">
+                            <tbody className="divide-y divide-gray-50">
                                 {filteredProducts.length > 0 ? filteredProducts.map(product => (
-                                    <tr key={product.id} className={`hover:bg-gray-50 transition-colors group ${product.parent_id ? 'bg-gray-50/50' : ''}`}>
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-3">
-                                                {product.parent_id && <div className="w-4 border-l-2 border-b-2 border-gray-300 h-4 rounded-bl-lg ml-2"></div>}
-                                                <div className="w-12 h-12 bg-white rounded-lg border border-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center p-1">
+                                    <tr key={product.id} className={`hover:bg-gray-50/70 transition-all duration-300 group ${product.parent_id ? 'bg-gray-50/20' : ''}`}>
+                                        <td className="p-6">
+                                            <div className="flex items-center gap-5">
+                                                {product.parent_id && <div className="w-4 border-l-2 border-b-2 border-gray-200 h-4 rounded-bl-lg ml-2 opacity-50"></div>}
+                                                <div className="w-16 h-16 bg-white rounded-2xl border border-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center p-2 group-hover:shadow-lg group-hover:shadow-gray-100 transition-all duration-500">
                                                     {product.image_url ? (
-                                                        <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
+                                                        <img src={product.image_url} alt={product.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-700" />
                                                     ) : (
-                                                        <Package className="w-5 h-5 text-gray-100" />
+                                                        <Package className="w-6 h-6 text-gray-100" />
                                                     )}
                                                 </div>
                                                 <div>
-                                                    <p className={`font-bold text-gray-900 uppercase text-xs line-clamp-1 ${product.parent_id ? 'text-gray-600' : ''}`}>
+                                                    <p className={`font-black text-brand-carbon uppercase italic text-sm tracking-tight leading-none ${product.parent_id ? 'text-gray-500' : ''}`}>
                                                         {product.parent_id ? `↳ ${product.name}` : product.name}
                                                     </p>
-                                                    <p className="text-[10px] text-gray-400 font-mono">{product.reference || 'SIN REF'}</p>
+                                                    <div className="flex items-center gap-2 mt-2">
+                                                        <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{product.reference || 'SIN REF'}</span>
+                                                        {product.parent_id && <span className="text-[7px] font-black bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-md border border-blue-100 uppercase tracking-widest">Variante</span>}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="space-y-1">
-                                                {/* Mostrar Atributos si es variante */}
+                                        <td className="p-6">
+                                            <div className="space-y-2">
                                                 {product.attributes && Object.keys(product.attributes).length > 0 && (
-                                                    <div className="flex flex-wrap gap-1">
+                                                    <div className="flex flex-wrap gap-1.5">
                                                         {Object.entries(product.attributes).map(([k, v]) => {
                                                             const valArray = Array.isArray(v) ? v : [v];
                                                             return (
-                                                                <span key={k} className="px-1.5 py-0.5 bg-purple-50 text-purple-600 text-[9px] font-bold uppercase rounded border border-purple-100">
-                                                                    {k}: {valArray.length > 2 ? `${valArray.slice(0, 2).join(', ')}... (+${valArray.length - 2})` : valArray.join(', ')}
+                                                                <span key={k} className="px-2 py-1 bg-white border border-gray-100 text-gray-500 text-[8px] font-black uppercase rounded-lg shadow-sm">
+                                                                    <span className="text-primary/50 mr-1">{k}:</span> {valArray.length > 2 ? `${valArray.slice(0, 2).join(', ')}... (+${valArray.length - 2})` : valArray.join(', ')}
                                                                 </span>
                                                             );
                                                         })}
                                                     </div>
                                                 )}
-                                                {!product.parent_id && !product.attributes && (
-                                                    <div className="flex items-center gap-1.5 text-[10px] uppercase font-bold text-blue-600">
-                                                        <Layers className="w-3 h-3" /> {product.categories?.name || 'Varios'}
+                                                {!product.parent_id && (
+                                                    <div className="flex items-center gap-2 text-[9px] uppercase font-black text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 w-fit shadow-sm">
+                                                        <Layers className="w-3.5 h-3.5" /> {product.categories?.name || 'Maestro'}
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="font-black text-gray-900">{parseFloat(product.price).toFixed(2)}€</div>
-                                            <div className={`text-[10px] font-bold uppercase ${product.stock > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                                                {product.stock} en stock
+                                        <td className="p-6">
+                                            <div className="text-lg font-black text-brand-carbon italic leading-none mb-1.5">{parseFloat(product.price).toFixed(2)}€</div>
+                                            <div className={`flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest ${product.stock > 0 ? 'text-emerald-500' : 'text-red-500 animate-pulse'}`}>
+                                                <span className={`w-1 h-1 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                                                {product.stock} Unidades
                                             </div>
                                         </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => openEdit(product)} className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
+                                        <td className="p-6 text-right">
+                                            <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
+                                                <button onClick={() => openEdit(product)} className="w-10 h-10 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary transition-all shadow-sm">
                                                     <Edit2 className="w-4 h-4" />
                                                 </button>
-                                                <button onClick={() => deleteProduct(product.id)} className="p-2 text-gray-400 hover:text-red-600 transition-colors">
+                                                <button onClick={() => deleteProduct(product.id)} className="w-10 h-10 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-400 hover:text-red-500 hover:border-red-100 transition-all shadow-sm">
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
                                             </div>
@@ -586,33 +595,33 @@ export default function ProductList() {
 
             {/* Modal de Producto */}
             {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl my-8 overflow-hidden h-[90vh] flex flex-col">
-                        <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-shrink-0">
+                <div className="fixed inset-0 bg-brand-carbon/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto font-outfit">
+                    <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-5xl my-8 overflow-hidden h-[90vh] flex flex-col border border-white/20">
+                        <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-white flex-shrink-0">
                             <div>
-                                <h2 className="font-black uppercase italic text-gray-800 tracking-wider">
-                                    {editingId ? 'Editar Producto' : 'Nuevo Producto'}
+                                <h2 className="text-xl font-black uppercase italic text-brand-carbon tracking-tighter">
+                                    {editingId ? 'Evolución de Producto' : 'Nuevo Activo Maestro'}
                                 </h2>
-                                {formData.parent_id && <span className="text-xs text-blue-500 font-bold uppercase">Es Variante</span>}
+                                {formData.parent_id && <span className="text-[10px] text-blue-500 font-black uppercase tracking-widest mt-1 block">Variante de Inteligencia</span>}
                             </div>
 
-                            <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
-                                <X className="w-5 h-5" />
+                            <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
+                                <X className="w-6 h-6" />
                             </button>
                         </div>
 
-                        {/* Tabs */}
+                        {/* Tabs Premium */}
                         {!formData.parent_id && editingId && (
-                            <div className="flex border-b border-gray-100 px-4 bg-gray-50 gap-4 flex-shrink-0">
+                            <div className="flex border-b border-gray-100 px-8 bg-gray-50/30 gap-8 flex-shrink-0">
                                 <button
                                     onClick={() => setActiveTab('general')}
-                                    className={`py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === 'general' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    className={`py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'general' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                                 >
-                                    Datos Generales
+                                    Datos Maestros
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('variants')}
-                                    className={`py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === 'variants' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    className={`py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'variants' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                                 >
                                     Variantes ({variants.length})
                                 </button>
@@ -857,9 +866,10 @@ export default function ProductList() {
                                             <button
                                                 disabled={isSaving}
                                                 type="submit"
-                                                className="w-full bg-blue-600 text-white font-black py-4 rounded-lg hover:bg-blue-700 transition-colors uppercase italic tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                                                className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl shadow-brand-carbon/10 disabled:opacity-50 mt-10 font-outfit"
                                             >
-                                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : editingId ? 'Guardar Cambios' : 'Crear Producto'}
+                                                {isSaving ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <Save className="w-4 h-4 text-primary" />}
+                                                Guardar Máster Maestro
                                             </button>
                                         </div>
                                     </div>
@@ -950,9 +960,9 @@ export default function ProductList() {
                                         </div>
 
                                         <button
-                                            type="button"
                                             disabled={isSaving}
                                             onClick={async () => {
+                                                const name = formData.name;
                                                 const priceEl = document.getElementById('new-variant-price');
                                                 const stockEl = document.getElementById('new-variant-stock');
                                                 const refEl = document.getElementById('new-variant-ref');
@@ -960,33 +970,18 @@ export default function ProductList() {
                                                 const attrKeyEl = document.getElementById('new-variant-attr-key');
                                                 const attrValEl = document.getElementById('new-variant-attr-val');
 
-                                                const price = parseFloat(priceEl?.value);
-                                                const stock = parseInt(stockEl?.value || '0');
+                                                if (!priceEl?.value || !refEl?.value) return alert('Precio y Referencia son obligatorios');
 
-                                                if (!price || isNaN(price)) {
-                                                    alert('El precio es obligatorio');
-                                                    return;
-                                                }
-
-                                                // Build attributes from current key/val
-                                                const attrs = {};
-                                                if (attrKeyEl?.value && attrValEl?.value) {
-                                                    attrs[attrKeyEl.value.trim()] = attrValEl.value.trim();
-                                                }
-
-                                                const parent = products.find(p => p.id === editingId);
                                                 const payload = {
-                                                    name: parent.name,
-                                                    reference: refEl?.value || `${parent.reference || 'PROD'}-V${variants.length + 1}`,
-                                                    price: price,
-                                                    stock: stock,
-                                                    discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
-                                                    category_id: parent.category_id,
-                                                    brand_id: parent.brand_id,
-                                                    image_url: parent.image_url,
-                                                    description: '',
+                                                    name: name,
                                                     parent_id: editingId,
-                                                    attributes: attrs
+                                                    price: parseFloat(priceEl.value),
+                                                    stock: parseInt(stockEl?.value || 0),
+                                                    reference: refEl.value,
+                                                    discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
+                                                    image_url: formData.image_url, // inheriting parent image by default
+                                                    category_id: formData.category_id,
+                                                    attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {}
                                                 };
 
                                                 try {
@@ -1008,10 +1003,10 @@ export default function ProductList() {
                                                     setIsSaving(false);
                                                 }
                                             }}
-                                            className="w-full bg-blue-600 text-white text-xs font-black uppercase py-2.5 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
+                                            className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl shadow-brand-carbon/10 disabled:opacity-50 mt-4 font-outfit"
                                         >
-                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                                            Crear Variante
+                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Plus className="w-4 h-4 text-primary" />}
+                                            Crear Variante Inteligente
                                         </button>
                                     </div>
 

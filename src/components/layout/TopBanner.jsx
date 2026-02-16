@@ -9,12 +9,12 @@ export function TopBanner() {
                     <div className="flex items-center gap-6">
                         <span className="flex items-center gap-2">
                             <div className="w-1.5 h-1.5 bg-secondary rounded-full animate-pulse"></div>
-                            Envío Boutique +100€
+                            Envío Gratuito en pedidos de +100€
                         </span>
                         <span className="opacity-30">|</span>
                         <span>Asesoramiento Experto</span>
                         <span className="opacity-30">|</span>
-                        <span>2 Años de Garantía Real</span>
+                        <span>2 Años de Garantía</span>
                     </div>
                     <div className="hidden xl:flex items-center gap-6">
                         <Link to="/register-pro" className="hover:text-secondary-light transition-colors group flex items-center gap-2">

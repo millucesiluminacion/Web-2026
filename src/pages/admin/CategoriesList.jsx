@@ -111,8 +111,11 @@ export default function CategoriesList() {
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-black text-gray-800 uppercase italic">Categorías</h1>
+            <div className="flex justify-between items-end mb-10 font-outfit">
+                <div>
+                    <h1 className="text-2xl lg:text-3xl font-outfit font-black text-brand-carbon uppercase italic tracking-tighter">Categorías</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-3">Taxonomía de Inteligencia</p>
+                </div>
                 <button
                     onClick={openCreate}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors font-bold uppercase italic shadow-sm"

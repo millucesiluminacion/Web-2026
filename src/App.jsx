@@ -29,45 +29,50 @@ import Checkout from './pages/Checkout';
 import PaymentSettings from './pages/admin/PaymentSettings';
 import UsersAdmin from './pages/admin/UsersAdmin';
 
+import { AuthProvider } from './context/AuthContext';
+
 function App() {
   return (
-    <CartProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<MainLayout />}>
-            <Route index element={<HomePage />} />
-            <Route path="search" element={<ProductListing />} />
-            <Route path="product/:id" element={<ProductDetail />} />
-            <Route path="cart" element={<Cart />} />
-            <Route path="checkout" element={<Checkout />} />
-            <Route path="login" element={<LoginPage />} />
-            <Route path="register" element={<RegisterPage />} />
-            <Route path="decoracion" element={<DecoracionPage />} />
-            <Route path="ofertas" element={<OfertasPage />} />
-            <Route path="blog" element={<BlogPage />} />
-            <Route path="proyectos" element={<ProyectosPage />} />
-          </Route>
+    <AuthProvider>
+      <CartProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<MainLayout />}>
+              <Route index element={<HomePage />} />
+              <Route path="search" element={<ProductListing />} />
+              <Route path="product/:id" element={<ProductDetail />} />
+              <Route path="cart" element={<Cart />} />
+              <Route path="checkout" element={<Checkout />} />
+              <Route path="login" element={<LoginPage />} />
+              <Route path="register" element={<RegisterPage />} />
+              <Route path="register-pro" element={<RegisterPage isPro={true} />} />
+              <Route path="decoracion" element={<DecoracionPage />} />
+              <Route path="ofertas" element={<OfertasPage />} />
+              <Route path="blog" element={<BlogPage />} />
+              <Route path="proyectos" element={<ProyectosPage />} />
+            </Route>
 
-          <Route path="/admin" element={<AdminLayout />}>
-            <Route index element={<Dashboard />} />
-            <Route path="products" element={<ProductList />} />
-            <Route path="categories" element={<CategoriesList />} />
-            <Route path="orders" element={<OrdersList />} />
-            <Route path="customers" element={<CustomersList />} />
-            <Route path="brands" element={<BrandsList />} />
-            <Route path="why-us" element={<WhyChooseUsAdmin />} />
-            <Route path="settings" element={<AccountSettings />} />
-            <Route path="offers" element={<OffersAdmin />} />
-            <Route path="rooms" element={<RoomsList />} />
-            <Route path="sliders" element={<SliderList />} />
-            <Route path="blog" element={<BlogAdmin />} />
-            <Route path="projects" element={<ProjectsAdmin />} />
-            <Route path="payments" element={<PaymentSettings />} />
-            <Route path="users" element={<UsersAdmin />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </CartProvider>
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="products" element={<ProductList />} />
+              <Route path="categories" element={<CategoriesList />} />
+              <Route path="orders" element={<OrdersList />} />
+              <Route path="customers" element={<CustomersList />} />
+              <Route path="brands" element={<BrandsList />} />
+              <Route path="why-us" element={<WhyChooseUsAdmin />} />
+              <Route path="settings" element={<AccountSettings />} />
+              <Route path="offers" element={<OffersAdmin />} />
+              <Route path="rooms" element={<RoomsList />} />
+              <Route path="sliders" element={<SliderList />} />
+              <Route path="blog" element={<BlogAdmin />} />
+              <Route path="projects" element={<ProjectsAdmin />} />
+              <Route path="payments" element={<PaymentSettings />} />
+              <Route path="users" element={<UsersAdmin />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </CartProvider>
+    </AuthProvider>
   );
 }
 

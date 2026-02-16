@@ -11,11 +11,15 @@ export default function CustomersList() {
     const [isSaving, setIsSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
+    const [activeTab, setActiveTab] = useState('all'); // all, persona, profesional
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
         phone: '',
-        address: ''
+        address: '',
+        user_type: 'persona',
+        company_name: '',
+        vat_id: ''
     });
 
     useEffect(() => {
@@ -41,7 +45,15 @@ export default function CustomersList() {
 
     function openCreate() {
         setEditingId(null);
-        setFormData({ full_name: '', email: '', phone: '', address: '' });
+        setFormData({
+            full_name: '',
+            email: '',
+            phone: '',
+            address: '',
+            user_type: 'persona',
+            company_name: '',
+            vat_id: ''
+        });
         setIsModalOpen(true);
     }
 
@@ -51,7 +63,10 @@ export default function CustomersList() {
             full_name: customer.full_name,
             email: customer.email,
             phone: customer.phone || '',
-            address: customer.address || ''
+            address: customer.address || '',
+            user_type: customer.user_type || 'persona',
+            company_name: customer.company_name || '',
+            vat_id: customer.vat_id || ''
         });
         setIsModalOpen(true);
     }
@@ -151,23 +166,36 @@ export default function CustomersList() {
         });
     };
 
-    const filteredCustomers = customers.filter(c =>
-        c.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredCustomers = customers.filter(c => {
+        const matchesSearch =
+            c.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.email?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesTab =
+            activeTab === 'all' ||
+            (c.user_type || 'persona') === activeTab;
+
+        return matchesSearch && matchesTab;
+    });
+
+    const customerCounts = {
+        all: customers.length,
+        persona: customers.filter(c => (c.user_type || 'persona') === 'persona').length,
+        profesional: customers.filter(c => c.user_type === 'profesional').length
+    };
 
     return (
         <div className="pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block font-outfit">Customer Relations</span>
-                    <h1 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
                         Base de <span className="text-primary/40">Clientes</span>
                     </h1>
                 </div>
                 <button
                     onClick={openCreate}
-                    className="flex items-center gap-3 bg-brand-carbon text-white px-8 py-4 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
+                    className="flex items-center gap-3 bg-brand-carbon text-white h-14 px-8 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
                 >
                     <Plus className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform" />
                     Registrar Cliente
@@ -176,18 +204,40 @@ export default function CustomersList() {
 
             <div className="bg-white rounded-[2.5rem] shadow-sm overflow-hidden border border-gray-100">
                 <div className="p-8 border-b border-gray-100 bg-gray-50/20 flex flex-wrap gap-4 items-center justify-between">
-                    <div className="relative max-w-md flex-1">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="BUSCAR CLIENTE POR NOMBRE O EMAIL..."
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300 font-outfit"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                    </div>
-                    <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-2.5 rounded-xl border border-blue-100 uppercase italic tracking-widest font-outfit">
-                        {filteredCustomers.length} Contactos
+                    <div className="flex flex-col md:flex-row gap-6 items-center justify-between w-full">
+                        <div className="relative max-w-md flex-1">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="BUSCAR CLIENTE POR NOMBRE O EMAIL..."
+                                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300 font-outfit"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+                            {[
+                                { id: 'all', label: 'Todos', count: customerCounts.all },
+                                { id: 'persona', label: 'Particulares', count: customerCounts.persona },
+                                { id: 'profesional', label: 'Profesionales', count: customerCounts.profesional }
+                            ].map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === tab.id
+                                        ? 'bg-brand-carbon text-white shadow-lg'
+                                        : 'text-gray-400 hover:text-brand-carbon hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {tab.label}
+                                    <span className={`px-2 py-0.5 rounded-md text-[8px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'
+                                        }`}>
+                                        {tab.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -217,7 +267,14 @@ export default function CustomersList() {
                                                 </div>
                                                 <div>
                                                     <p className="text-sm font-black uppercase italic text-brand-carbon font-outfit">{customer.full_name}</p>
-                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5 font-outfit">Ref: {customer.id.slice(0, 8)}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest font-outfit">Ref: {customer.id.slice(0, 8)}</span>
+                                                        {customer.user_type === 'profesional' && (
+                                                            <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10">
+                                                                PRO
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -232,9 +289,16 @@ export default function CustomersList() {
                                             </div>
                                         </td>
                                         <td className="p-8">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed max-w-[200px] truncate font-outfit">
-                                                {customer.address || '—'}
-                                            </p>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase leading-relaxed max-w-[200px] truncate font-outfit">
+                                                    {customer.address || '—'}
+                                                </p>
+                                                {customer.company_name && (
+                                                    <p className="text-[9px] font-black text-brand-carbon uppercase tracking-tighter truncate max-w-[200px] font-outfit">
+                                                        🏢 {customer.company_name}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-8">
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -317,6 +381,17 @@ export default function CustomersList() {
                         <form onSubmit={handleSubmit} className="p-10 space-y-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Tipo de Cliente</label>
+                                    <select
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                        value={formData.user_type}
+                                        onChange={(e) => setFormData({ ...formData, user_type: e.target.value })}
+                                    >
+                                        <option value="persona">Particular (B2C)</option>
+                                        <option value="profesional">Profesional (B2B)</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-3">
                                     <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre Completo</label>
                                     <input
                                         required
@@ -326,8 +401,34 @@ export default function CustomersList() {
                                         placeholder="Ej: John Doe"
                                     />
                                 </div>
+                            </div>
+
+                            {formData.user_type === 'profesional' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-4 duration-300">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre de Empresa</label>
+                                        <input
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.company_name}
+                                            onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                                            placeholder="Fiscal Name"
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">NIF / CIF</label>
+                                        <input
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.vat_id}
+                                            onChange={(e) => setFormData({ ...formData, vat_id: e.target.value })}
+                                            placeholder="Tax ID"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Email Corporativo</label>
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Email de Contacto</label>
                                     <input
                                         required
                                         type="email"
@@ -337,15 +438,15 @@ export default function CustomersList() {
                                         placeholder="email@example.com"
                                     />
                                 </div>
-                            </div>
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Teléfono de Contacto</label>
-                                <input
-                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                    placeholder="+34 600 000 000"
-                                />
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Teléfono Directo</label>
+                                    <input
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                        value={formData.phone}
+                                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                        placeholder="+34 600 000 000"
+                                    />
+                                </div>
                             </div>
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Dirección de Envío Principal</label>

@@ -98,13 +98,16 @@ export default function OffersAdmin() {
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-black text-gray-800 uppercase italic">Ofertas y Cupones</h1>
+            <div className="flex justify-between items-end mb-10 font-outfit">
+                <div>
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Ofertas y Cupones</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-3">Gestión de Promociones</p>
+                </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors font-bold uppercase italic shadow-sm"
+                    className="bg-brand-carbon text-white h-14 px-8 rounded-2xl flex items-center gap-3 hover:bg-primary transition-all font-black uppercase italic text-[10px] shadow-xl shadow-brand-carbon/10 font-outfit"
                 >
-                    <Plus className="w-4 h-4" /> Nueva Promo
+                    <Plus className="w-4 h-4 text-primary" /> Nueva Promo
                 </button>
             </div>
 

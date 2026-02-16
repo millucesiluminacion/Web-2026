@@ -1,26 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
-import { Loader2, Tag, ShoppingCart } from 'lucide-react';
+import { Loader2, Tag, ShoppingCart, Star } from 'lucide-react';
+import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 const OfertasPage = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
+    const { addToCart } = useCart();
+    const { isPro, discountPercent: proDiscountPercent } = useAuth();
 
     useEffect(() => {
         async function fetchOffers() {
             try {
-                // Fetch products that have a price and a higher original price (simulating discount)
-                // or where we have a specific 'discount_percentage' or 'is_on_sale' flag if added
+                // Fetch products that have a discount price or specific tag
                 const { data, error } = await supabase
                     .from('products')
                     .select('*')
-                    .not('price', 'is', null)
+                    .is('parent_id', null)
                     .order('created_at', { ascending: false });
 
                 if (error) throw error;
-
-                // For now, filter products that have "Oferta" in name or just show latest if no specific sale flag
-                // Ideally, we'd have an 'is_offer' column or 'original_price'
                 setProducts(data || []);
             } catch (err) {
                 console.error('Error fetching offers:', err);
@@ -33,69 +34,91 @@ const OfertasPage = () => {
     }, []);
 
     return (
-        <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12">
+        <div className="bg-brand-porcelain min-h-screen pt-32 pb-20">
             <div className="container mx-auto px-6 max-w-[1400px]">
-                <header className="mb-12 text-center relative">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">MIL LUCES OUTLET</span>
-                    <h1 className="text-4xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
-                        Mega <span className="text-primary/40">Ofertas</span> <br /> <span className="text-brand-carbon">Boutique</span>
+                <header className="mb-16 text-center relative">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Mil Luces Outlet</span>
+                    <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
+                        Oportunidades <span className="text-primary/40">Exclusivas</span> <br /> <span className="text-brand-carbon">Boutique</span>
                     </h1>
-                    <div className="w-20 h-1 bg-primary/10 mx-auto mt-8 rounded-full"></div>
+                    <div className="w-20 h-1 bg-primary/20 mx-auto mt-8 rounded-full"></div>
                 </header>
 
                 {loading ? (
-                    <div className="h-96 flex flex-col items-center justify-center text-gray-400 glass rounded-[3rem]">
+                    <div className="h-96 flex flex-col items-center justify-center text-gray-400 bg-white rounded-[3rem] shadow-luxury border border-gray-100/50">
                         <Loader2 className="w-10 h-10 animate-spin mb-4 text-primary" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Sincronizando Ofertas...</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest italic">Sincronizando Selección...</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                         {products.length > 0 ? products.map((product) => {
-                            const discount = 15;
-                            const originalPrice = (product.price / (1 - discount / 100)).toFixed(2);
+                            const originalPrice = parseFloat(product.price || 0);
+                            const dbDiscountPrice = parseFloat(product.discount_price || 0);
+                            const hasDbDiscount = dbDiscountPrice > 0 && dbDiscountPrice < originalPrice;
+
+                            // Pro logic
+                            const proPrice = isPro ? originalPrice * (1 - proDiscountPercent / 100) : originalPrice;
+                            const isShowingProDiscount = isPro && proDiscountPercent > 0;
+                            const finalPrice = isPro ? proPrice : (hasDbDiscount ? dbDiscountPrice : originalPrice);
+                            const displayDiscountPercent = isShowingProDiscount ? proDiscountPercent : (hasDbDiscount ? Math.round(((originalPrice - dbDiscountPrice) / originalPrice) * 100) : 0);
+
+                            // We only show products that have some kind of discount or if we want to show all here
+                            // Let's only show if there's SOME discount for the user
+                            if (!isShowingProDiscount && !hasDbDiscount) return null;
 
                             return (
-                                <div key={product.id} className="group relative bg-white rounded-[2.5rem] p-6 overflow-hidden shadow-sm hover:shadow-luxury transition-all duration-500 border border-gray-100/50 flex flex-col">
+                                <div key={product.id} className="group relative bg-white rounded-[2.5rem] p-8 overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-500 border border-gray-100/50 flex flex-col">
                                     <div className="absolute top-6 left-6 z-10">
-                                        <span className="bg-primary text-white text-[9px] font-black px-3 py-1.5 rounded-lg uppercase italic tracking-widest shadow-xl shadow-primary/20">
-                                            -{discount}% OFF
+                                        <span className={`text-white text-[9px] font-black px-3 py-1.5 rounded-lg uppercase italic tracking-widest shadow-xl shadow-primary/20 ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
+                                            -{displayDiscountPercent}% {isShowingProDiscount ? 'PRO' : 'OFF'}
                                         </span>
                                     </div>
 
-                                    <div className="aspect-square flex items-center justify-center mb-8 p-8 bg-gray-50/50 rounded-3xl group-hover:bg-white transition-colors duration-500 relative overflow-hidden">
-                                        <img
-                                            src={product.image_url || 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?w=400&h=400&fit=crop'}
-                                            alt={product.name}
-                                            className="max-w-full max-h-full object-contain mix-blend-multiply group-hover:scale-110 transition-transform duration-700"
-                                        />
+                                    <Link to={`/product/${product.id}`} className="aspect-square flex items-center justify-center mb-8 p-8 bg-gray-50/50 rounded-3xl group-hover:bg-white transition-colors duration-500 relative overflow-hidden">
+                                        {product.image_url ? (
+                                            <img
+                                                src={product.image_url}
+                                                alt={product.name}
+                                                className="max-w-full max-h-full object-contain transition-transform duration-700 group-hover:scale-110"
+                                            />
+                                        ) : (
+                                            <div className="text-7xl transition-transform duration-500 group-hover:scale-125">💡</div>
+                                        )}
                                         <div className="absolute inset-0 bg-primary/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                    </div>
+                                    </Link>
 
                                     <div className="flex-1 flex flex-col">
                                         <div className="flex items-center gap-2 mb-3">
-                                            <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest">REF: {product.id.slice(0, 8)}</span>
+                                            <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest">Masterpiece Ref. {product.id.toString().slice(0, 8)}</span>
                                             <div className="h-[1px] flex-1 bg-gray-100"></div>
                                         </div>
-                                        <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight mb-4 group-hover:text-primary transition-colors line-clamp-2 h-10">
-                                            {product.name}
-                                        </h3>
+                                        <Link to={`/product/${product.id}`}>
+                                            <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight mb-6 group-hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem]">
+                                                {product.name}
+                                            </h3>
+                                        </Link>
 
                                         <div className="mt-auto pt-6 border-t border-gray-50 flex items-center justify-between">
                                             <div>
-                                                <p className="text-[10px] text-gray-400 line-through font-bold mb-1">{originalPrice} €</p>
-                                                <p className="text-2xl font-black text-brand-carbon italic tracking-tighter">{(product.price || 0).toFixed(2)} <span className="text-xs text-primary">€</span></p>
+                                                <p className="text-[10px] text-gray-400 line-through font-bold mb-1">{originalPrice.toFixed(2)} €</p>
+                                                <p className={`text-2xl font-black italic tracking-tighter ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                                    {finalPrice.toFixed(2)} <span className="text-xs">€</span>
+                                                </p>
                                             </div>
-                                            <button className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-brand-carbon hover:bg-primary hover:text-white transition-all shadow-sm hover:shadow-xl hover:shadow-primary/20">
+                                            <button
+                                                onClick={() => addToCart({ ...product, price: finalPrice })}
+                                                className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all"
+                                            >
                                                 <ShoppingCart className="w-5 h-5" />
                                             </button>
                                         </div>
                                     </div>
                                 </div>
                             );
-                        }) : (
-                            <div className="col-span-full py-32 text-center bg-gray-50/50 rounded-[3rem] border border-dashed border-gray-200">
+                        }).filter(Boolean) : (
+                            <div className="col-span-full py-32 text-center bg-white rounded-[3rem] border-2 border-dashed border-gray-100 shadow-luxury">
                                 <Tag className="w-12 h-12 mx-auto mb-6 text-gray-200" />
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[.4em] italic leading-loose">Buscando oportunidades<br />exclusivas...</p>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[.4em] italic leading-loose">Buscando nuevas oportunidades<br />de inversión exclusive...</p>
                             </div>
                         )}
                     </div>

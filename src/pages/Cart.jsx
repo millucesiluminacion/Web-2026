@@ -3,10 +3,20 @@ import { Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 
 export default function Cart() {
-    const { cart, removeFromCart, updateQuantity, totalPrice, clearCart } = useCart();
+    const {
+        cart,
+        removeFromCart,
+        updateQuantity,
+        subtotal,
+        proDiscountAmount,
+        totalPrice,
+        discountPercent
+    } = useCart();
+
+    // Calculate taxes accurately (assuming totalPrice includes tax)
     const IVA_RATE = 0.21;
-    const iva = totalPrice * IVA_RATE;
-    const subtotal = totalPrice - iva;
+    const baseImponible = totalPrice / (1 + IVA_RATE);
+    const iva = totalPrice - baseImponible;
 
     if (cart.length === 0) {
         return (
@@ -79,6 +89,12 @@ export default function Cart() {
                                     <span className="text-gray-500">Selección Subtotal</span>
                                     <span>{subtotal.toFixed(2)} €</span>
                                 </div>
+                                {proDiscountAmount > 0 && (
+                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.3em] text-primary">
+                                        <span className="font-black italic">Descuento Profesional ({discountPercent}%)</span>
+                                        <span className="font-black italic">-{proDiscountAmount.toFixed(2)} €</span>
+                                    </div>
+                                )}
                                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.3em]">
                                     <span className="text-gray-500">Envío Boutique</span>
                                     <span className="text-primary font-black italic">CONCEDIDO</span>

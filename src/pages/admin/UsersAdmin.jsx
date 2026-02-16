@@ -11,10 +11,15 @@ export default function UsersAdmin() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [activeTab, setActiveTab] = useState('all'); // all, persona, profesional
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
-        role: 'editor'
+        role: 'editor',
+        user_type: 'persona',
+        company_name: '',
+        vat_id: '',
+        discount_percent: 0
     });
 
     useEffect(() => {
@@ -57,7 +62,15 @@ export default function UsersAdmin() {
 
     function openCreate() {
         setEditingUser(null);
-        setFormData({ full_name: '', email: '', role: 'editor' });
+        setFormData({
+            full_name: '',
+            email: '',
+            role: 'editor',
+            user_type: 'persona',
+            company_name: '',
+            vat_id: '',
+            discount_percent: 0
+        });
         setIsModalOpen(true);
     }
 
@@ -66,7 +79,11 @@ export default function UsersAdmin() {
         setFormData({
             full_name: user.full_name || '',
             email: user.email || '',
-            role: user.role || 'editor'
+            role: user.role || 'editor',
+            user_type: user.user_type || 'persona',
+            company_name: user.company_name || '',
+            vat_id: user.vat_id || '',
+            discount_percent: user.discount_percent || 0
         });
         setIsModalOpen(true);
     }
@@ -116,6 +133,10 @@ export default function UsersAdmin() {
             Nombre: u.full_name,
             Email: u.email,
             Rol: u.role,
+            Tipo: u.user_type,
+            Empresa: u.company_name,
+            NIF: u.vat_id,
+            Descuento: u.discount_percent,
             Creado: u.created_at
         })));
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -144,6 +165,10 @@ export default function UsersAdmin() {
                     const updates = {};
                     if (row.Nombre) updates.full_name = row.Nombre;
                     if (row.Rol) updates.role = row.Rol;
+                    if (row.Tipo) updates.user_type = row.Tipo;
+                    if (row.Empresa) updates.company_name = row.Empresa;
+                    if (row.NIF) updates.vat_id = row.NIF;
+                    if (row.Descuento) updates.discount_percent = parseFloat(row.Descuento);
 
                     if (Object.keys(updates).length > 0) {
                         const { error } = await supabase.from('profiles').update(updates).eq('id', id);
@@ -168,10 +193,23 @@ export default function UsersAdmin() {
         }
     }
 
-    const filteredUsers = users.filter(u =>
-        u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.email?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredUsers = users.filter(u => {
+        const matchesSearch =
+            u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            u.email?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesTab =
+            activeTab === 'all' ||
+            u.user_type === activeTab;
+
+        return matchesSearch && matchesTab;
+    });
+
+    const userCounts = {
+        all: users.length,
+        persona: users.filter(u => u.user_type === 'persona').length,
+        profesional: users.filter(u => u.user_type === 'profesional').length
+    };
 
     const getRoleStyles = (role) => {
         switch (role?.toLowerCase()) {
@@ -187,31 +225,31 @@ export default function UsersAdmin() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block font-outfit">Access Control</span>
-                    <h1 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
                         Gestión de <span className="text-primary/40">Equipo</span>
                     </h1>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
                     <button
                         onClick={openCreate}
-                        className="flex items-center gap-3 bg-brand-carbon text-white px-8 py-4 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
+                        className="flex items-center gap-3 bg-brand-carbon text-white px-8 h-14 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
                     >
                         <Plus className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform" />
                         Registrar Miembro
                     </button>
-                    <label className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-6 py-3 rounded-xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary transition-all cursor-pointer font-outfit">
+                    <label className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-6 h-14 rounded-2xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary transition-all cursor-pointer font-outfit">
                         <Upload className="w-4 h-4 text-primary" />
                         Importar CSV
                         <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
                     </label>
                     <button
                         onClick={handleExport}
-                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-6 py-3 rounded-xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary transition-all font-outfit"
+                        className="flex items-center gap-2 bg-white border border-gray-200 text-gray-600 px-6 h-14 rounded-2xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary transition-all font-outfit"
                     >
                         <Download className="w-4 h-4 text-primary" />
                         Exportar CSV
                     </button>
-                    <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-3 rounded-xl border border-blue-100 uppercase italic tracking-widest font-outfit flex items-center gap-2 shadow-sm">
+                    <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-6 h-14 rounded-2xl border border-blue-100 uppercase italic tracking-widest font-outfit flex items-center gap-2 shadow-sm">
                         <UserCheck className="w-4 h-4" />
                         {users.length} Administradores
                     </div>
@@ -220,15 +258,40 @@ export default function UsersAdmin() {
 
             <div className="bg-white rounded-[2.5rem] shadow-sm overflow-hidden border border-gray-100">
                 <div className="p-8 border-b border-gray-100 bg-gray-50/20">
-                    <div className="relative max-w-md">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="BUSCAR EQUIPO POR NOMBRE O EMAIL..."
-                            className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300 font-outfit"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
+                    <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
+                        <div className="relative max-w-md w-full">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="BUSCAR POR NOMBRE O EMAIL..."
+                                className="w-full pl-12 pr-4 py-3 bg-white border border-gray-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300 font-outfit"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+
+                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+                            {[
+                                { id: 'all', label: 'Todos', count: userCounts.all },
+                                { id: 'persona', label: 'Particulares', count: userCounts.persona },
+                                { id: 'profesional', label: 'Profesionales', count: userCounts.profesional }
+                            ].map((tab) => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-3 ${activeTab === tab.id
+                                        ? 'bg-brand-carbon text-white shadow-lg'
+                                        : 'text-gray-400 hover:text-brand-carbon hover:bg-gray-50'
+                                        }`}
+                                >
+                                    {tab.label}
+                                    <span className={`px-2 py-0.5 rounded-md text-[8px] ${activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-400'
+                                        }`}>
+                                        {tab.count}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -273,9 +336,16 @@ export default function UsersAdmin() {
                                             </div>
                                         </td>
                                         <td className="p-8">
-                                            <p className="font-mono text-[10px] text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 w-fit">
-                                                {user.id.slice(0, 12).toUpperCase()}
-                                            </p>
+                                            <div className="flex flex-col gap-1">
+                                                <p className="font-mono text-[10px] text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 w-fit">
+                                                    {user.id.slice(0, 12).toUpperCase()}
+                                                </p>
+                                                {user.user_type === 'profesional' && (
+                                                    <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 w-fit">
+                                                        PRO {user.discount_percent}% DESC
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="p-8">
                                             <div className="relative group/select">
@@ -339,13 +409,12 @@ export default function UsersAdmin() {
                 )}
             </div>
 
-            {/* Permissions Widget */}
             {/* Modal de Edición */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-12">
                     <div className="absolute inset-0 bg-brand-carbon/40 backdrop-blur-md" onClick={() => setIsModalOpen(false)}></div>
-                    <div className="relative bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                    <div className="relative bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto">
+                        <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-gray-50/50 sticky top-0 z-10">
                             <div>
                                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-brand-carbon font-outfit">
                                     {editingUser ? 'Editar' : 'Registrar'} <span className="text-primary/40">Miembro</span>
@@ -359,6 +428,62 @@ export default function UsersAdmin() {
                             </button>
                         </div>
                         <form onSubmit={handleSaveUser} className="p-10 space-y-8">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Tipo de Cuenta</label>
+                                    <select
+                                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                        value={formData.user_type}
+                                        onChange={(e) => setFormData({ ...formData, user_type: e.target.value })}
+                                    >
+                                        <option value="persona">Particular</option>
+                                        <option value="profesional">Profesional / Empresa</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">% Descuento Especial</label>
+                                    <div className="relative">
+                                        <Settings className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                        <input
+                                            type="number"
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.discount_percent}
+                                            onChange={(e) => setFormData({ ...formData, discount_percent: parseFloat(e.target.value) })}
+                                            placeholder="Ej: 5"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {formData.user_type === 'profesional' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-4 duration-300">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre Fiscal</label>
+                                        <div className="relative">
+                                            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                            <input
+                                                className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                                value={formData.company_name}
+                                                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                                                placeholder="Nombre de la empresa"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">NIF / CIF</label>
+                                        <div className="relative">
+                                            <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                            <input
+                                                className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                                value={formData.vat_id}
+                                                onChange={(e) => setFormData({ ...formData, vat_id: e.target.value })}
+                                                placeholder="ID Fiscal"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-3">
                                     <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre Completo</label>

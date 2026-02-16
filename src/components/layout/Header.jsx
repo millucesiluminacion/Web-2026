@@ -2,12 +2,14 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Search, ShoppingCart, User, X, Phone, Mic, ChevronDown } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 
 export function Header() {
     const [searchTerm, setSearchTerm] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const { totalItems } = useCart();
+    const { profile, isPro } = useAuth();
     const navigate = useNavigate();
     const menuRef = useRef(null);
 
@@ -110,12 +112,27 @@ export function Header() {
                         <div className="h-8 w-[1px] bg-gray-100 hidden md:block"></div>
 
                         {/* Account & Cart */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
+                            <div className="flex flex-col items-end hidden sm:flex">
+                                {isPro && (
+                                    <>
+                                        <span className="text-[7px] font-black text-primary uppercase tracking-[.2em] animate-pulse">Session Profesional Activa</span>
+                                        <span className="text-[10px] font-black italic text-brand-carbon truncate max-w-[150px]">
+                                            {profile?.company_name || profile?.full_name}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
                             <Link
                                 to="/login"
-                                className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all"
+                                className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all relative group"
                             >
                                 <User className="w-5 h-5" />
+                                {isPro && (
+                                    <span className="absolute -top-1 -right-1 bg-brand-carbon text-primary text-[8px] font-black px-1.5 py-0.5 rounded-md border-2 border-white shadow-sm ring-2 ring-primary/20">
+                                        PRO
+                                    </span>
+                                )}
                             </Link>
 
                             <Link
@@ -158,7 +175,6 @@ export function Header() {
                                     <li><Link className="text-sm font-bold uppercase italic hover:text-blue-300 transition-colors" to="/search?category=plafones">Colección Minimal</Link></li>
                                 </ul>
                             </div>
-                            {/* Add other categories here... */}
                         </div>
                     </div>
                 )}

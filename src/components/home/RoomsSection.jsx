@@ -27,6 +27,7 @@ export function RoomsSection() {
 
                 if (data && data.length > 0) {
                     const formatted = data.map(room => ({
+                        id: room.id,
                         name: room.name,
                         img: room.image_url || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=500&fit=crop',
                         slug: room.slug || room.name.toLowerCase()
@@ -66,7 +67,7 @@ export function RoomsSection() {
                         <li key={i}>
                             <div className="rounded-lg overflow-hidden relative group h-80">
                                 <div className="h-full">
-                                    <a href={`/room/${room.slug || room.name.toLowerCase()}`} className="block h-full">
+                                    <a href={`/search?room=${room.id || room.slug}`} className="block h-full">
                                         <img
                                             src={room.img}
                                             alt={room.name}

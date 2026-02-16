@@ -98,10 +98,13 @@ export default function BlogAdmin() {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center">
-                <h1 className="text-2xl font-black text-brand-carbon uppercase italic">Gestión de Blog</h1>
-                <button onClick={openCreate} className="bg-primary text-white px-6 py-3 rounded-2xl flex items-center gap-2 hover:shadow-lg hover:shadow-primary/20 transition-all font-black uppercase italic text-xs">
-                    <Plus className="w-4 h-4" /> Nuevo Artículo
+            <div className="flex justify-between items-end mb-10 font-outfit">
+                <div>
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Artículos de Blog</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-3">Gestión de Contenidos</p>
+                </div>
+                <button onClick={openCreate} className="bg-brand-carbon text-white h-14 px-8 rounded-2xl flex items-center gap-3 hover:bg-primary transition-all font-black uppercase italic text-[10px] shadow-xl shadow-brand-carbon/10 font-outfit">
+                    <Plus className="w-4 h-4 text-primary" /> Nuevo Artículo
                 </button>
             </div>
 

@@ -9,6 +9,11 @@ export default function OrdersList() {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [orderItems, setOrderItems] = useState([]);
     const [fetchingItems, setFetchingItems] = useState(false);
+    const [stats, setStats] = useState({
+        days7: { total: 0, count: 0 },
+        days30: { total: 0, count: 0 },
+        days90: { total: 0, count: 0 }
+    });
 
     // Manual Order Creation States
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -37,11 +42,30 @@ export default function OrdersList() {
 
             if (error) throw error;
             setOrders(data || []);
+            calculateStats(data || []);
         } catch (error) {
             console.error('Error fetching orders:', error.message);
         } finally {
             setLoading(false);
         }
+    }
+
+    function calculateStats(ordersData) {
+        const now = new Date();
+        const getStatsForDays = (days) => {
+            const cutoff = new Date(now.getTime() - (days * 24 * 60 * 60 * 1000));
+            const filtered = ordersData.filter(o => new Date(o.created_at) >= cutoff && o.status !== 'CANCELLED');
+            return {
+                count: filtered.length,
+                total: filtered.reduce((acc, curr) => acc + (curr.total || 0), 0)
+            };
+        };
+
+        setStats({
+            days7: getStatsForDays(7),
+            days30: getStatsForDays(30),
+            days90: getStatsForDays(90)
+        });
     }
 
     async function fetchCreateData() {
@@ -193,22 +217,48 @@ export default function OrdersList() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block font-outfit">Management Hub</span>
-                    <h1 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
                         Gestión de <span className="text-primary/40">Pedidos</span>
                     </h1>
                 </div>
                 <div className="flex items-center gap-4">
-                    <div className="text-[10px] font-black text-gray-400 bg-gray-50 px-4 py-2.5 rounded-xl border border-gray-100 uppercase italic tracking-widest shrink-0 font-outfit">
+                    <div className="text-[10px] font-black text-gray-400 bg-gray-50 h-14 px-6 rounded-2xl border border-gray-100 uppercase italic tracking-widest shrink-0 font-outfit flex items-center shadow-sm">
                         {orders.length} Pedidos Totales
                     </div>
                     <button
                         onClick={openCreateModal}
-                        className="flex items-center gap-3 bg-brand-carbon text-white px-8 py-4 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
+                        className="flex items-center gap-3 bg-brand-carbon text-white h-14 px-8 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
                     >
                         <Plus className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform" />
                         Nuevo Pedido
                     </button>
                 </div>
+            </div>
+
+            {/* Analytics Dashboard */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+                {[
+                    { label: 'Últimos 7 Días', data: stats.days7, color: 'blue' },
+                    { label: 'Últimos 30 Días', data: stats.days30, color: 'purple' },
+                    { label: 'Últimos 90 Días', data: stats.days90, color: 'emerald' }
+                ].map((s) => (
+                    <div key={s.label} className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm group hover:border-primary/20 transition-all">
+                        <div className="flex justify-between items-start mb-6">
+                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest font-outfit">{s.label}</span>
+                            <div className={`p-2 rounded-lg bg-${s.color}-50 text-${s.color}-500 group-hover:scale-110 transition-transform`}>
+                                <Clock className="w-4 h-4" />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="text-3xl font-black text-brand-carbon italic font-outfit">
+                                {s.data.total.toFixed(2)} €
+                            </p>
+                            <p className={`text-[10px] font-black text-${s.color}-600/70 uppercase tracking-tighter font-outfit`}>
+                                {s.data.count} Pedidos Completados
+                            </p>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-sm overflow-hidden border border-gray-100">
@@ -281,9 +331,19 @@ export default function OrdersList() {
                                         </select>
                                     </td>
                                     <td className="p-7">
-                                        <div className="flex items-center gap-2">
-                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                                            <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{order.payment_method}</span>
+                                        <div className="flex flex-col gap-1.5">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                                <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{order.payment_method}</span>
+                                            </div>
+                                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg w-fit ${order.shipping_address === 'STORE_PICKUP' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                                }`}>
+                                                {order.shipping_address === 'STORE_PICKUP' ? (
+                                                    <><Plus className="w-3 h-3 hover:rotate-0" /> <span className="text-[8px] font-black uppercase">Recogida</span></>
+                                                ) : (
+                                                    <><Truck className="w-3 h-3" /> <span className="text-[8px] font-black uppercase">Envío</span></>
+                                                )}
+                                            </div>
                                         </div>
                                     </td>
                                     <td className="p-7 text-right">

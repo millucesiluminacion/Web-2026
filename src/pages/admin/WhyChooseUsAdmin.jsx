@@ -64,14 +64,17 @@ export default function WhyChooseUsAdmin() {
 
     return (
         <div>
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl font-black text-gray-800 uppercase italic">Por Qué Elegirnos</h1>
+            <div className="flex justify-between items-end mb-10 font-outfit">
+                <div>
+                    <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Por Qué Elegirnos</h1>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-3">Valores de Marca Boutique</p>
+                </div>
                 <button
                     onClick={saveAll}
                     disabled={isSaving}
-                    className="bg-blue-600 text-white px-6 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors font-black uppercase italic shadow-md disabled:bg-gray-400"
+                    className="bg-brand-carbon text-white h-14 px-8 rounded-2xl flex items-center gap-3 hover:bg-primary transition-all font-black uppercase italic text-[10px] shadow-xl shadow-brand-carbon/10 disabled:bg-gray-400 font-outfit"
                 >
-                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Save className="w-4 h-4 text-primary" />}
                     Guardar Cambios
                 </button>
             </div>
