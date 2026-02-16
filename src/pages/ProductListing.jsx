@@ -66,7 +66,7 @@ export default function ProductListing() {
                             <div>
                                 <h4 className="font-semibold text-sm mb-2">Categorías</h4>
                                 <ul className="space-y-2 text-sm text-gray-600">
-                                    {['Bombillas', 'Tubos', 'Paneles', 'Tiras', 'Downlights'].map(cat => (
+                                    {['Bombillas', 'Tubos', 'Downlights', 'Paneles', 'Tiras', 'Solar', 'Proyectores', 'Ventiladores', 'Farolas', 'Comercial', 'Industrial', 'Lámparas'].map(cat => (
                                         <li key={cat} className="flex items-center gap-2">
                                             <Link
                                                 to={`/search?category=${cat.toLowerCase()}`}
