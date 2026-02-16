@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
