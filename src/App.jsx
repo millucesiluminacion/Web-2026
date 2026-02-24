@@ -12,7 +12,9 @@ import ProductList from './pages/admin/ProductList';
 import DecoracionPage from './pages/DecoracionPage';
 import OfertasPage from './pages/OfertasPage';
 import BlogPage from './pages/BlogPage';
+import BlogPostDetail from './pages/BlogPostDetail';
 import ProyectosPage from './pages/ProyectosPage';
+import ProfessionalsPage from './pages/ProfessionalsPage';
 import { CartProvider } from './context/CartContext';
 import CategoriesList from './pages/admin/CategoriesList';
 import OrdersList from './pages/admin/OrdersList';
@@ -28,6 +30,10 @@ import ProjectsAdmin from './pages/admin/ProjectsAdmin';
 import Checkout from './pages/Checkout';
 import PaymentSettings from './pages/admin/PaymentSettings';
 import UsersAdmin from './pages/admin/UsersAdmin';
+import ProfessionalsAdmin from './pages/admin/ProfessionalsAdmin';
+import CategoriesAdmin from './pages/admin/CategoriesAdmin';
+import SEOAdmin from './pages/admin/SEOAdmin';
+import SEOManager from './components/common/SEOManager';
 
 import { AuthProvider } from './context/AuthContext';
 
@@ -36,11 +42,12 @@ function App() {
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
+          <SEOManager />
           <Routes>
             <Route path="/" element={<MainLayout />}>
               <Route index element={<HomePage />} />
               <Route path="search" element={<ProductListing />} />
-              <Route path="product/:id" element={<ProductDetail />} />
+              <Route path="product/:slug" element={<ProductDetail />} />
               <Route path="cart" element={<Cart />} />
               <Route path="checkout" element={<Checkout />} />
               <Route path="login" element={<LoginPage />} />
@@ -49,13 +56,15 @@ function App() {
               <Route path="decoracion" element={<DecoracionPage />} />
               <Route path="ofertas" element={<OfertasPage />} />
               <Route path="blog" element={<BlogPage />} />
+              <Route path="blog/:slug" element={<BlogPostDetail />} />
               <Route path="proyectos" element={<ProyectosPage />} />
+              <Route path="profesionales" element={<ProfessionalsPage />} />
             </Route>
 
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Dashboard />} />
               <Route path="products" element={<ProductList />} />
-              <Route path="categories" element={<CategoriesList />} />
+              <Route path="categories" element={<CategoriesAdmin />} />
               <Route path="orders" element={<OrdersList />} />
               <Route path="customers" element={<CustomersList />} />
               <Route path="brands" element={<BrandsList />} />
@@ -68,6 +77,8 @@ function App() {
               <Route path="projects" element={<ProjectsAdmin />} />
               <Route path="payments" element={<PaymentSettings />} />
               <Route path="users" element={<UsersAdmin />} />
+              <Route path="professionals" element={<ProfessionalsAdmin />} />
+              <Route path="seo" element={<SEOAdmin />} />
             </Route>
           </Routes>
         </BrowserRouter>

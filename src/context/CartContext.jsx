@@ -43,11 +43,9 @@ export function CartProvider({ children }) {
     const clearCart = () => setCart([]);
 
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-
-    // Apply professional discount if the user is a professional
-    const proDiscountAmount = profile?.user_type === 'profesional' ? (subtotal * (discountPercent / 100)) : 0;
-    const totalPrice = subtotal - proDiscountAmount;
+    const totalPrice = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const totalOriginal = cart.reduce((acc, item) => acc + ((item.original_price || item.price) * item.quantity), 0);
+    const totalSavings = totalOriginal - totalPrice;
 
     return (
         <CartContext.Provider value={{
@@ -57,9 +55,9 @@ export function CartProvider({ children }) {
             updateQuantity,
             clearCart,
             totalItems,
-            subtotal,
-            proDiscountAmount,
             totalPrice,
+            totalOriginal,
+            totalSavings,
             discountPercent: profile?.user_type === 'profesional' ? discountPercent : 0
         }}>
             {children}

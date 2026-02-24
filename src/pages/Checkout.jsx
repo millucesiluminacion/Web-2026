@@ -28,8 +28,9 @@ export default function Checkout() {
     });
 
     const IVA_RATE = 0.21;
-    const iva = totalPrice * IVA_RATE;
-    const subtotal = totalPrice - iva;
+    const baseImponible = totalPrice / (1 + IVA_RATE);
+    const iva = totalPrice - baseImponible;
+    const subtotal = baseImponible;
 
     if (cart.length === 0 && !orderCompleted) {
         return (

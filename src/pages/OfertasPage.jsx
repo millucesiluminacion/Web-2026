@@ -4,6 +4,7 @@ import { Loader2, Tag, ShoppingCart, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
+import { calculateProductPrice } from '../lib/pricingUtils';
 
 const OfertasPage = () => {
     const [products, setProducts] = useState([]);
@@ -52,19 +53,18 @@ const OfertasPage = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                         {products.length > 0 ? products.map((product) => {
-                            const originalPrice = parseFloat(product.price || 0);
-                            const dbDiscountPrice = parseFloat(product.discount_price || 0);
-                            const hasDbDiscount = dbDiscountPrice > 0 && dbDiscountPrice < originalPrice;
-
-                            // Pro logic
-                            const proPrice = isPro ? originalPrice * (1 - proDiscountPercent / 100) : originalPrice;
-                            const isShowingProDiscount = isPro && proDiscountPercent > 0;
-                            const finalPrice = isPro ? proPrice : (hasDbDiscount ? dbDiscountPrice : originalPrice);
-                            const displayDiscountPercent = isShowingProDiscount ? proDiscountPercent : (hasDbDiscount ? Math.round(((originalPrice - dbDiscountPrice) / originalPrice) * 100) : 0);
+                            const { profile } = useAuth();
+                            const {
+                                originalPrice,
+                                finalPrice,
+                                isShowingProDiscount,
+                                displayDiscountPercent,
+                                hasAnyDiscount
+                            } = calculateProductPrice(product, profile);
 
                             // We only show products that have some kind of discount or if we want to show all here
                             // Let's only show if there's SOME discount for the user
-                            if (!isShowingProDiscount && !hasDbDiscount) return null;
+                            if (!hasAnyDiscount) return null;
 
                             return (
                                 <div key={product.id} className="group relative bg-white rounded-[2.5rem] p-8 overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-500 border border-gray-100/50 flex flex-col">
@@ -74,7 +74,7 @@ const OfertasPage = () => {
                                         </span>
                                     </div>
 
-                                    <Link to={`/product/${product.id}`} className="aspect-square flex items-center justify-center mb-8 p-8 bg-gray-50/50 rounded-3xl group-hover:bg-white transition-colors duration-500 relative overflow-hidden">
+                                    <Link to={`/product/${product.slug || product.id}`} className="aspect-square flex items-center justify-center mb-8 p-8 bg-gray-50/50 rounded-3xl group-hover:bg-white transition-colors duration-500 relative overflow-hidden">
                                         {product.image_url ? (
                                             <img
                                                 src={product.image_url}
@@ -92,7 +92,7 @@ const OfertasPage = () => {
                                             <span className="text-[8px] font-black text-gray-300 uppercase tracking-widest">Masterpiece Ref. {product.id.toString().slice(0, 8)}</span>
                                             <div className="h-[1px] flex-1 bg-gray-100"></div>
                                         </div>
-                                        <Link to={`/product/${product.id}`}>
+                                        <Link to={`/product/${product.slug || product.id}`}>
                                             <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight mb-6 group-hover:text-primary transition-colors line-clamp-2 min-h-[2.5rem]">
                                                 {product.name}
                                             </h3>

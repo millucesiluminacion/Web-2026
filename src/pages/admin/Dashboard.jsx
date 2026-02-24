@@ -67,7 +67,7 @@ export default function Dashboard() {
 
             // 4. Top B2B Customers
             const { data: b2bCustomers } = await supabase
-                .from('customers')
+                .from('profiles')
                 .select('id, full_name, company_name, user_type')
                 .eq('user_type', 'profesional');
 

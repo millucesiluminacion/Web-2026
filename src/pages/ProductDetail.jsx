@@ -4,6 +4,7 @@ import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { calculateProductPrice } from '../lib/pricingUtils';
 
 const COLOR_MAP = {
     "Blanco": "#FFFFFF",
@@ -20,7 +21,7 @@ const COLOR_MAP = {
 };
 
 export default function ProductDetail() {
-    const { id } = useParams();
+    const { slug } = useParams();
     const { addToCart } = useCart();
     const { isPro, discountPercent: proDiscountPercent } = useAuth();
     const [qty, setQty] = useState(1);
@@ -40,20 +41,36 @@ export default function ProductDetail() {
 
     useEffect(() => {
         fetchProductAndVariants();
-    }, [id]);
+    }, [slug]);
+
+    useEffect(() => {
+        // SEO centralized via SEOManager
+    }, [parentProduct]);
 
     async function fetchProductAndVariants() {
         try {
             setLoading(true);
 
-            // 1. Fetch Main Product
-            const { data: product, error } = await supabase
+            // 1. Fetch Main Product (Trial 1: By Slug)
+            let { data: product, error } = await supabase
                 .from('products')
                 .select('*, categories(name)')
-                .eq('id', id)
+                .eq('slug', slug)
                 .single();
 
-            if (error) throw error;
+            // Trial 2: By ID (Fallback for legacy links or missing slugs)
+            if (error || !product) {
+                const { data: productById, error: idError } = await supabase
+                    .from('products')
+                    .select('*, categories(name)')
+                    .eq('id', slug)
+                    .single();
+
+                if (idError) throw idError;
+                product = productById;
+            }
+
+            if (!product) throw new Error("Producto no encontrado");
             setParentProduct(product);
             setCategoryName(product.categories?.name || '');
 
@@ -61,10 +78,10 @@ export default function ProductDetail() {
             if (product.category_id) {
                 const { data: related } = await supabase
                     .from('products')
-                    .select('id, name, price, discount_price, image_url, stock')
+                    .select('id, slug, name, price, discount_price, image_url, stock')
                     .eq('category_id', product.category_id)
                     .is('parent_id', null)
-                    .neq('id', id)
+                    .neq('id', product.id)
                     .limit(4);
                 setRelatedProducts(related || []);
             }
@@ -73,7 +90,7 @@ export default function ProductDetail() {
             const { data: children, error: varError } = await supabase
                 .from('products')
                 .select('*')
-                .eq('parent_id', id);
+                .eq('parent_id', product.id);
 
             if (varError) console.error("Error fetching variants:", varError);
 
@@ -148,7 +165,8 @@ export default function ProductDetail() {
 
         addToCart({
             ...productToAdd,
-            price: parseFloat(productToAdd.price),
+            price: finalPrice, // Use the already computed best price
+            original_price: originalPrice, // Keep original for reference in cart
             // Include selected options as extra info for the cart
             selectedOptions: selectedAttributes,
             cartLabel: selectedLabel || null
@@ -161,16 +179,16 @@ export default function ProductDetail() {
     const availableOptions = getAvailableOptions();
     const hasOptions = Object.keys(availableOptions).length > 0;
 
-    // Compute discount percentage
-    const originalPrice = parseFloat(displayProduct?.price || parentProduct?.price || 0);
-    const dbDiscountPrice = parseFloat(displayProduct?.discount_price || parentProduct?.discount_price || 0);
-    const hasDbDiscount = dbDiscountPrice > 0 && dbDiscountPrice < originalPrice;
+    const { profile } = useAuth();
 
-    // Pro logic
-    const proPrice = isPro ? originalPrice * (1 - proDiscountPercent / 100) : originalPrice;
-    const isShowingProDiscount = isPro && proDiscountPercent > 0;
-    const finalPrice = isPro ? proPrice : (hasDbDiscount ? dbDiscountPrice : originalPrice);
-    const displayDiscountPercent = isShowingProDiscount ? proDiscountPercent : (hasDbDiscount ? Math.round(((originalPrice - dbDiscountPrice) / originalPrice) * 100) : 0);
+    // Compute prices using centralized utility
+    const {
+        originalPrice,
+        finalPrice,
+        isShowingProDiscount,
+        displayDiscountPercent,
+        hasAnyDiscount
+    } = calculateProductPrice(displayProduct || parentProduct, profile);
 
     // Gallery images: if product has extra_images array, use it; otherwise single image
     const productImages = displayProduct?.extra_images && Array.isArray(displayProduct.extra_images) && displayProduct.extra_images.length > 0
@@ -230,7 +248,7 @@ export default function ProductDetail() {
                         {/* Main Image */}
                         <div className="bg-white rounded-[3rem] p-12 lg:p-20 shadow-luxury border border-gray-100/50 flex items-center justify-center min-h-[500px] lg:h-[700px] overflow-hidden group relative">
                             {/* Discount Badge */}
-                            {(isShowingProDiscount || hasDbDiscount) && (
+                            {(isShowingProDiscount || hasAnyDiscount) && (
                                 <div className={`absolute top-8 left-8 z-10 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
                                     <BadgePercent className="w-4 h-4" />
                                     <span className="font-black text-sm italic">-{displayDiscountPercent}% {isShowingProDiscount ? 'PRO' : ''}</span>
@@ -302,14 +320,14 @@ export default function ProductDetail() {
                                 <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2 leading-none">
                                     {isShowingProDiscount ? 'Inversión Profesional' : 'Inversión Exclusiva'}
                                 </span>
-                                {(isShowingProDiscount || hasDbDiscount) ? (
+                                {(isShowingProDiscount || hasAnyDiscount) ? (
                                     <div>
                                         <div className="flex items-baseline gap-3 mb-1">
                                             <span className="text-2xl font-bold text-gray-300 line-through italic tracking-tighter">
                                                 {originalPrice.toFixed(2)}€
                                             </span>
                                             <span className={`px-2 py-0.5 text-white text-[10px] font-black rounded-lg uppercase italic ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
-                                                {isShowingProDiscount ? `Pro -${proDiscountPercent}%` : `Ahorra ${displayDiscountPercent}%`}
+                                                {isShowingProDiscount ? `Pro -${displayDiscountPercent}%` : `Ahorra ${displayDiscountPercent}%`}
                                             </span>
                                         </div>
                                         <div className="flex items-baseline gap-2">
@@ -502,7 +520,7 @@ export default function ProductDetail() {
                             {relatedProducts.map(rp => {
                                 const rpHasDiscount = rp.discount_price && parseFloat(rp.discount_price) > 0 && parseFloat(rp.discount_price) < parseFloat(rp.price);
                                 return (
-                                    <Link key={rp.id} to={`/product/${rp.id}`} className="group">
+                                    <Link key={rp.id} to={`/product/${rp.slug}`} className="group">
                                         <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1">
                                             <div className="aspect-square p-6 flex items-center justify-center relative">
                                                 {rpHasDiscount && (

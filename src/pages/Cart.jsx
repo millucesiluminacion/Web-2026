@@ -7,8 +7,8 @@ export default function Cart() {
         cart,
         removeFromCart,
         updateQuantity,
-        subtotal,
-        proDiscountAmount,
+        totalOriginal,
+        totalSavings,
         totalPrice,
         discountPercent
     } = useCart();
@@ -47,17 +47,19 @@ export default function Cart() {
                     <div className="lg:col-span-8 space-y-6">
                         {cart.map(item => (
                             <div key={item.id} className="group bg-white p-8 rounded-[2.5rem] shadow-luxury border border-gray-100/50 flex flex-col md:flex-row items-center gap-8 hover:shadow-luxury-hover transition-all duration-500">
-                                <div className="w-24 h-24 bg-brand-porcelain rounded-2xl flex-shrink-0 flex items-center justify-center text-4xl overflow-hidden group-hover:scale-105 transition-transform">
+                                <Link to={`/product/${item.slug || item.id}`} className="w-24 h-24 bg-brand-porcelain rounded-2xl flex-shrink-0 flex items-center justify-center text-4xl overflow-hidden group-hover:scale-105 transition-transform cursor-pointer">
                                     {item.image_url ? (
                                         <img src={item.image_url} alt={item.name} className="w-full h-full object-contain" />
                                     ) : (
                                         "💡"
                                     )}
-                                </div>
+                                </Link>
                                 <div className="flex-1 text-center md:text-left">
                                     <p className="text-[8px] font-black text-primary uppercase tracking-[.3em] mb-1">{item.category}</p>
-                                    <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-tight mb-2 group-hover:text-primary transition-colors">{item.name}</h3>
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Masterpiece Ref. {1000 + item.id}</p>
+                                    <Link to={`/product/${item.slug || item.id}`}>
+                                        <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-tight mb-2 group-hover:text-primary transition-colors cursor-pointer">{item.name}</h3>
+                                    </Link>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">Masterpiece Ref. {item.id.toString().slice(0, 8)}</p>
                                 </div>
                                 <div className="flex items-center gap-6">
                                     <div className="flex items-center bg-gray-50 rounded-xl px-4 py-2 border border-gray-100">
@@ -86,13 +88,13 @@ export default function Cart() {
 
                             <div className="space-y-4 mb-10 relative z-10">
                                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.3em]">
-                                    <span className="text-gray-500">Selección Subtotal</span>
-                                    <span>{subtotal.toFixed(2)} €</span>
+                                    <span className="text-gray-500">Inversión Boutique</span>
+                                    <span>{totalOriginal.toFixed(2)} €</span>
                                 </div>
-                                {proDiscountAmount > 0 && (
+                                {totalSavings > 0 && (
                                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.3em] text-primary">
-                                        <span className="font-black italic">Descuento Profesional ({discountPercent}%)</span>
-                                        <span className="font-black italic">-{proDiscountAmount.toFixed(2)} €</span>
+                                        <span className="font-black italic">Ahorro Exclusivo</span>
+                                        <span className="font-black italic">-{totalSavings.toFixed(2)} €</span>
                                     </div>
                                 )}
                                 <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.3em]">

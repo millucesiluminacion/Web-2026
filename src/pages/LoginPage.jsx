@@ -22,7 +22,7 @@ export default function LoginPage() {
             });
 
             if (error) throw error;
-            navigate('/admin');
+            navigate('/');
         } catch (err) {
             setError(err.message);
         } finally {

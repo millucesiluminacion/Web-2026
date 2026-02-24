@@ -1,16 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, User, X, Phone, Mic, ChevronDown } from 'lucide-react';
+import { Search, ShoppingCart, User, X, Phone, Mic, ChevronDown, LayoutDashboard, LogOut } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 
-export function Header() {
+export function Header({ onOpenAuthModal }) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
     const { totalItems } = useCart();
-    const { profile, isPro } = useAuth();
+    const { profile, isPro, user, signOut } = useAuth();
     const navigate = useNavigate();
+    const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const menuRef = useRef(null);
 
     const handleSearch = (e) => {
@@ -123,17 +124,41 @@ export function Header() {
                                     </>
                                 )}
                             </div>
-                            <Link
-                                to="/login"
-                                className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all relative group"
-                            >
-                                <User className="w-5 h-5" />
-                                {isPro && (
-                                    <span className="absolute -top-1 -right-1 bg-brand-carbon text-primary text-[8px] font-black px-1.5 py-0.5 rounded-md border-2 border-white shadow-sm ring-2 ring-primary/20">
-                                        PRO
-                                    </span>
-                                )}
-                            </Link>
+
+                            {/* Admin Panel Link – only for admins/managers */}
+                            {isAdmin && (
+                                <Link
+                                    to="/admin"
+                                    className="hidden md:flex items-center gap-2 h-10 px-4 bg-brand-carbon text-white rounded-2xl text-[9px] font-black uppercase italic tracking-widest hover:bg-primary transition-all shadow-lg"
+                                >
+                                    <LayoutDashboard className="w-3.5 h-3.5 text-primary" />
+                                    Panel Admin
+                                </Link>
+                            )}
+
+                            {user ? (
+                                /* Logged in: avatar + sign out */
+                                <button
+                                    onClick={signOut}
+                                    title="Cerrar sesión"
+                                    className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-red-50 hover:text-red-500 transition-all relative group"
+                                >
+                                    <LogOut className="w-5 h-5" />
+                                    {isPro && (
+                                        <span className="absolute -top-1 -right-1 bg-brand-carbon text-primary text-[8px] font-black px-1.5 py-0.5 rounded-md border-2 border-white shadow-sm ring-2 ring-primary/20">
+                                            PRO
+                                        </span>
+                                    )}
+                                </button>
+                            ) : (
+                                /* Not logged in: open auth modal */
+                                <button
+                                    onClick={() => onOpenAuthModal('login')}
+                                    className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all"
+                                >
+                                    <User className="w-5 h-5" />
+                                </button>
+                            )}
 
                             <Link
                                 to="/cart"

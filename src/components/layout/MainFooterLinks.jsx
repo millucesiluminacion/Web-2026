@@ -50,6 +50,7 @@ export function MainFooterLinks() {
             <div>
                 <h4 className="text-white font-bold mb-4 uppercase text-xs tracking-widest border-b border-blue-600 inline-block pb-1">Atención al Cliente</h4>
                 <ul className="space-y-2 text-xs">
+                    <li><Link to="/profesionales" className="text-primary font-black uppercase hover:text-white transition-colors">Área Profesional / B2B</Link></li>
                     {['Contacto', 'Envíos y Devoluciones', 'Garantía y RMA', 'Preguntas Frecuentes', 'Descargar Catálogos', 'Aviso Legal', 'Política de Privacidad', 'Política de Cookies', 'Mapa del Sitio'].map(item => (
                         <li key={item}><a href="#" className="hover:text-blue-400 transition-colors">{item}</a></li>
                     ))}

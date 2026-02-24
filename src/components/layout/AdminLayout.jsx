@@ -1,7 +1,8 @@
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Menu, Tag, Award,
-    CheckSquare, Sofa, Image as ImageIcon, CreditCard, BookOpen, Briefcase, UserPlus
+    CheckSquare, Sofa, Image as ImageIcon, CreditCard, BookOpen, Briefcase, UserPlus, Star,
+    Search
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
@@ -92,6 +93,7 @@ export function AdminLayout() {
                 { icon: BookOpen, label: 'Blog', path: '/admin/blog' },
                 { icon: Briefcase, label: 'Proyectos', path: '/admin/projects' },
                 { icon: CheckSquare, label: 'Por qué elegirnos', path: '/admin/why-us' },
+                { icon: Star, label: 'Área Profesional', path: '/admin/professionals' },
             ]
         },
         {
@@ -107,6 +109,12 @@ export function AdminLayout() {
                 { icon: CreditCard, label: 'Pagos', path: '/admin/payments' },
                 { icon: UserPlus, label: 'Usuarios', path: '/admin/users' },
                 { icon: Settings, label: 'Ajustes', path: '/admin/settings' },
+            ]
+        },
+        {
+            title: 'Marketing',
+            items: [
+                { icon: Search, label: 'SEO Boutique', path: '/admin/seo' },
             ]
         }
     ];

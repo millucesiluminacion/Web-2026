@@ -28,6 +28,7 @@ export function CategoryGrid() {
                 const { data, error } = await supabase
                     .from('categories')
                     .select('*')
+                    .is('parent_id', null)
                     .order('order_index', { ascending: true })
                     .order('name', { ascending: true });
 

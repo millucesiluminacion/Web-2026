@@ -19,7 +19,8 @@ export default function UsersAdmin() {
         user_type: 'persona',
         company_name: '',
         vat_id: '',
-        discount_percent: 0
+        discount_percent: 0,
+        is_partner: false
     });
 
     useEffect(() => {
@@ -69,7 +70,8 @@ export default function UsersAdmin() {
             user_type: 'persona',
             company_name: '',
             vat_id: '',
-            discount_percent: 0
+            discount_percent: 0,
+            is_partner: false
         });
         setIsModalOpen(true);
     }
@@ -83,7 +85,8 @@ export default function UsersAdmin() {
             user_type: user.user_type || 'persona',
             company_name: user.company_name || '',
             vat_id: user.vat_id || '',
-            discount_percent: user.discount_percent || 0
+            discount_percent: user.discount_percent || 0,
+            is_partner: user.is_partner || false
         });
         setIsModalOpen(true);
     }
@@ -137,6 +140,7 @@ export default function UsersAdmin() {
             Empresa: u.company_name,
             NIF: u.vat_id,
             Descuento: u.discount_percent,
+            Socio: u.is_partner ? 'SÍ' : 'NO',
             Creado: u.created_at
         })));
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -169,6 +173,7 @@ export default function UsersAdmin() {
                     if (row.Empresa) updates.company_name = row.Empresa;
                     if (row.NIF) updates.vat_id = row.NIF;
                     if (row.Descuento) updates.discount_percent = parseFloat(row.Descuento);
+                    if (row.Socio) updates.is_partner = (row.Socio === 'SÍ' || row.Socio === 'true');
 
                     if (Object.keys(updates).length > 0) {
                         const { error } = await supabase.from('profiles').update(updates).eq('id', id);
@@ -341,9 +346,16 @@ export default function UsersAdmin() {
                                                     {user.id.slice(0, 12).toUpperCase()}
                                                 </p>
                                                 {user.user_type === 'profesional' && (
-                                                    <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 w-fit">
-                                                        PRO {user.discount_percent}% DESC
-                                                    </span>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 w-fit">
+                                                            PRO {user.discount_percent}% DESC
+                                                        </span>
+                                                        {user.is_partner && (
+                                                            <span className="text-[8px] font-black text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 w-fit">
+                                                                Socio (Partner)
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         </td>
@@ -453,6 +465,33 @@ export default function UsersAdmin() {
                                         />
                                     </div>
                                 </div>
+                            </div>
+
+                            <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 space-y-4">
+                                <label className="flex items-center gap-4 cursor-pointer group">
+                                    <div className="relative">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only"
+                                            checked={formData.is_partner}
+                                            onChange={(e) => {
+                                                const checked = e.target.checked;
+                                                setFormData({
+                                                    ...formData,
+                                                    is_partner: checked,
+                                                    // Si se marca como socio y el descuento es 0, sugerir 10%
+                                                    discount_percent: checked && formData.discount_percent === 0 ? 10 : formData.discount_percent
+                                                });
+                                            }}
+                                        />
+                                        <div className={`w-14 h-7 rounded-full transition-colors duration-300 ${formData.is_partner ? 'bg-emerald-500' : 'bg-gray-300'}`}></div>
+                                        <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform duration-300 ${formData.is_partner ? 'translate-x-7' : 'translate-x-0'}`}></div>
+                                    </div>
+                                    <div className="text-left">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-brand-carbon block">Socio Preferente (Partner)</span>
+                                        <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tight block">Activa el descuento base automático y beneficios VIP</span>
+                                    </div>
+                                </label>
                             </div>
 
                             {formData.user_type === 'profesional' && (

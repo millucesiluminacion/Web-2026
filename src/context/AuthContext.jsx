@@ -65,6 +65,7 @@ export function AuthProvider({ children }) {
         loading,
         signOut,
         isPro: profile?.user_type === 'profesional',
+        isPartner: !!profile?.is_partner,
         discountPercent: profile?.discount_percent || 0
     };
 

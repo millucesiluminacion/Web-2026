@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-export function TopBanner() {
+export function TopBanner({ onOpenAuthModal }) {
     return (
         <div className="bg-primary hover:bg-primary-light transition-colors text-white py-2 hidden md:block border-b border-white/10">
             <div className="container mx-auto px-6 max-w-[1400px]">
@@ -17,9 +17,12 @@ export function TopBanner() {
                         <span>2 Años de Garantía</span>
                     </div>
                     <div className="hidden xl:flex items-center gap-6">
-                        <Link to="/register-pro" className="hover:text-secondary-light transition-colors group flex items-center gap-2">
+                        <button
+                            onClick={() => onOpenAuthModal('register', 'profesional')}
+                            className="hover:text-secondary-light transition-colors group flex items-center gap-2"
+                        >
                             Área Profesional <ArrowRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
-                        </Link>
+                        </button>
                     </div>
                 </div>
             </div>

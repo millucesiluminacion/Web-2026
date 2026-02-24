@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Briefcase, Zap, Layout } from 'lucide-react';
 import { CategoryGrid } from '../components/home/CategoryGrid';
 import { BrandsSection } from '../components/home/BrandsSection';
 import { RoomsSection } from '../components/home/RoomsSection';
@@ -12,6 +12,7 @@ export default function HomePage() {
     const [sliders, setSliders] = useState([]);
     const [sideBanners, setSideBanners] = useState([]);
     const [currentSlider, setCurrentSlider] = useState(0);
+    const [proSlider, setProSlider] = useState(0);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -21,9 +22,10 @@ export default function HomePage() {
     async function fetchAllData() {
         try {
             setLoading(true);
-            const [prodRes, sliderRes] = await Promise.all([
+            const [prodRes, sliderRes, seoRes] = await Promise.all([
                 supabase.from('products').select('*').order('created_at', { ascending: false }).limit(3),
-                supabase.from('sliders').select('*').eq('is_active', true).order('order_index', { ascending: true })
+                supabase.from('sliders').select('*').eq('is_active', true).order('order_index', { ascending: true }),
+                supabase.from('site_settings').select('*').eq('key', 'seo_global').single()
             ]);
 
             if (prodRes.error) throw prodRes.error;
@@ -34,6 +36,21 @@ export default function HomePage() {
             const allSliders = sliderRes.data || [];
             setSliders(allSliders.filter(s => s.type === 'main_slider'));
             setSideBanners(allSliders.filter(s => s.type === 'side_banner'));
+
+            // SEO Implementation
+            if (seoRes.data?.value) {
+                const seo = seoRes.data.value;
+                document.title = seo.home_title || 'Mil Luces | Boutique de Iluminación';
+                const metaDesc = document.querySelector('meta[name="description"]');
+                if (metaDesc) {
+                    metaDesc.setAttribute('content', seo.home_description || '');
+                } else {
+                    const meta = document.createElement('meta');
+                    meta.name = 'description';
+                    meta.content = seo.home_description || '';
+                    document.head.appendChild(meta);
+                }
+            }
 
         } catch (error) {
             console.error('Error fetching data:', error.message);
@@ -54,11 +71,34 @@ export default function HomePage() {
     const nextSlider = () => setCurrentSlider(prev => (prev + 1) % sliders.length);
     const prevSlider = () => setCurrentSlider(prev => (prev - 1 + sliders.length) % sliders.length);
 
-    // Default Fallbacks
-    const defaultSliders = [
-        { image_url: 'https://www.efectoled.com/img/core/global/lighting/2026/home/campaigns/848_baliza-v16_prod177697_home-main_desktop_es.png', link_url: '/ofertas-baliza', title: 'Baliza V16' }
+    // Auto-advance mini pro slider
+    useEffect(() => {
+        const timer = setInterval(() => {
+            setProSlider(prev => (prev + 1) % 2);
+        }, 4000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const proSlides = [
+        {
+            title: "Expertos\nRotulistas",
+            desc: "Acceso directo a Tiras LED, Módulos y Perfiles para tus luminosos.",
+            link: "/search?category=tiras",
+            image: "/assets/pro/rotulistas.png",
+            icon: Zap
+        },
+        {
+            title: "Reformas &\nInteriorismo",
+            desc: "Lámparas y Downlights con tarifas especiales para tus obras.",
+            link: "/search?category=lamparas",
+            image: "/assets/pro/reformas.png",
+            icon: Layout
+        }
     ];
-    const defaultSideBanner = { image_url: 'https://www.efectoled.com/img/core/global/lighting/2026/home/campaigns/644_proclub-b2c_cms343_home-service_desktop_es.png', link_url: '/register-pro' };
+
+    // Default Fallbacks (Empty to avoid FOUC with external images)
+    const defaultSliders = [];
+    const defaultSideBanner = { image_url: '', link_url: '/profesionales' };
 
     const activeSliders = sliders.length > 0 ? sliders : defaultSliders;
     const activeSideBanner = sideBanners.length > 0 ? sideBanners[0] : defaultSideBanner;
@@ -74,11 +114,13 @@ export default function HomePage() {
                         <div className="lg:col-span-9 relative group rounded-[2.5rem] lg:rounded-[3.5rem] overflow-hidden shadow-luxury aspect-[16/10] lg:aspect-auto min-h-[450px] lg:h-[750px] bg-brand-carbon">
                             {/* Background Image with Overlay */}
                             <div className="absolute inset-0 transition-transform duration-1000 group-hover:scale-105">
-                                <img
-                                    src={activeSliders[currentSlider]?.image_url || 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=2070&auto=format&fit=crop'}
-                                    alt="Luxury Lighting"
-                                    className="w-full h-full object-cover opacity-60"
-                                />
+                                {activeSliders[currentSlider]?.image_url && (
+                                    <img
+                                        src={activeSliders[currentSlider].image_url}
+                                        alt="Luxury Lighting"
+                                        className="w-full h-full object-cover opacity-60"
+                                    />
+                                )}
                                 <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon via-brand-carbon/20 to-transparent"></div>
                             </div>
 
@@ -134,30 +176,62 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        {/* Side Narrative Feature (3%) */}
+                        {/* Side Narrative Feature (3%) - Mini Slider PRO */}
                         <div className="lg:col-span-3 lg:flex flex-col gap-8 hidden">
-                            <div className="flex-1 bg-white rounded-[2.5rem] p-10 shadow-luxury border border-gray-100 flex flex-col justify-between group cursor-pointer hover:border-primary/20 transition-all">
-                                <div>
-                                    <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-primary mb-6 transition-transform group-hover:scale-110">
-                                        <Loader2 className="w-6 h-6 animate-spin-slow" />
+                            <Link
+                                to={proSlides[proSlider].link}
+                                className="flex-1 bg-brand-carbon rounded-[2.5rem] shadow-luxury border border-white/5 flex flex-col justify-between group cursor-pointer hover:border-primary/40 transition-all relative overflow-hidden"
+                            >
+                                {/* Background Image with Overlay */}
+                                <div className="absolute inset-0 z-0">
+                                    <img
+                                        src={proSlides[proSlider].image}
+                                        alt={proSlides[proSlider].title}
+                                        className="w-full h-full object-cover opacity-40 transition-transform duration-700 group-hover:scale-110"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon via-brand-carbon/20 to-transparent"></div>
+                                </div>
+
+                                <div className="relative z-10 p-10 h-full flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-8">
+                                            <div className="w-12 h-12 bg-primary/20 backdrop-blur-md text-primary rounded-2xl flex items-center justify-center transition-transform group-hover:rotate-12 border border-primary/20">
+                                                {proSlider === 0 ? <Zap className="w-6 h-6" /> : <Layout className="w-6 h-6" />}
+                                            </div>
+                                            <div className="flex gap-1">
+                                                <div className={`w-1 h-1 rounded-full transition-all ${proSlider === 0 ? 'bg-primary w-4' : 'bg-white/20'}`}></div>
+                                                <div className={`w-1 h-1 rounded-full transition-all ${proSlider === 1 ? 'bg-primary w-4' : 'bg-white/20'}`}></div>
+                                            </div>
+                                        </div>
+
+                                        <div className="min-h-[140px] animate-in fade-in slide-in-from-right-4 duration-500" key={proSlider}>
+                                            <h3 className="text-2xl font-black uppercase italic leading-none mb-4 whitespace-pre-line text-white">
+                                                {proSlides[proSlider].title.split('\n')[0]} <br />
+                                                <span className="text-primary italic">{proSlides[proSlider].title.split('\n')[1]}</span>
+                                            </h3>
+                                            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-widest leading-relaxed">
+                                                {proSlides[proSlider].desc}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <h3 className="text-xl font-black uppercase italic leading-tight mb-2">Proyectos <br />Luz & Arte</h3>
-                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-relaxed">Asesoramiento personalizado para estudios de arquitectura.</p>
+
+                                    <div className="flex items-center gap-2 text-[10px] font-black text-white uppercase italic tracking-widest group-hover:gap-4 transition-all group-hover:text-primary transition-all">
+                                        Selección Profesional <div className="w-4 h-[2px] bg-primary"></div>
+                                    </div>
                                 </div>
-                                <div className="flex items-center gap-2 text-[10px] font-black text-primary uppercase italic tracking-widest group-hover:gap-4 transition-all">
-                                    Saber más <div className="w-4 h-[2px] bg-primary"></div>
-                                </div>
-                            </div>
+                            </Link>
 
                             <a
                                 href={activeSideBanner.link_url || '#'}
                                 className="h-[300px] relative rounded-[2.5rem] overflow-hidden shadow-luxury group"
                             >
-                                <img
-                                    src={activeSideBanner.image_url}
-                                    alt="Side Banner"
-                                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                                />
+                                {activeSideBanner.image_url && (
+                                    <img
+                                        src={activeSideBanner.image_url}
+                                        alt="Side Banner"
+                                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+                                    />
+                                )}
                                 <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                 <div className="absolute top-8 left-8">
                                     <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-widest rounded-lg border border-white/10">
@@ -209,7 +283,7 @@ export default function HomePage() {
                                         </div>
                                         <div className="z-10">
                                             <Link
-                                                to={`/product/${featuredProducts[0].id}`}
+                                                to={`/product/${featuredProducts[0].slug || featuredProducts[0].id}`}
                                                 className="inline-flex items-center gap-4 px-8 py-4 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] hover:bg-primary transition-all shadow-xl shadow-black/20"
                                             >
                                                 Ver Detalles <div className="w-8 h-[1px] bg-white opacity-40"></div>
@@ -234,7 +308,7 @@ export default function HomePage() {
                                     {featuredProducts.slice(1, 3).map((prod) => (
                                         <Link
                                             key={prod.id}
-                                            to={`/product/${prod.id}`}
+                                            to={`/product/${prod.slug || prod.id}`}
                                             className="flex-1 group relative bg-white rounded-[2.5rem] p-8 overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-500 border border-gray-100/50 flex items-center"
                                         >
                                             <div className="w-1/2 relative z-10">
