@@ -31,6 +31,7 @@ import Checkout from './pages/Checkout';
 import PaymentSettings from './pages/admin/PaymentSettings';
 import UsersAdmin from './pages/admin/UsersAdmin';
 import ProfessionalsAdmin from './pages/admin/ProfessionalsAdmin';
+import ProfessionsAdmin from './pages/admin/ProfessionsAdmin';
 import CategoriesAdmin from './pages/admin/CategoriesAdmin';
 import SEOAdmin from './pages/admin/SEOAdmin';
 import SEOManager from './components/common/SEOManager';
@@ -78,6 +79,7 @@ function App() {
               <Route path="payments" element={<PaymentSettings />} />
               <Route path="users" element={<UsersAdmin />} />
               <Route path="professionals" element={<ProfessionalsAdmin />} />
+              <Route path="professions" element={<ProfessionsAdmin />} />
               <Route path="seo" element={<SEOAdmin />} />
             </Route>
           </Routes>

@@ -92,8 +92,9 @@ export function AdminLayout() {
                 { icon: ImageIcon, label: 'Sliders / Banners', path: '/admin/sliders' },
                 { icon: BookOpen, label: 'Blog', path: '/admin/blog' },
                 { icon: Briefcase, label: 'Proyectos', path: '/admin/projects' },
+                { icon: Star, label: 'Sectores PRO', path: '/admin/professions' },
+                { icon: Award, label: 'Contenido PRO', path: '/admin/professionals' },
                 { icon: CheckSquare, label: 'Por qué elegirnos', path: '/admin/why-us' },
-                { icon: Star, label: 'Área Profesional', path: '/admin/professionals' },
             ]
         },
         {

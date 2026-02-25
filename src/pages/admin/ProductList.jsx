@@ -21,6 +21,7 @@ export default function ProductList() {
     const [categories, setCategories] = useState([]);
     const [brands, setBrands] = useState([]);
     const [rooms, setRooms] = useState([]);
+    const [professions, setProfessions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -37,6 +38,7 @@ export default function ProductList() {
         category_id: '',
         brand_id: '',
         room_ids: [],
+        profession_ids: [],
         image_url: '',
         description: '',
         discount_price: '',
@@ -59,13 +61,14 @@ export default function ProductList() {
     async function fetchAllData() {
         try {
             setLoading(true);
-            const [prodRes, catRes, brandRes, roomRes] = await Promise.all([
+            const [prodRes, catRes, brandRes, roomRes, profRes] = await Promise.all([
                 supabase.from('products')
                     .select('*, categories(name), brands(name), product_rooms(room_id)')
                     .order('created_at', { ascending: false }),
                 supabase.from('categories').select('id, name').order('name'),
                 supabase.from('brands').select('id, name').order('name'),
-                supabase.from('rooms').select('id, name').order('name')
+                supabase.from('rooms').select('id, name').order('name'),
+                supabase.from('professions').select('id, name').order('name')
             ]);
 
             const allProducts = prodRes.data || [];
@@ -80,6 +83,7 @@ export default function ProductList() {
             setCategories(catRes.data || []);
             setBrands(brandRes.data || []);
             setRooms(roomRes.data || []);
+            setProfessions(profRes.data || []);
         } catch (error) {
             console.error('Error fetching data:', error.message);
         } finally {
@@ -308,6 +312,7 @@ export default function ProductList() {
             category_id: product.category_id || '',
             brand_id: product.brand_id || '',
             room_ids: product.room_ids || [],
+            profession_ids: [], // Fetch this separately or from a joined select
             image_url: product.image_url || '',
             description: product.description || '',
             discount_price: product.discount_price || '',
@@ -315,6 +320,9 @@ export default function ProductList() {
             attributes: product.attributes || {},
             extra_images: product.extra_images || []
         });
+
+        // Load relations
+        loadProductRelations(product.id);
 
         // Load variants if it is a parent
         if (!product.parent_id) {
@@ -327,12 +335,29 @@ export default function ProductList() {
         setIsModalOpen(true);
     }
 
+    async function loadProductRelations(productId) {
+        try {
+            const [roomsData, profsData] = await Promise.all([
+                supabase.from('product_rooms').select('room_id').eq('product_id', productId),
+                supabase.from('product_professions').select('profession_id').eq('product_id', productId)
+            ]);
+
+            setFormData(prev => ({
+                ...prev,
+                room_ids: roomsData.data?.map(r => r.room_id) || [],
+                profession_ids: profsData.data?.map(p => p.profession_id) || []
+            }));
+        } catch (error) {
+            console.error("Error loading relations:", error);
+        }
+    }
+
     function openCreate() {
         setEditingId(null);
         setActiveTab('general');
         setFormData({
             name: '', reference: '', price: '', stock: 0,
-            category_id: '', brand_id: '', room_ids: [],
+            category_id: '', brand_id: '', room_ids: [], profession_ids: [],
             image_url: '', description: '', discount_price: '',
             parent_id: null, attributes: {}, extra_images: []
         });
@@ -370,9 +395,8 @@ export default function ProductList() {
                 productId = data.id;
             }
 
-            // Handle Rooms Relation - Only for Parents or if logic allows children to have separate rooms
-            // Usually variants inherit, but for now we save for all if selected
             if (productId) {
+                // Save Rooms
                 await supabase.from('product_rooms').delete().eq('product_id', productId);
                 if (formData.room_ids.length > 0) {
                     const roomInserts = formData.room_ids.map(roomId => ({
@@ -380,6 +404,16 @@ export default function ProductList() {
                         room_id: roomId
                     }));
                     await supabase.from('product_rooms').insert(roomInserts);
+                }
+
+                // Save Professions (Sectores B2B)
+                await supabase.from('product_professions').delete().eq('product_id', productId);
+                if (formData.profession_ids.length > 0) {
+                    const profInserts = formData.profession_ids.map(profId => ({
+                        product_id: productId,
+                        profession_id: profId
+                    }));
+                    await supabase.from('product_professions').insert(profInserts);
                 }
             }
 
@@ -774,6 +808,31 @@ export default function ProductList() {
                                                                 }}
                                                             />
                                                             <span className="text-xs font-bold uppercase text-gray-600">{room.name}</span>
+                                                        </label>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Sectores B2B (Mega Menú)</label>
+                                                <div className="border rounded-lg p-3 max-h-32 overflow-y-auto space-y-2 bg-gray-50/50">
+                                                    {professions.map(prof => (
+                                                        <label key={prof.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                                                            <input
+                                                                type="checkbox"
+                                                                className="rounded text-primary focus:ring-primary"
+                                                                checked={formData.profession_ids.includes(prof.id)}
+                                                                onChange={(e) => {
+                                                                    const checked = e.target.checked;
+                                                                    setFormData(prev => ({
+                                                                        ...prev,
+                                                                        profession_ids: checked
+                                                                            ? [...prev.profession_ids, prof.id]
+                                                                            : prev.profession_ids.filter(id => id !== prof.id)
+                                                                    }));
+                                                                }}
+                                                            />
+                                                            <span className="text-xs font-bold uppercase text-gray-600">{prof.name}</span>
                                                         </label>
                                                     ))}
                                                 </div>

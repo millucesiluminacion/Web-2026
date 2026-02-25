@@ -362,6 +362,7 @@ export default function SliderList() {
                                     >
                                         <option value="main_slider">Slider Principal (Grande)</option>
                                         <option value="side_banner">Banner Lateral (Estrecho)</option>
+                                        <option value="megamenu_featured">Banner Mega-Menú (Destacado)</option>
                                     </select>
                                 </div>
 

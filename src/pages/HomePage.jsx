@@ -13,6 +13,7 @@ export default function HomePage() {
     const [sideBanners, setSideBanners] = useState([]);
     const [currentSlider, setCurrentSlider] = useState(0);
     const [proSlider, setProSlider] = useState(0);
+    const [professions, setProfessions] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -22,34 +23,19 @@ export default function HomePage() {
     async function fetchAllData() {
         try {
             setLoading(true);
-            const [prodRes, sliderRes, seoRes] = await Promise.all([
+            const [prodRes, sliderRes, profRes] = await Promise.all([
                 supabase.from('products').select('*').order('created_at', { ascending: false }).limit(3),
                 supabase.from('sliders').select('*').eq('is_active', true).order('order_index', { ascending: true }),
-                supabase.from('site_settings').select('*').eq('key', 'seo_global').single()
+                supabase.from('professions').select('*').order('order_index', { ascending: true })
             ]);
 
-            if (prodRes.error) throw prodRes.error;
-            if (sliderRes.error) throw sliderRes.error;
+            if (prodRes.data) setFeaturedProducts(prodRes.data);
+            if (profRes.data) setProfessions(profRes.data);
 
-            setFeaturedProducts(prodRes.data || []);
-
-            const allSliders = sliderRes.data || [];
-            setSliders(allSliders.filter(s => s.type === 'main_slider'));
-            setSideBanners(allSliders.filter(s => s.type === 'side_banner'));
-
-            // SEO Implementation
-            if (seoRes.data?.value) {
-                const seo = seoRes.data.value;
-                document.title = seo.home_title || 'Mil Luces | Boutique de Iluminación';
-                const metaDesc = document.querySelector('meta[name="description"]');
-                if (metaDesc) {
-                    metaDesc.setAttribute('content', seo.home_description || '');
-                } else {
-                    const meta = document.createElement('meta');
-                    meta.name = 'description';
-                    meta.content = seo.home_description || '';
-                    document.head.appendChild(meta);
-                }
+            if (sliderRes.data) {
+                const allSliders = sliderRes.data;
+                setSliders(allSliders.filter(s => s.type === 'main_slider'));
+                setSideBanners(allSliders.filter(s => s.type === 'side_banner'));
             }
 
         } catch (error) {
@@ -73,11 +59,12 @@ export default function HomePage() {
 
     // Auto-advance mini pro slider
     useEffect(() => {
+        if (professions.length <= 1) return;
         const timer = setInterval(() => {
-            setProSlider(prev => (prev + 1) % 2);
+            setProSlider(prev => (prev + 1) % professions.length);
         }, 4000);
         return () => clearInterval(timer);
-    }, []);
+    }, [professions]);
 
     const proSlides = [
         {
@@ -107,11 +94,11 @@ export default function HomePage() {
         <div className="js-main-container">
             {/* Premium Hero Section */}
             <section className="relative pt-8 pb-12 overflow-hidden">
-                <div className="container mx-auto px-4 md:px-6 max-w-[1400px]">
+                <div className="container mx-auto px-4 md:px-6 max-w-[1600px]">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-stretch">
 
                         {/* Main Cinematic Feature (75%) */}
-                        <div className="lg:col-span-9 relative group rounded-[2.5rem] lg:rounded-[3.5rem] overflow-hidden shadow-luxury aspect-[16/10] lg:aspect-auto min-h-[450px] lg:h-[750px] bg-brand-carbon">
+                        <div className="lg:col-span-9 relative group rounded-[2rem] lg:rounded-[3.5rem] overflow-hidden shadow-luxury h-[48vh] min-h-[320px] max-h-[480px] lg:h-[500px] lg:min-h-0 lg:max-h-none bg-brand-carbon">
                             {/* Background Image with Overlay */}
                             <div className="absolute inset-0 transition-transform duration-1000 group-hover:scale-105">
                                 {activeSliders[currentSlider]?.image_url && (
@@ -125,29 +112,24 @@ export default function HomePage() {
                             </div>
 
                             {/* Content Overlay */}
-                            <div className="absolute inset-0 p-12 lg:p-20 flex flex-col justify-end">
+                            <div className="absolute inset-0 p-6 sm:p-10 lg:p-20 flex flex-col justify-end">
                                 <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
                                     {activeSliders[currentSlider]?.subtitle && (
                                         <span className="inline-block px-4 py-1.5 bg-primary/10 backdrop-blur-md text-primary rounded-full text-[10px] font-black uppercase tracking-[.3em] mb-6 border border-primary/20">
                                             {activeSliders[currentSlider].subtitle}
                                         </span>
                                     )}
-                                    <h1 className="text-4xl md:text-5xl lg:text-8xl font-black text-white uppercase italic leading-[0.85] tracking-tighter mb-8 lg:mb-12">
+                                    <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white uppercase italic leading-[0.85] tracking-tighter mb-5 lg:mb-12">
                                         {activeSliders[currentSlider]?.title ? (
-                                            activeSliders[currentSlider].title.split('<br />').map((text, i) => (
-                                                <span key={i}>
-                                                    {i > 0 && <br />}
-                                                    {text}
-                                                </span>
-                                            ))
+                                            activeSliders[currentSlider].title.replace(/<br\s*\/?>/gi, ' ')
                                         ) : (
-                                            <>La Luz que <br /><span className="text-white/40 italic">Define Tu</span> <br className="md:hidden" /> <span className="text-primary italic">Estilo</span></>
+                                            <>La Luz que <span className="text-primary/60 italic">Define Tu</span> <span className="text-white italic">Estilo</span></>
                                         )}
                                     </h1>
                                     <div className="flex flex-wrap gap-4">
                                         <Link
                                             to={activeSliders[currentSlider]?.link_url || '/search'}
-                                            className="px-8 lg:px-12 py-4 lg:py-6 bg-white text-brand-carbon rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30"
+                                            className="px-6 lg:px-12 py-3 lg:py-6 bg-white text-brand-carbon rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30"
                                         >
                                             {activeSliders[currentSlider]?.button_text || 'Ver Boutique'}
                                         </Link>
@@ -164,7 +146,7 @@ export default function HomePage() {
                             </div>
 
                             {/* Navigation Micro-Dots */}
-                            <div className="absolute bottom-10 right-10 flex gap-3">
+                            <div className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 flex gap-3">
                                 {activeSliders.map((_, i) => (
                                     <button
                                         key={i}
@@ -177,18 +159,22 @@ export default function HomePage() {
                         </div>
 
                         {/* Side Narrative Feature (3%) - Mini Slider PRO */}
-                        <div className="lg:col-span-3 lg:flex flex-col gap-8 hidden">
+                        <div className="lg:col-span-3 lg:flex flex-col gap-6 hidden lg:h-[500px]">
                             <Link
-                                to={proSlides[proSlider].link}
+                                to={professions.length > 0 ? `/search?profession=${professions[proSlider]?.slug}` : "/profesionales"}
                                 className="flex-1 bg-brand-carbon rounded-[2.5rem] shadow-luxury border border-white/5 flex flex-col justify-between group cursor-pointer hover:border-primary/40 transition-all relative overflow-hidden"
                             >
                                 {/* Background Image with Overlay */}
                                 <div className="absolute inset-0 z-0">
-                                    <img
-                                        src={proSlides[proSlider].image}
-                                        alt={proSlides[proSlider].title}
-                                        className="w-full h-full object-cover opacity-40 transition-transform duration-700 group-hover:scale-110"
-                                    />
+                                    {professions.length > 0 && professions[proSlider]?.image_url ? (
+                                        <img
+                                            src={professions[proSlider].image_url}
+                                            alt={professions[proSlider].name}
+                                            className="w-full h-full object-cover opacity-40 transition-transform duration-700 group-hover:scale-110"
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full bg-brand-carbon/20"></div>
+                                    )}
                                     <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon via-brand-carbon/20 to-transparent"></div>
                                 </div>
 
@@ -196,34 +182,34 @@ export default function HomePage() {
                                     <div>
                                         <div className="flex items-center justify-between mb-8">
                                             <div className="w-12 h-12 bg-primary/20 backdrop-blur-md text-primary rounded-2xl flex items-center justify-center transition-transform group-hover:rotate-12 border border-primary/20">
-                                                {proSlider === 0 ? <Zap className="w-6 h-6" /> : <Layout className="w-6 h-6" />}
+                                                <Briefcase className="w-6 h-6" />
                                             </div>
                                             <div className="flex gap-1">
-                                                <div className={`w-1 h-1 rounded-full transition-all ${proSlider === 0 ? 'bg-primary w-4' : 'bg-white/20'}`}></div>
-                                                <div className={`w-1 h-1 rounded-full transition-all ${proSlider === 1 ? 'bg-primary w-4' : 'bg-white/20'}`}></div>
+                                                {professions.map((_, i) => (
+                                                    <div key={i} className={`w-1 h-1 rounded-full transition-all ${i === proSlider ? 'bg-primary w-4' : 'bg-white/20'}`}></div>
+                                                ))}
                                             </div>
                                         </div>
 
                                         <div className="min-h-[140px] animate-in fade-in slide-in-from-right-4 duration-500" key={proSlider}>
                                             <h3 className="text-2xl font-black uppercase italic leading-none mb-4 whitespace-pre-line text-white">
-                                                {proSlides[proSlider].title.split('\n')[0]} <br />
-                                                <span className="text-primary italic">{proSlides[proSlider].title.split('\n')[1]}</span>
+                                                {professions.length > 0 ? professions[proSlider].name : 'Cargando...'}
                                             </h3>
-                                            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-widest leading-relaxed">
-                                                {proSlides[proSlider].desc}
+                                            <p className="text-[10px] text-gray-300 font-bold uppercase tracking-widest leading-relaxed line-clamp-3">
+                                                {professions.length > 0 ? professions[proSlider].description : ''}
                                             </p>
                                         </div>
                                     </div>
 
                                     <div className="flex items-center gap-2 text-[10px] font-black text-white uppercase italic tracking-widest group-hover:gap-4 transition-all group-hover:text-primary transition-all">
-                                        Selección Profesional <div className="w-4 h-[2px] bg-primary"></div>
+                                        Explorar Selección <div className="w-4 h-[2px] bg-primary"></div>
                                     </div>
                                 </div>
                             </Link>
 
                             <a
                                 href={activeSideBanner.link_url || '#'}
-                                className="h-[300px] relative rounded-[2.5rem] overflow-hidden shadow-luxury group"
+                                className="flex-1 relative rounded-[2.5rem] overflow-hidden shadow-luxury group"
                             >
                                 {activeSideBanner.image_url && (
                                     <img
@@ -248,11 +234,11 @@ export default function HomePage() {
             <CategoryGrid />
 
             {/* Featured Section - Boutique Edit */}
-            <section className="mb-12 max-w-[1400px] mx-auto px-6">
+            <section className="mb-12 max-w-[1600px] mx-auto px-6">
                 <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
                     <div>
                         <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Premium Selection</span>
-                        <h2 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Novedades <br /><span className="text-gray-300">Destacadas</span></h2>
+                        <h2 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Novedades <span className="text-primary/60">Destacadas</span></h2>
                     </div>
                     <Link to="/search" className="text-[10px] font-black text-brand-carbon uppercase italic tracking-widest hover:text-primary transition-all flex items-center gap-2 border-b-2 border-brand-carbon pb-1 group">
                         Ver Colección Completa <div className="w-6 h-[1px] bg-brand-carbon group-hover:w-10 transition-all"></div>

@@ -25,10 +25,12 @@ export default function ProductListing() {
     const category = searchParams.get('category');
     const subcategory = searchParams.get('subcategory');
     const roomId = searchParams.get('room');
+    const professionSlug = searchParams.get('profession');
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [rooms, setRooms] = useState([]);
+    const [professions, setProfessions] = useState([]);
     const [subcategories, setSubcategories] = useState([]);
     const [activeCategory, setActiveCategory] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -37,7 +39,7 @@ export default function ProductListing() {
 
     useEffect(() => {
         fetchProducts();
-    }, [category, subcategory, roomId]);
+    }, [category, subcategory, roomId, professionSlug]);
 
     useEffect(() => {
         // SEO centralized via SEOManager
@@ -47,15 +49,17 @@ export default function ProductListing() {
         try {
             setLoading(true);
 
-            // 1. Fetch all categories and rooms
-            const [catRes, roomsRes] = await Promise.all([
+            // 1. Fetch all categories, rooms and professions
+            const [catRes, roomsRes, profsRes] = await Promise.all([
                 supabase.from('categories').select('*').order('order_index', { ascending: true }),
-                supabase.from('rooms').select('*').order('name')
+                supabase.from('rooms').select('*').order('name'),
+                supabase.from('professions').select('*').order('order_index', { ascending: true })
             ]);
 
             const allCategories = catRes.data || [];
             setCategories(allCategories);
             setRooms(roomsRes.data || []);
+            setProfessions(profsRes.data || []);
 
             // 2. Identify active category and subcategories
             if (category && category !== 'all') {
@@ -75,10 +79,10 @@ export default function ProductListing() {
             }
 
             // 3. Build Product Query
-            // Use standard select. Only use !inner join if we are filtering by room to avoid excluding products without rooms.
-            const querySelect = roomId
-                ? '*, product_rooms!inner(room_id)'
-                : '*, product_rooms(room_id)';
+            let querySelect = '*, product_rooms(room_id), product_professions(profession_id)';
+
+            if (roomId) querySelect = '*, product_rooms!inner(room_id), product_professions(profession_id)';
+            if (professionSlug) querySelect = '*, product_rooms(room_id), product_professions!inner(profession_id)';
 
             let productQuery = supabase.from('products').select(querySelect).is('parent_id', null);
 
@@ -116,6 +120,13 @@ export default function ProductListing() {
                 productQuery = productQuery.eq('product_rooms.room_id', roomId);
             }
 
+            if (professionSlug) {
+                const prof = profsRes.data?.find(p => p.slug === professionSlug.toLowerCase());
+                if (prof) {
+                    productQuery = productQuery.eq('product_professions.profession_id', prof.id);
+                }
+            }
+
             const productsRes = await productQuery.order('created_at', { ascending: false });
 
             if (productsRes.error) throw productsRes.error;
@@ -142,7 +153,13 @@ export default function ProductListing() {
         <div className="container mx-auto px-4 py-8">
             {/* Breadcrumbs */}
             <div className="text-sm text-gray-500 mb-8">
-                <Link to="/" className="hover:text-blue-600 transition-colors">Inicio</Link> / <span className="text-gray-900 font-medium capitalize">{category || 'Todos los productos'}</span>
+                <Link to="/" className="hover:text-blue-600 transition-colors">Inicio</Link> /{' '}
+                <span className="text-gray-900 font-medium capitalize">
+                    {category && category !== 'all' ? category :
+                        roomId ? rooms.find(r => r.id === roomId)?.name :
+                            professionSlug ? professions.find(p => p.slug === professionSlug)?.name :
+                                'Todos los productos'}
+                </span>
             </div>
 
             <div className="flex flex-col lg:flex-row gap-8">
