@@ -10,6 +10,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@paypal/paypal-js": "^9.3.0",
+    "@paypal/react-paypal-js": "^8.9.2",
     "@supabase/supabase-js": "^2.95.3",
     "clsx": "^2.1.1",
     "dotenv": "^17.3.1",
@@ -19,6 +21,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.13.0",
+    "stripe": "^20.4.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {

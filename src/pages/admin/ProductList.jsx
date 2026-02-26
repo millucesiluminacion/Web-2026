@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, Percent, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
@@ -24,10 +24,19 @@ export default function ProductList() {
     const [professions, setProfessions] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [filterCategory, setFilterCategory] = useState('');
+    const [filterBrand, setFilterBrand] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [activeTab, setActiveTab] = useState('general'); // 'general' | 'variants'
+
+    // Bulk selection state
+    const [selectedIds, setSelectedIds] = useState(new Set());
+    const [bulkAction, setBulkAction] = useState('');
+    const [bulkValue, setBulkValue] = useState('');
+    const [isBulkSaving, setIsBulkSaving] = useState(false);
+    const [bulkToast, setBulkToast] = useState('');
 
     // Form State
     const [formData, setFormData] = useState({
@@ -65,7 +74,7 @@ export default function ProductList() {
                 supabase.from('products')
                     .select('*, categories(name), brands(name), product_rooms(room_id)')
                     .order('created_at', { ascending: false }),
-                supabase.from('categories').select('id, name').order('name'),
+                supabase.from('categories').select('id, name, parent_id, slug').order('name'),
                 supabase.from('brands').select('id, name').order('name'),
                 supabase.from('rooms').select('id, name').order('name'),
                 supabase.from('professions').select('id, name').order('name')
@@ -488,10 +497,83 @@ export default function ProductList() {
         setFormData(prev => ({ ...prev, attributes: newAttrs }));
     };
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.reference?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredProducts = products.filter(p => {
+        const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchCat = !filterCategory || p.category_id === filterCategory;
+        const matchBrand = !filterBrand || p.brand_id === filterBrand;
+        return matchSearch && matchCat && matchBrand;
+    });
+
+    // Bulk selection helpers
+    const allFilteredIds = filteredProducts.map(p => p.id);
+    const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id));
+    const someSelected = selectedIds.size > 0;
+
+    function toggleSelect(id) {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    }
+
+    function toggleSelectAll() {
+        if (allSelected) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(allFilteredIds));
+        }
+    }
+
+    async function executeBulkAction() {
+        if (!bulkAction || selectedIds.size === 0) return;
+        setIsBulkSaving(true);
+        const ids = Array.from(selectedIds);
+        try {
+            if (bulkAction === 'category' && bulkValue) {
+                await supabase.from('products').update({ category_id: bulkValue }).in('id', ids);
+                setBulkToast(`Categoría actualizada en ${ids.length} productos`);
+            } else if (bulkAction === 'brand' && bulkValue) {
+                await supabase.from('products').update({ brand_id: bulkValue }).in('id', ids);
+                setBulkToast(`Marca actualizada en ${ids.length} productos`);
+            } else if (bulkAction === 'discount' && bulkValue) {
+                const pct = parseFloat(bulkValue) / 100;
+                for (const id of ids) {
+                    const prod = products.find(p => p.id === id);
+                    if (prod) {
+                        const discountPrice = parseFloat((prod.price * (1 - pct)).toFixed(2));
+                        await supabase.from('products').update({ discount_price: discountPrice }).eq('id', id);
+                    }
+                }
+                setBulkToast(`Descuento del ${bulkValue}% aplicado a ${ids.length} productos`);
+            } else if (bulkAction === 'set_stock') {
+                await supabase.from('products').update({ stock: parseInt(bulkValue) }).in('id', ids);
+                setBulkToast(`Stock actualizado a ${bulkValue} uds. en ${ids.length} productos`);
+            } else if (bulkAction === 'remove_discount') {
+                await supabase.from('products').update({ discount_price: null }).in('id', ids);
+                setBulkToast(`Oferta eliminada de ${ids.length} productos`);
+            } else if (bulkAction === 'delete') {
+                if (!window.confirm(`¿Eliminar ${ids.length} productos? Esta acción no se puede deshacer.`)) {
+                    setIsBulkSaving(false);
+                    return;
+                }
+                await supabase.from('products').delete().in('id', ids);
+                setBulkToast(`${ids.length} productos eliminados`);
+            }
+            await fetchAllData();
+            setSelectedIds(new Set());
+            setBulkAction('');
+            setBulkValue('');
+            setTimeout(() => setBulkToast(''), 3500);
+        } catch (err) {
+            console.error('Bulk action error:', err);
+            setBulkToast('Error: ' + err.message);
+        } finally {
+            setIsBulkSaving(false);
+        }
+    }
+
 
     return (
         <div>
@@ -522,17 +604,164 @@ export default function ProductList() {
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden mb-12">
-                <div className="p-6 border-b border-gray-50 flex items-center gap-4 bg-gray-50/30">
-                    <div className="relative flex-1 max-w-md">
+
+                {/* Bulk action toolbar */}
+                {someSelected && (
+                    <div className="flex flex-wrap items-center gap-3 px-6 py-4 bg-primary/5 border-b border-primary/10 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-center gap-2 mr-2">
+                            <CheckSquare className="w-4 h-4 text-primary" />
+                            <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                                {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
+                            </span>
+                        </div>
+
+                        {/* Cambiar categoría */}
+                        <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm">
+                            <Layers className="w-3.5 h-3.5 text-gray-400" />
+                            <select
+                                className="text-[10px] font-black uppercase text-gray-600 focus:outline-none bg-transparent"
+                                value={bulkAction === 'category' ? bulkValue : ''}
+                                onChange={e => { setBulkAction('category'); setBulkValue(e.target.value); }}
+                            >
+                                <option value="">Cambiar Sección...</option>
+                                {categories.filter(c => !c.parent_id).map(parent => (
+                                    <optgroup key={parent.id} label={parent.name}>
+                                        <option value={parent.id}>{parent.name} (general)</option>
+                                        {categories.filter(c => c.parent_id === parent.id).map(sub => (
+                                            <option key={sub.id} value={sub.id}>&nbsp;&nbsp;{sub.name}</option>
+                                        ))}
+                                    </optgroup>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Cambiar marca */}
+                        <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm">
+                            <Award className="w-3.5 h-3.5 text-gray-400" />
+                            <select
+                                className="text-[10px] font-black uppercase text-gray-600 focus:outline-none bg-transparent"
+                                value={bulkAction === 'brand' ? bulkValue : ''}
+                                onChange={e => { setBulkAction('brand'); setBulkValue(e.target.value); }}
+                            >
+                                <option value="">Cambiar Marca...</option>
+                                {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                            </select>
+                        </div>
+
+                        {/* Descuento % */}
+                        <div className="flex items-center gap-1.5 bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm">
+                            <Percent className="w-3.5 h-3.5 text-gray-400" />
+                            <input
+                                type="number"
+                                min="1" max="99"
+                                placeholder="% Dto."
+                                className="w-16 text-[10px] font-black text-gray-600 focus:outline-none bg-transparent"
+                                value={bulkAction === 'discount' ? bulkValue : ''}
+                                onChange={e => { setBulkAction('discount'); setBulkValue(e.target.value); }}
+                            />
+                        </div>
+
+                        {/* Stock */}
+                        <div className="flex items-center gap-1.5 bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm">
+                            <Package className="w-3.5 h-3.5 text-gray-400" />
+                            <input
+                                type="number"
+                                min="0"
+                                placeholder="Stock uds."
+                                className="w-20 text-[10px] font-black text-gray-600 focus:outline-none bg-transparent"
+                                value={bulkAction === 'set_stock' ? bulkValue : ''}
+                                onChange={e => { setBulkAction('set_stock'); setBulkValue(e.target.value); }}
+                            />
+                        </div>
+
+                        {/* Quitar oferta */}
+                        <button
+                            onClick={() => { setBulkAction('remove_discount'); setBulkValue(''); }}
+                            className={`text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border transition-all ${bulkAction === 'remove_discount'
+                                ? 'bg-amber-500 text-white border-amber-500'
+                                : 'bg-white text-gray-500 border-gray-100 hover:border-amber-300 hover:text-amber-600'
+                                }`}
+                        >
+                            Quitar Oferta
+                        </button>
+
+                        {/* Eliminar */}
+                        <button
+                            onClick={() => { setBulkAction('delete'); setBulkValue(''); }}
+                            className={`text-[9px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border transition-all ${bulkAction === 'delete'
+                                ? 'bg-red-500 text-white border-red-500'
+                                : 'bg-white text-red-400 border-gray-100 hover:border-red-300'
+                                }`}
+                        >
+                            <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+                            Eliminar
+                        </button>
+
+                        {/* Aplicar */}
+                        <button
+                            onClick={executeBulkAction}
+                            disabled={!bulkAction || isBulkSaving}
+                            className="ml-auto bg-primary text-white px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/80 transition-all disabled:opacity-40 shadow-lg shadow-primary/20 flex items-center gap-2"
+                        >
+                            {isBulkSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                            Aplicar
+                        </button>
+
+                        {/* Deseleccionar */}
+                        <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="text-[9px] font-black uppercase text-gray-400 hover:text-gray-600 transition-colors"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                        </button>
+
+                        {bulkToast && (
+                            <div className="w-full text-[9px] font-black text-green-700 bg-green-50 px-4 py-2 rounded-xl border border-green-100">
+                                ✓ {bulkToast}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                <div className="p-6 border-b border-gray-50 flex flex-wrap items-center gap-4 bg-gray-50/30">
+                    <div className="relative flex-1 min-w-[200px] max-w-md">
                         <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
                         <input
                             type="text"
                             placeholder="Buscar por nombre, referencia o SKU..."
-                            className="w-full h-14 pl-14 pr-6 bg-white border-none rounded-2xl text-[11px] font-bold tracking-tight focus:ring-2 focus:ring-primary/20 transition-all font-outfit shadow-sm"
+                            className="w-full h-12 pl-14 pr-6 bg-white border-none rounded-2xl text-[11px] font-bold tracking-tight focus:ring-2 focus:ring-primary/20 transition-all font-outfit shadow-sm"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
+
+                    {/* Quick filters */}
+                    <select
+                        value={filterCategory}
+                        onChange={e => setFilterCategory(e.target.value)}
+                        className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                    >
+                        <option value="">Todas las categorías</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+
+                    <select
+                        value={filterBrand}
+                        onChange={e => setFilterBrand(e.target.value)}
+                        className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                    >
+                        <option value="">Todas las marcas</option>
+                        {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                    </select>
+
+                    {(filterCategory || filterBrand) && (
+                        <button
+                            onClick={() => { setFilterCategory(''); setFilterBrand(''); }}
+                            className="text-[9px] font-black uppercase text-gray-400 hover:text-primary transition-colors flex items-center gap-1"
+                        >
+                            <X className="w-3 h-3" /> Limpiar
+                        </button>
+                    )}
                 </div>
 
                 {loading ? (
@@ -545,71 +774,116 @@ export default function ProductList() {
                         <table className="w-full text-left font-outfit">
                             <thead className="bg-gray-50/50 uppercase text-[9px] font-black text-gray-400 border-b border-gray-100 tracking-[0.2em]">
                                 <tr>
-                                    <th className="p-6">Producto Maestro</th>
-                                    <th className="p-6">Inteligencia / Categorías</th>
-                                    <th className="p-6">Rendimiento (€)</th>
-                                    <th className="p-6 text-right">Acciones</th>
+                                    <th className="p-4 pl-6 w-10">
+                                        <button
+                                            onClick={toggleSelectAll}
+                                            className="text-gray-300 hover:text-primary transition-colors"
+                                            title={allSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                                        >
+                                            {allSelected
+                                                ? <CheckSquare className="w-4 h-4 text-primary" />
+                                                : <Square className="w-4 h-4" />
+                                            }
+                                        </button>
+                                    </th>
+                                    <th className="p-4">Producto</th>
+                                    <th className="p-4">Categoría / Atributos</th>
+                                    <th className="p-4">Precio / Stock</th>
+                                    <th className="p-4 text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {filteredProducts.length > 0 ? filteredProducts.map(product => (
-                                    <tr key={product.id} className={`hover:bg-gray-50/70 transition-all duration-300 group ${product.parent_id ? 'bg-gray-50/20' : ''}`}>
-                                        <td className="p-6">
-                                            <div className="flex items-center gap-5">
+                                    <tr
+                                        key={product.id}
+                                        className={`hover:bg-gray-50/70 transition-all duration-200 group ${selectedIds.has(product.id) ? 'bg-primary/5' : product.parent_id ? 'bg-gray-50/20' : ''
+                                            }`}
+                                    >
+                                        {/* Checkbox */}
+                                        <td className="pl-6 w-10">
+                                            <button
+                                                onClick={() => toggleSelect(product.id)}
+                                                className="text-gray-200 hover:text-primary transition-colors mt-1"
+                                            >
+                                                {selectedIds.has(product.id)
+                                                    ? <CheckSquare className="w-4 h-4 text-primary" />
+                                                    : <Square className="w-4 h-4" />
+                                                }
+                                            </button>
+                                        </td>
+
+                                        {/* Producto */}
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-4">
                                                 {product.parent_id && <div className="w-4 border-l-2 border-b-2 border-gray-200 h-4 rounded-bl-lg ml-2 opacity-50"></div>}
-                                                <div className="w-16 h-16 bg-white rounded-2xl border border-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center p-2 group-hover:shadow-lg group-hover:shadow-gray-100 transition-all duration-500">
-                                                    {product.image_url ? (
-                                                        <img src={product.image_url} alt={product.name} className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-700" />
-                                                    ) : (
-                                                        <Package className="w-6 h-6 text-gray-100" />
-                                                    )}
+                                                <div className="w-12 h-12 bg-white rounded-xl border border-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center p-1.5 group-hover:shadow-md transition-all duration-300">
+                                                    {product.image_url
+                                                        ? <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
+                                                        : <Package className="w-5 h-5 text-gray-200" />
+                                                    }
                                                 </div>
                                                 <div>
-                                                    <p className={`font-black text-brand-carbon uppercase italic text-sm tracking-tight leading-none ${product.parent_id ? 'text-gray-500' : ''}`}>
+                                                    <p className={`font-black text-brand-carbon uppercase italic text-xs tracking-tight leading-none mb-1 ${product.parent_id ? 'text-gray-500' : ''
+                                                        }`}>
                                                         {product.parent_id ? `↳ ${product.name}` : product.name}
                                                     </p>
-                                                    <div className="flex items-center gap-2 mt-2">
-                                                        <span className="text-[9px] text-gray-400 font-black uppercase tracking-widest">{product.reference || 'SIN REF'}</span>
-                                                        {product.parent_id && <span className="text-[7px] font-black bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-md border border-blue-100 uppercase tracking-widest">Variante</span>}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[8px] text-gray-400 font-black uppercase tracking-widest font-mono">{product.reference || 'SIN REF'}</span>
+                                                        {product.parent_id && <span className="text-[7px] font-black bg-blue-50 text-blue-400 px-1.5 py-0.5 rounded border border-blue-100 uppercase">Variante</span>}
+                                                        {product.discount_price && parseFloat(product.discount_price) > 0 && (
+                                                            <span className="text-[7px] font-black bg-red-50 text-red-400 px-1.5 py-0.5 rounded border border-red-100 uppercase">Oferta</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="p-6">
-                                            <div className="space-y-2">
-                                                {product.attributes && Object.keys(product.attributes).length > 0 && (
-                                                    <div className="flex flex-wrap gap-1.5">
-                                                        {Object.entries(product.attributes).map(([k, v]) => {
-                                                            const valArray = Array.isArray(v) ? v : [v];
-                                                            return (
-                                                                <span key={k} className="px-2 py-1 bg-white border border-gray-100 text-gray-500 text-[8px] font-black uppercase rounded-lg shadow-sm">
-                                                                    <span className="text-primary/50 mr-1">{k}:</span> {valArray.length > 2 ? `${valArray.slice(0, 2).join(', ')}... (+${valArray.length - 2})` : valArray.join(', ')}
-                                                                </span>
-                                                            );
-                                                        })}
-                                                    </div>
-                                                )}
+
+                                        {/* Categoría / Atributos */}
+                                        <td className="p-4">
+                                            <div className="space-y-1.5">
                                                 {!product.parent_id && (
-                                                    <div className="flex items-center gap-2 text-[9px] uppercase font-black text-blue-500 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100 w-fit shadow-sm">
-                                                        <Layers className="w-3.5 h-3.5" /> {product.categories?.name || 'Maestro'}
+                                                    <div className="flex items-center gap-1.5 text-[9px] uppercase font-black text-indigo-500 bg-indigo-50 px-2 py-1 rounded-lg border border-indigo-100 w-fit">
+                                                        <Layers className="w-3 h-3" /> {product.categories?.name || '—'}
+                                                    </div>
+                                                )}
+                                                {product.brands?.name && (
+                                                    <div className="text-[8px] text-gray-400 font-black uppercase tracking-widest">{product.brands.name}</div>
+                                                )}
+                                                {product.attributes && Object.keys(product.attributes).length > 0 && (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {Object.entries(product.attributes).slice(0, 2).map(([k, v]) => (
+                                                            <span key={k} className="px-1.5 py-0.5 bg-gray-50 border border-gray-100 text-gray-400 text-[8px] font-bold uppercase rounded">
+                                                                {k}: {Array.isArray(v) ? v.join(', ') : v}
+                                                            </span>
+                                                        ))}
                                                     </div>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="p-6">
-                                            <div className="text-lg font-black text-brand-carbon italic leading-none mb-1.5">{parseFloat(product.price).toFixed(2)}€</div>
-                                            <div className={`flex items-center gap-1.5 text-[8px] font-black uppercase tracking-widest ${product.stock > 0 ? 'text-emerald-500' : 'text-red-500 animate-pulse'}`}>
-                                                <span className={`w-1 h-1 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
-                                                {product.stock} Unidades
+
+                                        {/* Precio / Stock */}
+                                        <td className="p-4">
+                                            <div className="font-black text-brand-carbon italic text-sm leading-none">
+                                                {product.discount_price && parseFloat(product.discount_price) > 0
+                                                    ? <><span className="line-through text-gray-300 text-xs">{parseFloat(product.price).toFixed(2)}€</span> <span className="text-red-500">{parseFloat(product.discount_price).toFixed(2)}€</span></>
+                                                    : <>{parseFloat(product.price).toFixed(2)}€</>
+                                                }
+                                            </div>
+                                            <div className={`flex items-center gap-1 mt-1 text-[8px] font-black uppercase ${product.stock > 0 ? 'text-emerald-500' : 'text-red-400'
+                                                }`}>
+                                                <span className={`w-1.5 h-1.5 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-400'}`}></span>
+                                                {product.stock || 0} uds.
                                             </div>
                                         </td>
-                                        <td className="p-6 text-right">
-                                            <div className="flex justify-end gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-2 group-hover:translate-x-0">
-                                                <button onClick={() => openEdit(product)} className="w-10 h-10 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary transition-all shadow-sm">
-                                                    <Edit2 className="w-4 h-4" />
+
+                                        {/* Acciones */}
+                                        <td className="p-4 text-right">
+                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
+                                                <button onClick={() => openEdit(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-primary hover:border-primary transition-all">
+                                                    <Edit2 className="w-3.5 h-3.5" />
                                                 </button>
-                                                <button onClick={() => deleteProduct(product.id)} className="w-10 h-10 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-400 hover:text-red-500 hover:border-red-100 transition-all shadow-sm">
-                                                    <Trash2 className="w-4 h-4" />
+                                                <button onClick={() => deleteProduct(product.id)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-red-400 hover:border-red-100 transition-all">
+                                                    <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>
                                         </td>
@@ -772,7 +1046,14 @@ export default function ProductList() {
                                                         onChange={e => setFormData({ ...formData, category_id: e.target.value })}
                                                     >
                                                         <option value="">Sin Categoría</option>
-                                                        {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+                                                        {categories.filter(c => !c.parent_id).map(parent => (
+                                                            <optgroup key={parent.id} label={`── ${parent.name}`}>
+                                                                <option value={parent.id}>{parent.name} (general)</option>
+                                                                {categories.filter(c => c.parent_id === parent.id).map(sub => (
+                                                                    <option key={sub.id} value={sub.id}>• {sub.name}</option>
+                                                                ))}
+                                                            </optgroup>
+                                                        ))}
                                                     </select>
                                                 </div>
                                                 <div>

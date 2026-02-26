@@ -27,7 +27,7 @@ import RoomsList from './pages/admin/RoomsList';
 import SliderList from './pages/admin/SliderList';
 import BlogAdmin from './pages/admin/BlogAdmin';
 import ProjectsAdmin from './pages/admin/ProjectsAdmin';
-import Checkout from './pages/Checkout';
+
 import PaymentSettings from './pages/admin/PaymentSettings';
 import UsersAdmin from './pages/admin/UsersAdmin';
 import ProfessionalsAdmin from './pages/admin/ProfessionalsAdmin';
@@ -50,7 +50,7 @@ function App() {
               <Route path="search" element={<ProductListing />} />
               <Route path="product/:slug" element={<ProductDetail />} />
               <Route path="cart" element={<Cart />} />
-              <Route path="checkout" element={<Checkout />} />
+
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
               <Route path="register-pro" element={<RegisterPage isPro={true} />} />
