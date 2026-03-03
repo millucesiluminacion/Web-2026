@@ -12,14 +12,30 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    // 1. Get requester token from header
+    // 1. Get environment variables with fallbacks (Vercel Node.js doesn't always populate VITE_ prefixed vars in process.env)
+    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
+        console.error('[admin-create-user] Missing environment variables:', {
+            url: !!supabaseUrl,
+            anon: !!supabaseAnonKey,
+            service: !!supabaseServiceKey
+        });
+        return res.status(500).json({
+            error: 'Servidor no configurado. Faltan variables SUPABASE_URL o SERVICE_ROLE_KEY en Vercel.'
+        });
+    }
+
+    // 2. Get requester token from header
     const authHeader = req.headers['authorization'];
     if (!authHeader) return res.status(401).json({ error: 'No authorization header' });
     const token = authHeader.replace('Bearer ', '');
 
     try {
-        // Create client with the REQUESTER'S token to verify identity
-        const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
+        // Create client safely
+        const supabase = createClient(supabaseUrl, supabaseAnonKey);
         const { data: { user }, error: userError } = await supabase.auth.getUser(token);
 
         if (userError || !user) throw new Error('Sesión inválida o expirada.');
@@ -32,28 +48,27 @@ export default async function handler(req, res) {
             .single();
 
         if (profileError || profile?.role !== 'admin') {
-            return res.status(403).json({ error: 'No tienes permisos suficientes para crear usuarios.' });
+            return res.status(403).json({ error: 'Permiso denegado: Se requiere rol de administrador.' });
         }
 
-        // 2. Extract new user data
+        // 3. Extract new user data
         const { email, password, full_name, role, user_type, company_name, vat_id, discount_percent, is_partner } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email y contraseña son obligatorios.' });
         }
 
-        // 3. Use service role to create the new user (skipping confirmation)
-        const supabaseAdmin = createClient(
-            process.env.VITE_SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY,
-            { auth: { autoRefreshToken: false, persistSession: false } }
-        );
+        // 4. Use service role (The heavy lifter)
+        const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+            auth: { autoRefreshToken: false, persistSession: false }
+        });
 
-        // a. Create auth user
+        // a. Create auth user (Skip email confirmation)
         const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password,
             email_confirm: true,
+            user_metadata: { full_name: full_name || '' }
         });
 
         if (authError) throw authError;

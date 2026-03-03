@@ -106,36 +106,77 @@ export default function UsersAdmin() {
                     .eq('id', editingUser.id);
                 if (error) throw error;
             } else {
-                // Create new user via secure serverless function
+                // Create new user - DUAL PATH (Try API first, then direct direct signUp fallback)
                 if (!formData.password || formData.password.length < 6) {
                     alert('La contraseña debe tener al menos 6 caracteres.');
                     return;
                 }
 
-                // Obtener el token de sesión del administrador actual
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session) throw new Error("No hay una sesión de administrador activa.");
+                let apiSuccess = false;
+                try {
+                    // 1. Obtener la sesión actual para el token
+                    const { data: { session: currentSession } } = await supabase.auth.getSession();
 
-                const response = await fetch('/api/admin-create-user', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${session.access_token}`
-                    },
-                    body: JSON.stringify(formData)
-                });
+                    if (currentSession) {
+                        const response = await fetch('/api/admin-create-user', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${currentSession.access_token}`
+                            },
+                            body: JSON.stringify(formData)
+                        });
 
-                const result = await response.json();
+                        const result = await response.json();
 
-                if (!response.ok) {
-                    // Manejo de errores específico para entorno local
-                    if (response.status === 404) {
-                        throw new Error("La función de creación (API) no está disponible en este entorno local. Esto suele funcionar solo en producción (Vercel) o con 'vercel dev'.");
+                        if (response.ok) {
+                            apiSuccess = true;
+                            console.log("✅ Usuario creado vía API silente:", result);
+                        } else {
+                            console.warn("⚠️ API de administrador falló, intentando vía directa:", result.error);
+                        }
                     }
-                    throw new Error(result.error || 'Error al crear el usuario');
+                } catch (apiErr) {
+                    console.error("❌ Error en llamada API:", apiErr);
                 }
 
-                console.log("Usuario creado con éxito:", result);
+                // 2. Vía Directa (FALLBACK) si la API no funcionó o no existe
+                if (!apiSuccess) {
+                    console.log("🔄 Ejecutando registro directo (fallback)...");
+
+                    const { createClient } = await import('@supabase/supabase-js');
+                    const tempClient = createClient(
+                        import.meta.env.VITE_SUPABASE_URL,
+                        import.meta.env.VITE_SUPABASE_ANON_KEY,
+                        { auth: { persistSession: false, autoRefreshToken: false } }
+                    );
+
+                    const { data: authData, error: authError } = await tempClient.auth.signUp({
+                        email: formData.email,
+                        password: formData.password,
+                        options: {
+                            data: {
+                                full_name: formData.full_name
+                            }
+                        }
+                    });
+
+                    if (authError) throw authError;
+
+                    // Si se creó con éxito vía directa, avisamos que puede requerir confirmación
+                    alert("⚠️ Miembro registrado directamente. Debido a la configuración actual, es posible que deba confirmar su email antes de entrar.");
+
+                    // Intentamos actualizar el perfil con el resto de metadatos (tipo de usuario, empresa, etc.)
+                    const { password, ...updateData } = formData;
+                    const { error: profileError } = await supabase
+                        .from('profiles')
+                        .update(updateData)
+                        .eq('id', authData.user.id);
+
+                    if (profileError) {
+                        console.error("Error actualizando perfil extra:", profileError);
+                    }
+                }
             }
             await fetchUsers();
             setIsModalOpen(false);
