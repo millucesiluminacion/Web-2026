@@ -54,13 +54,16 @@ export default async function handler(req, res) {
         const transporter = nodemailer.createTransport({
             host: smtp.host,
             port: parseInt(smtp.port),
-            secure: smtp.port === '465' || smtp.secure,
+            secure: smtp.port === '465' || smtp.secure === true,
             auth: {
                 user: smtp.user,
                 pass: smtp.pass
             },
+            connectionTimeout: 10000, // 10 seconds
+            greetingTimeout: 10000,
+            socketTimeout: 10000,
             tls: {
-                rejectUnauthorized: false // Helps with some shared hosting certificates
+                rejectUnauthorized: false
             }
         });
 
