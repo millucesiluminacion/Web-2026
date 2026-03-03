@@ -15,6 +15,7 @@ export default function UsersAdmin() {
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
+        password: '',
         role: 'editor',
         user_type: 'persona',
         company_name: '',
@@ -66,6 +67,7 @@ export default function UsersAdmin() {
         setFormData({
             full_name: '',
             email: '',
+            password: '',
             role: 'editor',
             user_type: 'persona',
             company_name: '',
@@ -96,19 +98,46 @@ export default function UsersAdmin() {
         try {
             setIsSaving(true);
             if (editingUser) {
-                // Update
+                // Update existing profile
+                const { password, ...updateData } = formData;
                 const { error } = await supabase
                     .from('profiles')
-                    .update(formData)
+                    .update(updateData)
                     .eq('id', editingUser.id);
                 if (error) throw error;
             } else {
-                // For "Creating" a user without auth (not recommended but for CRM/team list purposes)
-                // In a real app, this should probably be an invitation
-                alert('La creación de usuarios requiere que se registren primero para obtener un ID de seguridad. Por ahora puedes editar los perfiles existentes.');
-                return;
+                // Create new user via secure serverless function
+                if (!formData.password || formData.password.length < 6) {
+                    alert('La contraseña debe tener al menos 6 caracteres.');
+                    return;
+                }
+
+                // Obtener el token de sesión del administrador actual
+                const { data: { session } } = await supabase.auth.getSession();
+                if (!session) throw new Error("No hay una sesión de administrador activa.");
+
+                const response = await fetch('/api/admin-create-user', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${session.access_token}`
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    // Manejo de errores específico para entorno local
+                    if (response.status === 404) {
+                        throw new Error("La función de creación (API) no está disponible en este entorno local. Esto suele funcionar solo en producción (Vercel) o con 'vercel dev'.");
+                    }
+                    throw new Error(result.error || 'Error al crear el usuario');
+                }
+
+                console.log("Usuario creado con éxito:", result);
             }
-            fetchUsers();
+            await fetchUsers();
             setIsModalOpen(false);
         } catch (error) {
             alert('Error al guardar: ' + error.message);
@@ -552,6 +581,27 @@ export default function UsersAdmin() {
                                     </div>
                                 </div>
                             </div>
+
+                            {!editingUser && (
+                                <div className="space-y-3">
+                                    <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">
+                                        Contrase&ntilde;a Inicial <span className="ml-2 text-gray-300 normal-case tracking-normal font-bold">(m&iacute;n. 6 caracteres)</span>
+                                    </label>
+                                    <div className="relative">
+                                        <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                        <input
+                                            required
+                                            type="password"
+                                            className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.password}
+                                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                            placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;"
+                                            minLength={6}
+                                        />
+                                    </div>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest">El usuario puede cambiarla luego desde su cuenta.</p>
+                                </div>
+                            )}
 
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nivel de Acceso</label>
