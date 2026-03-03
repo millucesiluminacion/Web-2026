@@ -1,4 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+
+// Cargar variables de entorno local si existen
+dotenv.config();
 
 export default async function handler(req, res) {
     if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -28,9 +32,10 @@ export default async function handler(req, res) {
         const health = {
             timestamp: new Date().toISOString(),
             environment: {
-                platform: process.env.VERCEL ? 'Vercel' : 'Node.js (Custom)',
+                platform: process.env.VERCEL ? 'Vercel' : 'Node.js (Local/Custom)',
                 supabase_url: !!process.env.VITE_SUPABASE_URL || !!process.env.SUPABASE_URL,
-                supabase_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY || !!process.env.VITE_SUPABASE_SERVICE_KEY,
+                supabase_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY || !!process.env.VITE_SUPABASE_SERVICE_KEY || !!process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || !!process.env.SUPABASE_SERVICE_KEY,
+                detected_keys: Object.keys(process.env).filter(key => key.includes('SUPABASE'))
             },
             database: {
                 reachable: false,

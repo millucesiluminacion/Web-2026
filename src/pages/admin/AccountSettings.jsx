@@ -458,11 +458,16 @@ export default function AccountSettings() {
                                             {healthData?.environment?.supabase_service_key ? (
                                                 <CheckCircle className="w-5 h-5 text-primary" />
                                             ) : (
-                                                <div className="flex flex-col items-end gap-2">
+                                                <div className="flex flex-col items-end gap-2 text-right">
                                                     <div className="flex items-center gap-2 text-red-500 px-3 py-1.5 bg-red-500/10 rounded-xl border border-red-500/20">
                                                         <AlertTriangle className="w-3.5 h-3.5" />
                                                         <span className="text-[8px] font-black uppercase italic tracking-tighter">Falta Clave</span>
                                                     </div>
+                                                    {healthData?.environment?.detected_keys?.length > 0 && (
+                                                        <p className="text-[8px] text-gray-400 opacity-60 max-w-[150px] leading-tight mt-1">
+                                                            Encontradas: {healthData.environment.detected_keys.join(", ")}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
