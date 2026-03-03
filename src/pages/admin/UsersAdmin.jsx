@@ -93,6 +93,38 @@ export default function UsersAdmin() {
         setIsModalOpen(true);
     }
 
+    async function sendWelcomeEmail(userData) {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            const brandRes = await supabase.from('app_settings').select('value').eq('key', 'site_branding').single();
+            const brand = brandRes.data?.value || { site_name: 'Mil Luces' };
+
+            await fetch('/api/send-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token}`
+                },
+                body: JSON.stringify({
+                    to: userData.email,
+                    subject: `¡Bienvenido a ${brand.site_name}!`,
+                    html: `
+                        <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                            <h1 style="color: #000; text-transform: uppercase;">¡Hola ${userData.full_name}!</h1>
+                            <p>Te damos la bienvenida al equipo de <b>${brand.site_name}</b>.</p>
+                            <p>Tu cuenta ha sido creada con el perfil de: <b>${userData.role?.toUpperCase()}</b></p>
+                            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+                            <p style="font-size: 12px; color: #666;">Si no esperabas este correo, por favor contacta con soporte.</p>
+                        </div>
+                    `
+                })
+            });
+            console.log("📧 Correo de bienvenida enviado con éxito.");
+        } catch (err) {
+            console.warn("⚠️ No se pudo enviar el correo de bienvenida:", err.message);
+        }
+    }
+
     async function handleSaveUser(e) {
         e.preventDefault();
         try {
@@ -132,6 +164,8 @@ export default function UsersAdmin() {
                         if (response.ok) {
                             apiSuccess = true;
                             console.log("✅ Usuario creado vía API silente:", result);
+                            // Enviar bienvenida profesional
+                            sendWelcomeEmail(formData);
                         } else {
                             if (result.error?.includes("Servidor no configurado")) {
                                 console.warn("🚨 Vercel no tiene las claves de Supabase configuradas!");
@@ -146,7 +180,7 @@ export default function UsersAdmin() {
 
                 // 2. Vía Directa (FALLBACK) si la API no funcionó o no existe
                 if (!apiSuccess) {
-                    console.log("🔄 Ejecutando registro directo (fallback)...");
+                    console.log("🔄 Ejecutando registro directo (estilo Home) con metadatos...");
 
                     const { createClient } = await import('@supabase/supabase-js');
                     const tempClient = createClient(
@@ -155,46 +189,36 @@ export default function UsersAdmin() {
                         { auth: { persistSession: false, autoRefreshToken: false } }
                     );
 
+                    // Pasamos TODOS los datos en los metadatos para que el trigger de Supabase los recoja
+                    // (Igual que hace el registro de la Home)
                     const { data: authData, error: authError } = await tempClient.auth.signUp({
                         email: formData.email,
                         password: formData.password,
                         options: {
                             data: {
-                                full_name: formData.full_name
+                                full_name: formData.full_name,
+                                role: formData.role || 'editor',
+                                user_type: formData.user_type || 'persona',
+                                company_name: formData.company_name,
+                                vat_id: formData.vat_id,
+                                discount_percent: formData.discount_percent || 0,
+                                is_partner: formData.is_partner || false
                             }
                         }
                     });
 
                     if (authError) {
                         if (authError.message?.includes("already registered")) {
-                            throw new Error("Este email ya está registrado en el sistema de autenticación.");
+                            throw new Error("Este email ya está registrado.");
                         }
                         throw authError;
                     }
 
-                    if (!authData?.user?.id) {
-                        throw new Error("No se pudo obtener el ID del nuevo usuario.");
-                    }
+                    // Enviar bienvenida profesional (vía API segura)
+                    // Esperamos un segundo para asegurar que la sesión/registro esté listo en el backend
+                    setTimeout(() => sendWelcomeEmail(formData), 2000);
 
-                    // Pequeña pausa para permitir que el registro en auth.users se propague (evita error 23503)
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-
-                    // Usamos upsert para forzar la creación del perfil
-                    const { password, ...updateData } = formData;
-                    const { error: profileError } = await supabase
-                        .from('profiles')
-                        .upsert({
-                            id: authData.user.id,
-                            email: formData.email,
-                            ...updateData,
-                            created_at: new Date().toISOString()
-                        });
-
-                    if (profileError) {
-                        console.error("Error al asegurar el perfil:", profileError);
-                        // Si falla aquí, al menos el usuario ya existe en Auth
-                        alert("⚠️ Usuario registrado pero hubo un error al crear su perfil extendido. Intenta editarlo manualmente en la lista.");
-                    }
+                    alert("✅ Usuario registrado directamente. Recuerda que debido a la configuración de seguridad, es posible que el usuario tenga que confirmar su email antes de aparecer como 'activo' o poder loguearse.");
                 }
             }
             await fetchUsers();
