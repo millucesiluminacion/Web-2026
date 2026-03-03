@@ -166,15 +166,19 @@ export default function UsersAdmin() {
                     // Si se creó con éxito vía directa, avisamos que puede requerir confirmación
                     alert("⚠️ Miembro registrado directamente. Debido a la configuración actual, es posible que deba confirmar su email antes de entrar.");
 
-                    // Intentamos actualizar el perfil con el resto de metadatos (tipo de usuario, empresa, etc.)
+                    // Usamos upsert para forzar la creación del perfil si el trigger no ha saltado todavía
                     const { password, ...updateData } = formData;
                     const { error: profileError } = await supabase
                         .from('profiles')
-                        .update(updateData)
-                        .eq('id', authData.user.id);
+                        .upsert({
+                            id: authData.user.id,
+                            email: formData.email,
+                            ...updateData,
+                            created_at: new Date().toISOString()
+                        });
 
                     if (profileError) {
-                        console.error("Error actualizando perfil extra:", profileError);
+                        console.error("Error al asegurar el perfil:", profileError);
                     }
                 }
             }
