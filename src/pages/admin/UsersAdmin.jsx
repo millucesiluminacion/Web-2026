@@ -133,6 +133,10 @@ export default function UsersAdmin() {
                             apiSuccess = true;
                             console.log("✅ Usuario creado vía API silente:", result);
                         } else {
+                            if (result.error?.includes("Servidor no configurado")) {
+                                console.warn("🚨 Vercel no tiene las claves de Supabase configuradas!");
+                                alert("⚠️ Nota: El servidor de Vercel no tiene configuradas las claves secretas de Supabase. El registro funcionará, pero el usuario tendrá que confirmar su email.");
+                            }
                             console.warn("⚠️ API de administrador falló, intentando vía directa:", result.error);
                         }
                     }
@@ -161,12 +165,21 @@ export default function UsersAdmin() {
                         }
                     });
 
-                    if (authError) throw authError;
+                    if (authError) {
+                        if (authError.message?.includes("already registered")) {
+                            throw new Error("Este email ya está registrado en el sistema de autenticación.");
+                        }
+                        throw authError;
+                    }
 
-                    // Si se creó con éxito vía directa, avisamos que puede requerir confirmación
-                    alert("⚠️ Miembro registrado directamente. Debido a la configuración actual, es posible que deba confirmar su email antes de entrar.");
+                    if (!authData?.user?.id) {
+                        throw new Error("No se pudo obtener el ID del nuevo usuario.");
+                    }
 
-                    // Usamos upsert para forzar la creación del perfil si el trigger no ha saltado todavía
+                    // Pequeña pausa para permitir que el registro en auth.users se propague (evita error 23503)
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+
+                    // Usamos upsert para forzar la creación del perfil
                     const { password, ...updateData } = formData;
                     const { error: profileError } = await supabase
                         .from('profiles')
@@ -179,6 +192,8 @@ export default function UsersAdmin() {
 
                     if (profileError) {
                         console.error("Error al asegurar el perfil:", profileError);
+                        // Si falla aquí, al menos el usuario ya existe en Auth
+                        alert("⚠️ Usuario registrado pero hubo un error al crear su perfil extendido. Intenta editarlo manualmente en la lista.");
                     }
                 }
             }
