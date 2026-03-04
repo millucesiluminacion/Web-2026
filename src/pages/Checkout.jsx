@@ -68,7 +68,7 @@ export default function Checkout() {
                     status: 'PENDING'
                 }])
                 .select()
-                .single();
+                .maybeSingle();
 
             if (orderError) throw orderError;
 

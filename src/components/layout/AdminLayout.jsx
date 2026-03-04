@@ -22,7 +22,7 @@ export function AdminLayout() {
                     .from('profiles')
                     .select('role')
                     .eq('id', userId)
-                    .single();
+                    .maybeSingle();
 
                 if (error) throw error;
                 setUserRole(data?.role);

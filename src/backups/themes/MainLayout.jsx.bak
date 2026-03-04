@@ -4,10 +4,8 @@ import { TopBanner } from './TopBanner';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { AuthModal } from '../auth/AuthModal';
-import { useAuth } from '../../context/AuthContext';
 
 export function MainLayout() {
-    const { isPro, isPartner } = useAuth();
     const [authModal, setAuthModal] = useState({ open: false, tab: 'login', type: 'persona' });
 
     const openAuthModal = (tab = 'login', type = 'persona') => {
@@ -15,11 +13,8 @@ export function MainLayout() {
     };
     const closeAuthModal = () => setAuthModal({ open: false, tab: 'login', type: 'persona' });
 
-    // Dynamic theme class
-    const themeClass = isPartner ? 'theme-socio' : isPro ? 'theme-pro' : '';
-
     return (
-        <div className={`flex flex-col min-h-screen bg-gray-50 text-gray-900 font-sans ${themeClass}`}>
+        <div className="flex flex-col min-h-screen bg-gray-50 text-gray-900 font-sans">
             <div className="fixed top-0 left-0 right-0 z-50">
                 <TopBanner onOpenAuthModal={openAuthModal} />
                 <Header onOpenAuthModal={openAuthModal} />

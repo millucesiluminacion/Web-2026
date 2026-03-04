@@ -33,7 +33,7 @@ export default function BlogPostDetail() {
                     .from('blog_posts')
                     .select('*')
                     .eq('slug', slug)
-                    .single();
+                    .maybeSingle();
 
                 if (error) throw error;
                 setPost(data);

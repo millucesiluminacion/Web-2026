@@ -56,7 +56,7 @@ export default function ProductDetail() {
                 .from('products')
                 .select('*, categories(name)')
                 .eq('slug', slug)
-                .single();
+                .maybeSingle();
 
             // Trial 2: By ID (Fallback for legacy links or missing slugs)
             if (error || !product) {
@@ -64,7 +64,7 @@ export default function ProductDetail() {
                     .from('products')
                     .select('*, categories(name)')
                     .eq('id', slug)
-                    .single();
+                    .maybeSingle();
 
                 if (idError) throw idError;
                 product = productById;
@@ -186,6 +186,7 @@ export default function ProductDetail() {
         originalPrice,
         finalPrice,
         isShowingProDiscount,
+        isPartnerPrice,
         displayDiscountPercent,
         hasAnyDiscount
     } = calculateProductPrice(displayProduct || parentProduct, profile);
@@ -249,9 +250,9 @@ export default function ProductDetail() {
                         <div className="bg-white rounded-[3rem] p-12 lg:p-20 shadow-luxury border border-gray-100/50 flex items-center justify-center min-h-[500px] lg:h-[700px] overflow-hidden group relative">
                             {/* Discount Badge */}
                             {(isShowingProDiscount || hasAnyDiscount) && (
-                                <div className={`absolute top-8 left-8 z-10 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
+                                <div className={`absolute top-8 left-8 z-10 text-white px-4 py-2 rounded-2xl flex items-center gap-2 shadow-lg ${isPartnerPrice ? 'bg-indigo-600' : isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
                                     <BadgePercent className="w-4 h-4" />
-                                    <span className="font-black text-sm italic">-{displayDiscountPercent}% {isShowingProDiscount ? 'PRO' : ''}</span>
+                                    <span className="font-black text-sm italic">{isPartnerPrice ? 'SOCIO' : `-${displayDiscountPercent}% ${isShowingProDiscount ? 'PRO' : ''}`}</span>
                                 </div>
                             )}
 
@@ -318,7 +319,7 @@ export default function ProductDetail() {
 
                             <div className="mb-10">
                                 <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2 leading-none">
-                                    {isShowingProDiscount ? 'Inversión Profesional' : 'Inversión Exclusiva'}
+                                    {isPartnerPrice ? 'Precio Exclusivo Socio' : isShowingProDiscount ? 'Inversión Profesional' : 'Inversión Exclusiva'}
                                 </span>
                                 {(isShowingProDiscount || hasAnyDiscount) ? (
                                     <div>
@@ -326,15 +327,15 @@ export default function ProductDetail() {
                                             <span className="text-2xl font-bold text-gray-300 line-through italic tracking-tighter">
                                                 {originalPrice.toFixed(2)}€
                                             </span>
-                                            <span className={`px-2 py-0.5 text-white text-[10px] font-black rounded-lg uppercase italic ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
-                                                {isShowingProDiscount ? `Pro -${displayDiscountPercent}%` : `Ahorra ${displayDiscountPercent}%`}
+                                            <span className={`px-2 py-0.5 text-white text-[10px] font-black rounded-lg uppercase italic ${isPartnerPrice ? 'bg-indigo-600' : isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
+                                                {isPartnerPrice ? 'Tarifa Socio' : isShowingProDiscount ? `Pro -${displayDiscountPercent}%` : `Ahorra ${displayDiscountPercent}%`}
                                             </span>
                                         </div>
                                         <div className="flex items-baseline gap-2">
-                                            <span className={`text-5xl font-black italic tracking-tighter ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                            <span className={`text-5xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
                                                 {finalPrice.toFixed(2)}
                                             </span>
-                                            <span className={`text-2xl font-black italic tracking-tighter ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>€</span>
+                                            <span className={`text-2xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>€</span>
                                             <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">+ IVA Incluido</span>
                                         </div>
                                     </div>

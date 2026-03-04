@@ -51,6 +51,7 @@ export default function ProductList() {
         image_url: '',
         description: '',
         discount_price: '',
+        partner_price: '',
         parent_id: null,
         attributes: {},
         extra_images: [] // gallery images
@@ -152,11 +153,13 @@ export default function ProductList() {
             for (const row of parents) {
                 try {
                     const price = parseFloat(row['Precio de venta']?.replace(',', '.') || row['Precio']?.replace('€', '').replace(',', '.').trim() || 0);
+                    const partner_price = parseFloat(row['Precio Socio']?.replace(',', '.') || 0);
                     const payload = {
                         reference: row['SKU'],
                         name: row['Nombre'],
                         description: row['Descripción'],
                         price: isNaN(price) ? 0 : price,
+                        partner_price: isNaN(partner_price) ? 0 : partner_price,
                         stock: parseInt(row['CANT.'] || 0),
                         image_url: row['URL de la imagen'],
                         category_id: getCategoryId(row['Categorías']),
@@ -165,7 +168,7 @@ export default function ProductList() {
                     };
 
                     // Check if exists to update or insert
-                    const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).single();
+                    const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).maybeSingle();
 
                     let productId;
                     if (existing) {
@@ -173,7 +176,7 @@ export default function ProductList() {
                         await supabase.from('products').update(payload).eq('id', existing.id);
                         productId = existing.id;
                     } else {
-                        const { data: newProd, error } = await supabase.from('products').insert([payload]).select().single();
+                        const { data: newProd, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
                         if (error) throw error;
                         productId = newProd.id;
                     }
@@ -193,7 +196,7 @@ export default function ProductList() {
 
                     // If not found in current batch map, try searching in DB
                     if (!finalParentId) {
-                        const { data: dbParent } = await supabase.from('products').select('id').eq('reference', parentSku).single();
+                        const { data: dbParent } = await supabase.from('products').select('id').eq('reference', parentSku).maybeSingle();
                         finalParentId = dbParent?.id;
                     }
 
@@ -204,11 +207,13 @@ export default function ProductList() {
                     }
 
                     const price = parseFloat(row['Precio de venta']?.replace(',', '.') || row['Precio']?.replace('€', '').replace(',', '.').trim() || 0);
+                    const partner_price = parseFloat(row['Precio Socio']?.replace(',', '.') || 0);
                     const payload = {
                         reference: row['SKU'],
                         name: row['Nombre'],
                         description: row['Descripción'],
                         price: isNaN(price) ? 0 : price,
+                        partner_price: isNaN(partner_price) ? 0 : partner_price,
                         stock: parseInt(row['CANT.'] || 0),
                         image_url: row['URL de la imagen'],
                         category_id: getCategoryId(row['Categorías']), // Inherit category?
@@ -217,7 +222,7 @@ export default function ProductList() {
                     };
 
                     // Check if exists
-                    const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).single();
+                    const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).maybeSingle();
 
                     if (existing) {
                         await supabase.from('products').update(payload).eq('id', existing.id);
@@ -284,6 +289,7 @@ export default function ProductList() {
                 "SKU de productos originales": parent ? parent.reference : "",
                 "Precio": `${p.price} €`,
                 "Precio de venta": p.price,
+                "Precio Socio": p.partner_price || 0,
                 "Moneda": "EUR",
                 "Descripción": p.description || "",
                 "Inventario de seguimiento": "by product",
@@ -325,6 +331,7 @@ export default function ProductList() {
             image_url: product.image_url || '',
             description: product.description || '',
             discount_price: product.discount_price || '',
+            partner_price: product.partner_price || '',
             parent_id: product.parent_id,
             attributes: product.attributes || {},
             extra_images: product.extra_images || []
@@ -367,7 +374,7 @@ export default function ProductList() {
         setFormData({
             name: '', reference: '', price: '', stock: 0,
             category_id: '', brand_id: '', room_ids: [], profession_ids: [],
-            image_url: '', description: '', discount_price: '',
+            image_url: '', description: '', discount_price: '', partner_price: '',
             parent_id: null, attributes: {}, extra_images: []
         });
         setVariants([]);
@@ -388,6 +395,7 @@ export default function ProductList() {
                 image_url: formData.image_url,
                 description: formData.description,
                 discount_price: formData.discount_price ? parseFloat(formData.discount_price) : null,
+                partner_price: formData.partner_price ? parseFloat(formData.partner_price) : null,
                 attributes: formData.attributes,
                 parent_id: formData.parent_id,
                 extra_images: formData.extra_images || []
@@ -399,7 +407,7 @@ export default function ProductList() {
                 const { error } = await supabase.from('products').update(payload).eq('id', editingId);
                 if (error) throw error;
             } else {
-                const { data, error } = await supabase.from('products').insert([payload]).select().single();
+                const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
                 if (error) throw error;
                 productId = data.id;
             }
@@ -1032,6 +1040,19 @@ export default function ProductList() {
                                                     />
                                                 </div>
                                             </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5">💰 Precio Socio / Partner (€)</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    className="w-full border-2 border-indigo-100 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none font-black text-indigo-700 bg-indigo-50/50"
+                                                    placeholder="Precio fijo para socios..."
+                                                    value={formData.partner_price}
+                                                    onChange={e => setFormData({ ...formData, partner_price: e.target.value })}
+                                                />
+                                                <p className="text-[9px] text-gray-400 mt-1">Este precio tiene prioridad máxima para usuarios marcados como "Socio".</p>
+                                            </div>
                                         </div>
 
                                         {/* Columna Derecha: Relaciones y Descripción */}
@@ -1326,7 +1347,7 @@ export default function ProductList() {
 
                                                 try {
                                                     setIsSaving(true);
-                                                    const { data, error } = await supabase.from('products').insert([payload]).select().single();
+                                                    const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
                                                     if (error) throw error;
                                                     setVariants(prev => [...prev, data]);
                                                     // Reset form

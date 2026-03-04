@@ -96,7 +96,7 @@ export default function UsersAdmin() {
     async function sendWelcomeEmail(userData) {
         try {
             const { data: { session } } = await supabase.auth.getSession();
-            const brandRes = await supabase.from('app_settings').select('value').eq('key', 'site_branding').single();
+            const brandRes = await supabase.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
             const brand = brandRes.data?.value || { site_name: 'Mil Luces' };
 
             await fetch('/api/send-email', {

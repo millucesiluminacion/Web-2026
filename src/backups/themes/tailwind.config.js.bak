@@ -8,22 +8,19 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: 'hsl(var(--primary) / <alpha-value>)',
-          light: 'hsl(var(--primary-light) / <alpha-value>)',
-          dark: 'hsl(var(--primary-dark) / <alpha-value>)',
-          foreground: 'hsl(var(--primary-foreground) / <alpha-value>)',
+          DEFAULT: '#003399', // Deeper, more sophisticated Midnight Blue
+          light: '#0044CC',
+          dark: '#002266',
+          foreground: '#FFFFFF',
         },
         brand: {
-          carbon: 'hsl(var(--brand-carbon) / <alpha-value>)',
-          porcelain: '#F8F9FA',
+          carbon: '#0D0D0D', // Deep, textured black
+          porcelain: '#F8F9FA', // Clean, refined white
           muted: '#6B7280',
         },
         neutral: {
           50: '#F9FAFB',
-          900: 'hsl(var(--brand-carbon) / <alpha-value>)',
-        },
-        accent: {
-          glow: 'hsl(var(--accent-glow) / <alpha-value>)',
+          900: '#0D0D0D',
         }
       },
       fontFamily: {

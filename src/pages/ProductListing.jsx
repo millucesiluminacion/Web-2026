@@ -295,6 +295,7 @@ export default function ProductListing() {
                                     originalPrice,
                                     finalPrice,
                                     isShowingProDiscount,
+                                    isPartnerPrice,
                                     displayDiscountPercent,
                                     hasAnyDiscount
                                 } = calculateProductPrice(product, profile);
@@ -317,8 +318,8 @@ export default function ProductListing() {
                                             {/* Top Badges */}
                                             {(isShowingProDiscount || hasAnyDiscount) && (
                                                 <div className="absolute top-4 left-4">
-                                                    <span className={`px-2.5 py-1 text-white text-[9px] font-black uppercase tracking-wider rounded-lg italic shadow-lg ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
-                                                        -{displayDiscountPercent}% {isShowingProDiscount ? 'PRO' : ''}
+                                                    <span className={`px-2.5 py-1 text-white text-[9px] font-black uppercase tracking-wider rounded-lg italic shadow-lg ${isPartnerPrice ? 'bg-indigo-600' : isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
+                                                        {isPartnerPrice ? 'SOCIO' : `-${displayDiscountPercent}% ${isShowingProDiscount ? 'PRO' : ''}`}
                                                     </span>
                                                 </div>
                                             )}
@@ -354,11 +355,11 @@ export default function ProductListing() {
                                             <div className="flex items-center justify-between border-t border-gray-50 pt-6">
                                                 <div className="flex flex-col">
                                                     <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest leading-none mb-1">
-                                                        {isShowingProDiscount ? 'Inversión Pro' : 'Inversión'}
+                                                        {isPartnerPrice ? 'Precio Socio' : isShowingProDiscount ? 'Inversión Pro' : 'Inversión'}
                                                     </span>
                                                     {(isShowingProDiscount || hasAnyDiscount) ? (
                                                         <div className="flex items-baseline gap-2">
-                                                            <span className={`text-xl font-black italic ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                                            <span className={`text-xl font-black italic ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
                                                                 {finalPrice.toFixed(2)} €
                                                             </span>
                                                             <span className="text-xs text-gray-300 line-through">{originalPrice.toFixed(2)} €</span>

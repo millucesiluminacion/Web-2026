@@ -128,7 +128,7 @@ export default function OrdersList() {
                     payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
                 }])
                 .select()
-                .single();
+                .maybeSingle();
 
             if (orderError) throw orderError;
 

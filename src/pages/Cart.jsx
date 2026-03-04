@@ -113,7 +113,7 @@ export default function Cart() {
                 user_id: user?.id || null,
             }])
             .select()
-            .single();
+            .maybeSingle();
 
         if (error) throw error;
 

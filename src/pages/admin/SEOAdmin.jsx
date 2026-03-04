@@ -3,7 +3,7 @@ import {
     Search, Globe, Package, Menu, Sofa, BookOpen,
     Save, Loader2, AlertCircle, CheckCircle2,
     ExternalLink, Settings, Layout, Image as ImageIcon,
-    Tag, ChevronRight, BarChart3
+    Tag, ChevronRight, BarChart3, Zap
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -41,7 +41,7 @@ export default function SEOAdmin() {
                 .from('app_settings')
                 .select('*')
                 .eq('key', 'seo_pages')
-                .single();
+                .maybeSingle();
 
             const defaultPages = [
                 { id: 'home', name: 'Home / Portada', slug: '', meta_title: '', meta_description: '' },
@@ -73,7 +73,7 @@ export default function SEOAdmin() {
                 .from('app_settings')
                 .select('*')
                 .eq('key', 'seo_global')
-                .single();
+                .maybeSingle();
             if (error && error.code !== 'PGRST116') throw error;
             setGlobalSettings(data?.value || {
                 home_title: '',
@@ -124,7 +124,7 @@ export default function SEOAdmin() {
 
             if (activeTab === 'pages') {
                 // Actualizar en app_settings
-                const { data } = await supabase.from('app_settings').select('value').eq('key', 'seo_pages').single();
+                const { data } = await supabase.from('app_settings').select('value').eq('key', 'seo_pages').maybeSingle();
                 const currentPages = data?.value || {};
                 currentPages[id] = { ...currentPages[id], ...updates };
 

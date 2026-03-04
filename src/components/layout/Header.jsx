@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, ShoppingCart, User, X, Phone, Mic, ChevronDown, LayoutDashboard, LogOut, Grid3x3, ArrowRight } from 'lucide-react';
+import { Search, ShoppingCart, User, X, Phone, Mic, ChevronDown, LayoutDashboard, LogOut, Grid3x3, ArrowRight, Zap, Star } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabaseClient';
@@ -40,7 +40,7 @@ export function Header({ onOpenAuthModal }) {
     const [megaBanner, setMegaBanner] = useState(null);
 
     const { totalItems } = useCart();
-    const { profile, isPro, user, signOut } = useAuth();
+    const { profile, isPro, isPartner, user, signOut } = useAuth();
     const navigate = useNavigate();
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const menuRef = useRef(null);
@@ -66,7 +66,7 @@ export function Header({ onOpenAuthModal }) {
                         .eq('is_active', true)
                         .order('created_at', { ascending: false })
                         .limit(1)
-                        .single()
+                        .maybeSingle()
                 ]);
 
                 if (cats?.length) setCategories(cats);
@@ -107,7 +107,7 @@ export function Header({ onOpenAuthModal }) {
     return (
         <header
             ref={megaRef}
-            className={`relative z-40 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-lg shadow-luxury py-2' : 'bg-white/80 py-4'}`}
+            className={`relative z-40 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-lg shadow-luxury py-2' : 'bg-white/80 py-4'} ${isPartner || isPro ? 'border-b-2 border-accent-glow' : ''}`}
             onMouseLeave={handleMegaLeave}
         >
             {/* Top bar */}
@@ -182,11 +182,19 @@ export function Header({ onOpenAuthModal }) {
                     <div className="h-8 w-[1px] bg-gray-100 hidden md:block"></div>
 
                     <div className="flex items-center gap-3">
-                        {isPro && (
-                            <div className="hidden sm:flex flex-col items-end">
-                                <span className="text-[7px] font-black text-primary uppercase tracking-[.2em] animate-pulse">Sesión Profesional</span>
-                                <span className="text-[10px] font-black italic text-brand-carbon truncate max-w-[130px]">
-                                    {profile?.company_name || profile?.full_name}
+                        {(isPro || isPartner) && (
+                            <div className="hidden sm:flex flex-col items-end mr-4">
+                                <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border shadow-sm transition-all ${isPartner
+                                    ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 shadow-yellow-500/5'
+                                    : 'bg-primary/10 border-primary/20 text-primary shadow-primary/5'
+                                    }`}>
+                                    {isPartner ? <Star className="w-3 h-3 fill-current animate-pulse" /> : <Zap className="w-3 h-3 fill-current" />}
+                                    <span className="text-[10px] font-black uppercase tracking-[.2em] italic">
+                                        {isPartner ? 'Socio VIP' : 'Profesional'}
+                                    </span>
+                                </div>
+                                <span className="text-[11px] font-black uppercase italic tracking-tighter text-brand-carbon mt-1.5 opacity-80">
+                                    {profile?.company_name || profile?.full_name?.split(' ')[0]}
                                 </span>
                             </div>
                         )}
@@ -199,11 +207,23 @@ export function Header({ onOpenAuthModal }) {
                         )}
 
                         {user ? (
-                            <button onClick={signOut} title="Cerrar sesión"
-                                className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-red-50 hover:text-red-500 transition-all relative">
-                                <LogOut className="w-5 h-5" />
-                                {isPro && <span className="absolute -top-1 -right-1 bg-brand-carbon text-primary text-[8px] font-black px-1.5 py-0.5 rounded-md border-2 border-white">PRO</span>}
-                            </button>
+                            <div className="relative group">
+                                <button onClick={signOut} title="Cerrar sesión"
+                                    className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all relative group/user ${isPartner
+                                        ? 'bg-brand-carbon text-yellow-500 ring-2 ring-yellow-500/30 shadow-xl'
+                                        : 'text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg'
+                                        }`}>
+                                    <LogOut className="w-5 h-5 group-hover/user:text-primary transition-colors" />
+                                    {isPartner ? (
+                                        <span className="absolute -top-1 -right-1 bg-yellow-500 text-black text-[9px] font-black px-2 py-0.5 rounded-lg border-2 border-white shadow-xl animate-bounce">VIP</span>
+                                    ) : isPro ? (
+                                        <span className="absolute -top-1 -right-1 bg-brand-carbon text-primary text-[9px] font-black px-2 py-0.5 rounded-lg border-2 border-white shadow-lg">PRO</span>
+                                    ) : null}
+                                </button>
+                                <div className="absolute top-full right-0 mt-2 bg-white shadow-luxury rounded-xl p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity text-[10px] font-bold text-gray-500 whitespace-nowrap">
+                                    Cerrar Sesión
+                                </div>
+                            </div>
                         ) : (
                             <button onClick={() => onOpenAuthModal('login')} className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all">
                                 <User className="w-5 h-5" />

@@ -27,7 +27,7 @@ export default function SEOManager() {
                 .from('app_settings')
                 .select('value')
                 .eq('key', 'seo_pages')
-                .single();
+                .maybeSingle();
 
             const staticPages = pageSettings?.value || {};
 
@@ -50,9 +50,9 @@ export default function SEOManager() {
             if (!seoData) {
                 if (path.startsWith('/product/')) {
                     const slugOrId = path.split('/').pop();
-                    let { data } = await supabase.from('products').select('meta_title, meta_description, name').eq('slug', slugOrId).single();
+                    let { data } = await supabase.from('products').select('meta_title, meta_description, name').eq('slug', slugOrId).maybeSingle();
                     if (!data) {
-                        const { data: dataById } = await supabase.from('products').select('meta_title, meta_description, name').eq('id', slugOrId).single();
+                        const { data: dataById } = await supabase.from('products').select('meta_title, meta_description, name').eq('id', slugOrId).maybeSingle();
                         data = dataById;
                     }
                     if (data) seoData = {
@@ -61,7 +61,7 @@ export default function SEOManager() {
                     };
                 } else if (path.startsWith('/blog/')) {
                     const slug = path.split('/').pop();
-                    const { data } = await supabase.from('blog_posts').select('meta_title, meta_description, title').eq('slug', slug).single();
+                    const { data } = await supabase.from('blog_posts').select('meta_title, meta_description, title').eq('slug', slug).maybeSingle();
                     if (data) seoData = {
                         title: data.meta_title || `${data.title} | Blog Mil Luces`,
                         description: data.meta_description
@@ -75,7 +75,7 @@ export default function SEOManager() {
                     .from('app_settings')
                     .select('value')
                     .eq('key', 'seo_global')
-                    .single();
+                    .maybeSingle();
 
                 const globalVal = globalRes?.value || {};
 

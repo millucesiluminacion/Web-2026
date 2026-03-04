@@ -58,6 +58,7 @@ const OfertasPage = () => {
                                 originalPrice,
                                 finalPrice,
                                 isShowingProDiscount,
+                                isPartnerPrice,
                                 displayDiscountPercent,
                                 hasAnyDiscount
                             } = calculateProductPrice(product, profile);
@@ -69,8 +70,8 @@ const OfertasPage = () => {
                             return (
                                 <div key={product.id} className="group relative bg-white rounded-[2.5rem] p-8 overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-500 border border-gray-100/50 flex flex-col">
                                     <div className="absolute top-6 left-6 z-10">
-                                        <span className={`text-white text-[9px] font-black px-3 py-1.5 rounded-lg uppercase italic tracking-widest shadow-xl shadow-primary/20 ${isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
-                                            -{displayDiscountPercent}% {isShowingProDiscount ? 'PRO' : 'OFF'}
+                                        <span className={`text-white text-[9px] font-black px-3 py-1.5 rounded-lg uppercase italic tracking-widest shadow-xl shadow-primary/20 ${isPartnerPrice ? 'bg-indigo-600' : isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
+                                            {isPartnerPrice ? 'SOCIO' : `-${displayDiscountPercent}% ${isShowingProDiscount ? 'PRO' : 'OFF'}`}
                                         </span>
                                     </div>
 
@@ -101,7 +102,7 @@ const OfertasPage = () => {
                                         <div className="mt-auto pt-6 border-t border-gray-50 flex items-center justify-between">
                                             <div>
                                                 <p className="text-[10px] text-gray-400 line-through font-bold mb-1">{originalPrice.toFixed(2)} €</p>
-                                                <p className={`text-2xl font-black italic tracking-tighter ${isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                                <p className={`text-2xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
                                                     {finalPrice.toFixed(2)} <span className="text-xs">€</span>
                                                 </p>
                                             </div>
