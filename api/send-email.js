@@ -41,7 +41,13 @@ export default async function handler(req, res) {
             .eq('key', 'smtp_config')
             .single();
 
-        if (settingsError || !setting) throw new Error('Configuración SMTP no encontrada en la base de datos.');
+        if (settingsError || !setting) {
+            console.error('[send-email] SMTP settings not found in DB:', settingsError);
+            return res.status(404).json({
+                error: 'Configuración SMTP no encontrada.',
+                details: settingsError?.message || 'Asegúrate de haber guardado los ajustes de correo primero.'
+            });
+        }
 
         const smtp = setting.value;
         const { to, subject, html, text } = req.body;
@@ -49,6 +55,8 @@ export default async function handler(req, res) {
         if (!to || !subject || !html) {
             return res.status(400).json({ error: 'Faltan campos obligatorios (to, subject, html).' });
         }
+
+        console.log(`[send-email] Attempting to send to ${to} via ${smtp.host}:${smtp.port}`);
 
         // 4. Send Email via Nodemailer
         const transporter = nodemailer.createTransport({
@@ -59,13 +67,27 @@ export default async function handler(req, res) {
                 user: smtp.user,
                 pass: smtp.pass
             },
-            connectionTimeout: 10000, // 10 seconds
+            connectionTimeout: 10000,
             greetingTimeout: 10000,
             socketTimeout: 10000,
             tls: {
                 rejectUnauthorized: false
             }
         });
+
+        // 5. Verify transporter before sending
+        try {
+            await transporter.verify();
+            console.log('[send-email] SMTP Connection Verified');
+        } catch (verifyError) {
+            console.error('[send-email] SMTP Verification Failed:', verifyError);
+            return res.status(500).json({
+                error: 'Error de conexión con el servidor de correo.',
+                code: verifyError.code,
+                command: verifyError.command,
+                details: verifyError.message
+            });
+        }
 
         const mailOptions = {
             from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || smtp.user}>`,
@@ -81,7 +103,10 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, messageId: info.messageId });
 
     } catch (err) {
-        console.error('[send-email] Error:', err.message);
-        return res.status(500).json({ error: err.message });
+        console.error('[send-email] General Error:', err);
+        return res.status(500).json({
+            error: 'Error interno del servidor al procesar el envío.',
+            details: err.message
+        });
     }
 }

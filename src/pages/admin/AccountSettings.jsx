@@ -78,11 +78,12 @@ export default function AccountSettings() {
             // 1. Fetch Profile
             const { data: { session } } = await supabase.auth.getSession();
             if (session) {
-                const { data: profileVal } = await supabase
+                const { data: profileVal, error: pErr } = await supabase
                     .from('profiles')
                     .select('*')
                     .eq('id', session.user.id)
-                    .single();
+                    .maybeSingle(); // Usamos maybeSingle para evitar el error 406 si no hay perfil
+
                 if (profileVal) {
                     setProfile({
                         full_name: profileVal.full_name || '',
@@ -164,10 +165,15 @@ export default function AccountSettings() {
             if (response.ok) {
                 alert("✅ Email enviado con éxito. Revisa tu bandeja de entrada.");
             } else {
-                throw new Error(result.error || "Fallo en el envío");
+                let errorMsg = result.error || "Fallo en el envío";
+                if (result.code === 'EAUTH') errorMsg = 'Error de autenticación: Usuario o contraseña incorrectos.';
+                if (result.code === 'ESOCKET') errorMsg = 'Error de conexión: El servidor no responde o el puerto está bloqueado.';
+                if (result.code === 'EAI_AGAIN' || result.code === 'ENOTFOUND') errorMsg = `No se pudo encontrar el servidor: ${smtpConfig.host}.`;
+
+                alert(`❌ Error en la prueba: ${errorMsg}\n\nDetalles: ${result.details || 'N/A'}\nCódigo: ${result.code || 'N/A'}`);
             }
         } catch (err) {
-            alert("❌ Error en la prueba: " + err.message);
+            alert("❌ Error de red o servidor: " + err.message);
         } finally {
             setIsTesting(false);
         }
