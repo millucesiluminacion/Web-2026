@@ -35,7 +35,8 @@ export default function SEOManager() {
             const routeMap = {
                 '/': 'home',
                 '/ofertas': 'ofertas',
-                '/listing': 'tienda',
+                '/search': 'tienda',       // ruta real del catálogo
+                '/decoracion': 'tienda',   // alias de decoración
                 '/proyectos': 'proyectos',
                 '/profesionales': 'profesionales',
                 '/blog': 'blog_index'
