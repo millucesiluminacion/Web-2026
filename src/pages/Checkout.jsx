@@ -135,7 +135,7 @@ export default function Checkout() {
 
                 <div className="mb-16">
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Casi Tuyo</span>
-                    <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Confirmar <br /><span className="text-gray-300">Adquisición</span></h1>
+                    <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Confirmar <br /><span className="text-gray-300">Compra</span></h1>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
@@ -239,7 +239,7 @@ export default function Checkout() {
                                         <CreditCard className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-none mb-1">Pasarela de Inversión</h3>
+                                        <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-none mb-1">Pago Seguro</h3>
                                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Transacción segura bajo protocolo SSL de alto nivel</p>
                                     </div>
                                 </div>
@@ -350,7 +350,7 @@ export default function Checkout() {
                                     <span>{iva.toFixed(2)} €</span>
                                 </div>
                                 <div className="flex justify-between items-baseline pt-4">
-                                    <span className="text-[10px] font-black text-brand-carbon uppercase tracking-[.4em]">Inmersión Total</span>
+                                    <span className="text-[10px] font-black text-brand-carbon uppercase tracking-[.4em]">Precio Total</span>
                                     <div className="text-right">
                                         <span className="text-3xl font-black text-primary italic tracking-tighter">{totalPrice.toFixed(2)}</span>
                                         <span className="text-lg font-black text-primary italic tracking-tighter ml-1">€</span>
@@ -369,7 +369,7 @@ export default function Checkout() {
                                 ) : (
                                     <>
                                         <ShieldCheck className="w-5 h-5 transition-transform group-hover:scale-110" />
-                                        Confirmar Adquisición
+                                        Confirmar Compra
                                     </>
                                 )}
                             </button>

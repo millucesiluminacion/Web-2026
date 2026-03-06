@@ -37,12 +37,14 @@ import SEOAdmin from './pages/admin/SEOAdmin';
 import SEOManager from './components/common/SEOManager';
 
 import { AuthProvider } from './context/AuthContext';
+import ScrollToTop from './components/common/ScrollToTop';
 
 function App() {
   return (
     <AuthProvider>
       <CartProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <SEOManager />
           <Routes>
             <Route path="/" element={<MainLayout />}>

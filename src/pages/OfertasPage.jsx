@@ -10,7 +10,7 @@ const OfertasPage = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const { addToCart } = useCart();
-    const { isPro, discountPercent: proDiscountPercent } = useAuth();
+    const { profile } = useAuth();
 
     useEffect(() => {
         async function fetchOffers() {
@@ -53,7 +53,6 @@ const OfertasPage = () => {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
                         {products.length > 0 ? products.map((product) => {
-                            const { profile } = useAuth();
                             const {
                                 originalPrice,
                                 finalPrice,
@@ -119,7 +118,7 @@ const OfertasPage = () => {
                         }).filter(Boolean) : (
                             <div className="col-span-full py-32 text-center bg-white rounded-[3rem] border-2 border-dashed border-gray-100 shadow-luxury">
                                 <Tag className="w-12 h-12 mx-auto mb-6 text-gray-200" />
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[.4em] italic leading-loose">Buscando nuevas oportunidades<br />de inversión exclusive...</p>
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[.4em] italic leading-loose">Buscando nuevas oportunidades<br />de selección exclusiva...</p>
                             </div>
                         )}
                     </div>

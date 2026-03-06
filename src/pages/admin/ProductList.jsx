@@ -73,7 +73,7 @@ export default function ProductList() {
             setLoading(true);
             const [prodRes, catRes, brandRes, roomRes, profRes] = await Promise.all([
                 supabase.from('products')
-                    .select('*, categories(name), brands(name), product_rooms(room_id)')
+                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)')
                     .order('created_at', { ascending: false }),
                 supabase.from('categories').select('id, name, parent_id, slug').order('name'),
                 supabase.from('brands').select('id, name').order('name'),
@@ -81,15 +81,44 @@ export default function ProductList() {
                 supabase.from('professions').select('id, name').order('name')
             ]);
 
-            const allProducts = prodRes.data || [];
+            const allData = prodRes.data || [];
 
-            // Format products map rooms
-            const formattedProducts = allProducts.map(p => ({
-                ...p,
-                room_ids: p.product_rooms?.map(pr => pr.room_id) || []
-            }));
+            // Hierarchical Sorting: Parents first, then their variants
+            const parents = allData.filter(p => !p.parent_id);
+            const variants = allData.filter(p => p.parent_id);
 
-            setProducts(formattedProducts);
+            const hierarchicalProducts = [];
+            parents.forEach(parent => {
+                // Add parent
+                hierarchicalProducts.push({
+                    ...parent,
+                    room_ids: parent.product_rooms?.map(pr => pr.room_id) || [],
+                    profession_ids: parent.product_professions?.map(pp => pp.profession_id) || []
+                });
+
+                // Find and add its children immediately after
+                const children = variants.filter(v => v.parent_id === parent.id);
+                children.forEach(child => {
+                    hierarchicalProducts.push({
+                        ...child,
+                        room_ids: child.product_rooms?.map(pr => pr.room_id) || [],
+                        profession_ids: child.product_professions?.map(pp => pp.profession_id) || []
+                    });
+                });
+            });
+
+            // Handle orphans (variants whose parent was deleted or not found)
+            const addedIds = new Set(hierarchicalProducts.map(p => p.id));
+            const orphans = variants.filter(v => !addedIds.has(v.id));
+            orphans.forEach(orphan => {
+                hierarchicalProducts.push({
+                    ...orphan,
+                    room_ids: orphan.product_rooms?.map(pr => pr.room_id) || [],
+                    profession_ids: orphan.product_professions?.map(pp => pp.profession_id) || []
+                });
+            });
+
+            setProducts(hierarchicalProducts);
             setCategories(catRes.data || []);
             setBrands(brandRes.data || []);
             setRooms(roomRes.data || []);
@@ -446,11 +475,15 @@ export default function ProductList() {
     }
 
     async function deleteProduct(id) {
-        if (!confirm('¿Estás seguro de que quieres eliminar este producto?')) return;
+        if (!confirm('¿Estás seguro de que quieres eliminar este producto? Si tiene variantes, estas también se eliminarán.')) return;
         try {
             const { error } = await supabase.from('products').delete().eq('id', id);
-            if (error) throw error;
-            setProducts(products.filter(p => p.id !== id));
+            if (error) {
+                console.error("Delete error details:", error);
+                throw new Error(error.message || "Error desconocido al eliminar");
+            }
+            setProducts(prev => prev.filter(p => p.id !== id && p.parent_id !== id));
+            alert('Producto (y sus variantes si existían) eliminado correctamente.');
         } catch (error) {
             alert('Error al eliminar: ' + error.message);
         }
@@ -823,17 +856,21 @@ export default function ProductList() {
                                         {/* Producto */}
                                         <td className="p-4">
                                             <div className="flex items-center gap-4">
-                                                {product.parent_id && <div className="w-4 border-l-2 border-b-2 border-gray-200 h-4 rounded-bl-lg ml-2 opacity-50"></div>}
-                                                <div className="w-12 h-12 bg-white rounded-xl border border-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center p-1.5 group-hover:shadow-md transition-all duration-300">
+                                                {product.parent_id && (
+                                                    <div className="flex items-center">
+                                                        <div className="w-6 border-l-2 border-b-2 border-gray-200 h-6 rounded-bl-lg ml-2 mr-2 opacity-40 -mt-2"></div>
+                                                    </div>
+                                                )}
+                                                <div className={`w-12 h-12 bg-white rounded-xl border border-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center p-1.5 transition-all duration-300 ${product.parent_id ? 'w-10 h-10' : 'group-hover:shadow-md'}`}>
                                                     {product.image_url
                                                         ? <img src={product.image_url} alt={product.name} className="w-full h-full object-contain" />
-                                                        : <Package className="w-5 h-5 text-gray-200" />
+                                                        : <Package className={`text-gray-200 ${product.parent_id ? 'w-4 h-4' : 'w-5 h-5'}`} />
                                                     }
                                                 </div>
-                                                <div>
-                                                    <p className={`font-black text-brand-carbon uppercase italic text-xs tracking-tight leading-none mb-1 ${product.parent_id ? 'text-gray-500' : ''
+                                                <div className={product.parent_id ? 'opacity-80' : ''}>
+                                                    <p className={`font-black text-brand-carbon uppercase italic text-xs tracking-tight leading-none mb-1 ${product.parent_id ? 'text-[10px]' : ''
                                                         }`}>
-                                                        {product.parent_id ? `↳ ${product.name}` : product.name}
+                                                        {product.name}
                                                     </p>
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-[8px] text-gray-400 font-black uppercase tracking-widest font-mono">{product.reference || 'SIN REF'}</span>
@@ -1098,7 +1135,7 @@ export default function ProductList() {
                                                             <input
                                                                 type="checkbox"
                                                                 className="rounded text-blue-600 focus:ring-blue-500"
-                                                                checked={formData.room_ids.includes(room.id)}
+                                                                checked={formData.room_ids?.includes(room.id)}
                                                                 onChange={(e) => {
                                                                     const checked = e.target.checked;
                                                                     setFormData(prev => ({
@@ -1123,7 +1160,7 @@ export default function ProductList() {
                                                             <input
                                                                 type="checkbox"
                                                                 className="rounded text-primary focus:ring-primary"
-                                                                checked={formData.profession_ids.includes(prof.id)}
+                                                                checked={formData.profession_ids?.includes(prof.id)}
                                                                 onChange={(e) => {
                                                                     const checked = e.target.checked;
                                                                     setFormData(prev => ({
@@ -1422,9 +1459,11 @@ export default function ProductList() {
                                                                         category_id: variant.category_id || '',
                                                                         brand_id: variant.brand_id || '',
                                                                         room_ids: variant.room_ids || [],
+                                                                        profession_ids: variant.profession_ids || [],
                                                                         image_url: variant.image_url || '',
                                                                         description: variant.description || '',
                                                                         discount_price: variant.discount_price || '',
+                                                                        partner_price: variant.partner_price || '',
                                                                         parent_id: variant.parent_id,
                                                                         attributes: variant.attributes || {},
                                                                         extra_images: variant.extra_images || []

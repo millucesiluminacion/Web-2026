@@ -121,16 +121,18 @@ export function Header({ onOpenAuthModal }) {
 
                     {/* Desktop Nav */}
                     <nav className="hidden xl:flex items-center gap-10">
-                        {/* Colecciones trigger */}
-                        <button
+                        {/* Catálogo trigger */}
+                        <Link
+                            to="/search"
                             onMouseEnter={handleMegaEnter}
+                            onClick={() => setShowMegaMenu(false)}
                             className={`relative group flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[.2em] italic transition-colors ${showMegaMenu ? 'text-brand-carbon' : 'text-brand-carbon/60 hover:text-brand-carbon'}`}
                         >
                             <Grid3x3 className="w-3 h-3 opacity-50 group-hover:opacity-100 transition-opacity" />
-                            Colecciones
+                            Catálogo
                             <ChevronDown className={`w-3 h-3 opacity-40 transition-transform duration-200 ${showMegaMenu ? 'rotate-180' : ''}`} />
                             <span className={`absolute -bottom-1 left-0 h-[2px] bg-primary transition-all duration-200 ${showMegaMenu ? 'w-full' : 'w-0 group-hover:w-full'}`}></span>
-                        </button>
+                        </Link>
 
                         {/* Other nav items */}
                         {[

@@ -319,7 +319,7 @@ export default function ProductDetail() {
 
                             <div className="mb-10">
                                 <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2 leading-none">
-                                    {isPartnerPrice ? 'Precio Exclusivo Socio' : isShowingProDiscount ? 'Inversión Profesional' : 'Inversión Exclusiva'}
+                                    {isPartnerPrice ? 'Precio Exclusivo Socio' : isShowingProDiscount ? 'Precio Profesional' : 'Precio Exclusivo'}
                                 </span>
                                 {(isShowingProDiscount || hasAnyDiscount) ? (
                                     <div>

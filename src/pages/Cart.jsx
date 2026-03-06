@@ -191,7 +191,7 @@ export default function Cart() {
                     <div className="w-24 h-24 bg-primary/10 rounded-[2rem] flex items-center justify-center mx-auto mb-8 border border-primary/20">
                         <CheckCircle2 className="w-12 h-12 text-primary" />
                     </div>
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-3 block">Adquisición Confirmada</span>
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-3 block">Compra Confirmada</span>
                     <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4">
                         ¡Pedido <span className="text-gray-300">Recibido!</span>
                     </h1>
@@ -400,7 +400,7 @@ export default function Cart() {
                                 <div className="absolute top-0 right-0 w-40 h-40 bg-primary/15 blur-[80px] rounded-full"></div>
                                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-primary/10 blur-[60px] rounded-full"></div>
                                 <h3 className="text-lg font-black uppercase italic tracking-tighter mb-6 relative z-10">
-                                    Resumen de <br /><span className="text-gray-500">Adquisición</span>
+                                    Resumen de <br /><span className="text-gray-500">Compra</span>
                                 </h3>
                                 <div className="space-y-3 mb-6 max-h-[200px] overflow-y-auto pr-1 relative z-10">
                                     {cart.map(item => (
@@ -435,7 +435,7 @@ export default function Cart() {
                                 </div>
                                 <div className="border-t border-white/10 pt-5 mb-7 relative z-10">
                                     <div className="flex justify-between items-end">
-                                        <span className="text-[9px] font-black uppercase tracking-[.3em] text-gray-500">Inversión Total</span>
+                                        <span className="text-[9px] font-black uppercase tracking-[.3em] text-gray-500">Precio Total</span>
                                         <div className="text-right">
                                             <span className="text-4xl font-black italic tracking-tighter">{totalPrice.toFixed(2)}</span>
                                             <span className="text-lg font-black italic ml-1">€</span>
