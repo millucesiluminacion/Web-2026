@@ -87,7 +87,17 @@ export default function Checkout() {
 
             if (itemsError) throw itemsError;
 
-            // 3. Éxito
+            // 3. Deduct Stock safely
+            for (const item of cart) {
+                if (item.id) {
+                    const { data: currItem } = await supabase.from('products').select('stock').eq('id', item.id).single();
+                    if (currItem && typeof currItem.stock === 'number') {
+                        await supabase.from('products').update({ stock: Math.max(0, currItem.stock - item.quantity) }).eq('id', item.id);
+                    }
+                }
+            }
+
+            // 4. Éxito
             setOrderCompleted(true);
             clearCart();
 

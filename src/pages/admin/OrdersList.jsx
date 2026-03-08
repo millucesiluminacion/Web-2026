@@ -1,12 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, Download, Printer, Filter, MoreVertical, Trash } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function OrdersList() {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('ALL');
+    const [dateFilter, setDateFilter] = useState('ALL');
+    const [selectedOrders, setSelectedOrders] = useState([]);
+    const [isBulkLoading, setIsBulkLoading] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [adminNotes, setAdminNotes] = useState('');
     const [orderItems, setOrderItems] = useState([]);
     const [fetchingItems, setFetchingItems] = useState(false);
     const [stats, setStats] = useState({
@@ -175,11 +180,155 @@ export default function OrdersList() {
 
     const handleViewOrder = (order) => {
         setSelectedOrder(order);
+        setAdminNotes(order.admin_notes || '');
         fetchOrderItems(order.id);
     };
 
+    async function saveAdminNotes() {
+        if (!selectedOrder) return;
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({ admin_notes: adminNotes })
+                .eq('id', selectedOrder.id);
+            if (error) throw error;
+            setOrders(orders.map(o => o.id === selectedOrder.id ? { ...o, admin_notes: adminNotes } : o));
+            setSelectedOrder({ ...selectedOrder, admin_notes: adminNotes });
+            alert('Notas guardadas');
+        } catch (error) {
+            alert('Error guardando notas: ' + error.message);
+        }
+    }
+
+    const printOrder = () => {
+        const printContent = document.getElementById('printable-order');
+        if (!printContent) return;
+        const originalContent = document.body.innerHTML;
+        document.body.innerHTML = printContent.innerHTML;
+        window.print();
+        document.body.innerHTML = originalContent;
+        window.location.reload(); // Recargar para restaurar los eventos de React (alternativa rápida)
+    };
+
+    const exportToCSV = () => {
+        if (filteredOrders.length === 0) return alert('No hay pedidos para exportar');
+        const headers = ['ID', 'Fecha', 'Cliente', 'Email', 'Telefono', 'Total', 'Estado', 'Metodo Pago', 'Direccion', 'CP', 'Ciudad', 'Notas Cliente', 'Notas Admin'];
+        const rows = filteredOrders.map(o => [
+            o.id,
+            new Date(o.created_at).toLocaleString(),
+            o.customer_name || '',
+            o.customer_email || '',
+            o.customer_phone || '',
+            o.total || 0,
+            o.status || '',
+            o.payment_method || '',
+            o.shipping_address || '',
+            o.shipping_zip || '',
+            o.shipping_city || '',
+            o.notes || '',
+            o.admin_notes || ''
+        ].map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','));
+
+        const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows].join('\n');
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `pedidos_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const toggleSelectOrder = (id) => {
+        setSelectedOrders(prev => prev.includes(id) ? prev.filter(orderId => orderId !== id) : [...prev, id]);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedOrders.length === filteredOrders.length) {
+            setSelectedOrders([]);
+        } else {
+            setSelectedOrders(filteredOrders.map(o => o.id));
+        }
+    };
+
+    async function handleBulkDelete() {
+        if (!window.confirm(`¿Estás seguro de que quieres eliminar ${selectedOrders.length} pedido(s)? Esta acción no se puede deshacer.`)) return;
+        setIsBulkLoading(true);
+        try {
+            const { error } = await supabase.from('orders').delete().in('id', selectedOrders);
+            if (error) throw error;
+            setOrders(orders.filter(o => !selectedOrders.includes(o.id)));
+            setSelectedOrders([]);
+        } catch (error) {
+            alert('Error al eliminar pedidos: ' + error.message);
+        } finally {
+            setIsBulkLoading(false);
+        }
+    }
+
+    async function handleBulkStatusChange(newStatus) {
+        if (!newStatus) return;
+        setIsBulkLoading(true);
+        try {
+            // Restore stock if transitioning to CANCELLED or RETURNED
+            if (newStatus === 'CANCELLED' || newStatus === 'RETURNED') {
+                for (const orderId of selectedOrders) {
+                    const orderToCancel = orders.find(o => o.id === orderId);
+                    if (orderToCancel && orderToCancel.status !== 'CANCELLED' && orderToCancel.status !== 'RETURNED') {
+                        const { data: items } = await supabase.from('order_items').select('product_id, quantity').eq('order_id', orderId);
+                        if (items) {
+                            for (const item of items) {
+                                const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+                                if (prod) {
+                                    await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            const { error } = await supabase.from('orders').update({ status: newStatus }).in('id', selectedOrders);
+            if (error) throw error;
+            setOrders(orders.map(o => selectedOrders.includes(o.id) ? { ...o, status: newStatus } : o));
+            setSelectedOrders([]);
+        } catch (error) {
+            alert('Error al actualizar estados: ' + error.message);
+        } finally {
+            setIsBulkLoading(false);
+        }
+    }
+
+    async function handleDeleteSingle(id) {
+        if (!window.confirm('¿Eliminar este pedido definitivamente?')) return;
+        try {
+            const { error } = await supabase.from('orders').delete().eq('id', id);
+            if (error) throw error;
+            setOrders(orders.filter(o => o.id !== id));
+            setSelectedOrders(selectedOrders.filter(selectedId => selectedId !== id));
+        } catch (error) {
+            alert('Error al eliminar pedido: ' + error.message);
+        }
+    }
+
     async function updateStatus(id, newStatus) {
         try {
+            const currentOrder = orders.find(o => o.id === id);
+
+            // Restore stock on cancellation/return
+            if (currentOrder && (newStatus === 'CANCELLED' || newStatus === 'RETURNED') &&
+                currentOrder.status !== 'CANCELLED' && currentOrder.status !== 'RETURNED') {
+                const { data: items } = await supabase.from('order_items').select('product_id, quantity').eq('order_id', id);
+                if (items) {
+                    for (const item of items) {
+                        const { data: prod } = await supabase.from('products').select('stock').eq('id', item.product_id).single();
+                        if (prod) {
+                            await supabase.from('products').update({ stock: prod.stock + item.quantity }).eq('id', item.product_id);
+                        }
+                    }
+                }
+            }
+
             const { error } = await supabase
                 .from('orders')
                 .update({ status: newStatus })
@@ -197,37 +346,59 @@ export default function OrdersList() {
 
     const getStatusStyles = (status) => {
         switch (status?.toUpperCase()) {
-            case 'PAID':
+            case 'PAID': return 'bg-emerald-100 text-emerald-700';
             case 'DELIVERED': return 'bg-green-100 text-green-700';
-            case 'SHIPPED': return 'bg-blue-100 text-blue-700';
+            case 'SHIPPED': return 'bg-cyan-100 text-cyan-700';
+            case 'IN_TRANSIT': return 'bg-blue-100 text-blue-700';
+            case 'READY_TO_SHIP': return 'bg-indigo-100 text-indigo-700';
+            case 'PROCESSING': return 'bg-violet-100 text-violet-700';
+            case 'AWAITING_PAYMENT': return 'bg-amber-100 text-amber-700';
             case 'PENDING': return 'bg-orange-100 text-orange-700';
+            case 'RETURNED': return 'bg-pink-100 text-pink-700';
             case 'CANCELLED': return 'bg-red-100 text-red-700';
             default: return 'bg-gray-100 text-gray-700';
         }
     };
 
-    const filteredOrders = orders.filter(o =>
-        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    const filteredOrders = orders.filter(o => {
+        const matchesSearch = o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            o.customer_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
+
+        let matchesDate = true;
+        if (dateFilter !== 'ALL') {
+            const date = new Date(o.created_at);
+            const now = new Date();
+            const daysDiff = (now - date) / (1000 * 60 * 60 * 24);
+            if (dateFilter === 'TODAY' && daysDiff > 1) matchesDate = false;
+            if (dateFilter === 'WEEK' && daysDiff > 7) matchesDate = false;
+            if (dateFilter === 'MONTH' && daysDiff > 30) matchesDate = false;
+        }
+
+        return matchesSearch && matchesStatus && matchesDate;
+    });
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block font-outfit">Management Hub</span>
                     <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
                         Gestión de <span className="text-primary/40">Pedidos</span>
                     </h1>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="text-[10px] font-black text-gray-400 bg-gray-50 h-14 px-6 rounded-2xl border border-gray-100 uppercase italic tracking-widest shrink-0 font-outfit flex items-center shadow-sm">
-                        {orders.length} Pedidos Totales
-                    </div>
+                <div className="flex flex-wrap items-center gap-4">
+                    <button
+                        onClick={exportToCSV}
+                        className="flex items-center gap-2 bg-white text-gray-500 border border-gray-100 h-12 px-6 rounded-2xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary/30 hover:text-primary transition-all font-outfit"
+                    >
+                        <Download className="w-4 h-4" /> Exportar CSV
+                    </button>
                     <button
                         onClick={openCreateModal}
-                        className="flex items-center gap-3 bg-brand-carbon text-white h-14 px-8 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
+                        className="flex items-center gap-3 bg-brand-carbon text-white h-12 px-8 rounded-2xl font-black uppercase italic text-[10px] shadow-2xl hover:bg-primary transition-all group font-outfit"
                     >
                         <Plus className="w-4 h-4 text-primary group-hover:rotate-90 transition-transform" />
                         Nuevo Pedido
@@ -261,9 +432,9 @@ export default function OrdersList() {
                 ))}
             </div>
 
-            <div className="bg-white rounded-[2.5rem] shadow-sm overflow-hidden border border-gray-100">
-                <div className="p-8 border-b border-gray-100 bg-gray-50/20">
-                    <div className="relative max-w-md">
+            <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 mb-8">
+                <div className="p-6 border-b border-gray-100 bg-gray-50/20 flex flex-col md:flex-row gap-4 items-center justify-between">
+                    <div className="relative w-full md:w-96">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                         <input
                             type="text"
@@ -273,7 +444,73 @@ export default function OrdersList() {
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
                     </div>
+                    <div className="flex gap-4 w-full md:w-auto">
+                        <select
+                            value={statusFilter}
+                            onChange={e => setStatusFilter(e.target.value)}
+                            className="bg-white border border-gray-100 rounded-2xl px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest outline-none focus:ring-2 focus:ring-primary/20 w-full md:w-auto"
+                        >
+                            <option value="ALL">Todos los Estados</option>
+                            <option value="PENDING">Pendiente</option>
+                            <option value="AWAITING_PAYMENT">Pago en Espera</option>
+                            <option value="PAID">Pagado</option>
+                            <option value="PROCESSING">Procesando</option>
+                            <option value="READY_TO_SHIP">Listo para envío</option>
+                            <option value="SHIPPED">Enviado</option>
+                            <option value="IN_TRANSIT">En tránsito</option>
+                            <option value="DELIVERED">Entregado</option>
+                            <option value="CANCELLED">Cancelado</option>
+                            <option value="RETURNED">Reembolsado</option>
+                        </select>
+                        <select
+                            value={dateFilter}
+                            onChange={e => setDateFilter(e.target.value)}
+                            className="bg-white border border-gray-100 rounded-2xl px-4 py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest outline-none focus:ring-2 focus:ring-primary/20 w-full md:w-auto"
+                        >
+                            <option value="ALL">Todo el Tiempo</option>
+                            <option value="TODAY">Hoy</option>
+                            <option value="WEEK">Últimos 7 Días</option>
+                            <option value="MONTH">Últimos 30 Días</option>
+                        </select>
+                    </div>
                 </div>
+
+                {selectedOrders.length > 0 && (
+                    <div className="bg-primary/5 border-b border-primary/10 p-4 flex items-center justify-between animate-in fade-in py-3 px-8">
+                        <span className="text-[10px] font-black text-primary uppercase tracking-widest">
+                            {selectedOrders.length} pedido(s) seleccionado(s)
+                        </span>
+                        <div className="flex items-center gap-3">
+                            <select
+                                onChange={(e) => {
+                                    handleBulkStatusChange(e.target.value);
+                                    e.target.value = '';
+                                }}
+                                disabled={isBulkLoading}
+                                className="bg-white border text-primary border-primary/20 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none cursor-pointer"
+                            >
+                                <option value="">CAMBIAR ESTADO LOTE...</option>
+                                <option value="PENDING">Pendiente</option>
+                                <option value="AWAITING_PAYMENT">Pago Pendiente</option>
+                                <option value="PAID">Pagado</option>
+                                <option value="PROCESSING">Procesando</option>
+                                <option value="READY_TO_SHIP">Listo Envío</option>
+                                <option value="SHIPPED">Enviado</option>
+                                <option value="IN_TRANSIT">En Tránsito</option>
+                                <option value="DELIVERED">Entregado</option>
+                                <option value="CANCELLED">Cancelado</option>
+                            </select>
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={isBulkLoading}
+                                className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-100 transition-all border border-red-100"
+                            >
+                                {isBulkLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash className="w-4 h-4" />}
+                                Eliminar
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {loading ? (
                     <div className="p-20 flex flex-col items-center justify-center text-gray-500">
@@ -284,6 +521,14 @@ export default function OrdersList() {
                     <table className="w-full text-left border-collapse">
                         <thead className="bg-gray-50 uppercase text-[10px] font-black text-gray-400 border-b">
                             <tr className="font-outfit">
+                                <th className="p-7 w-10">
+                                    <input
+                                        type="checkbox"
+                                        checked={filteredOrders.length > 0 && selectedOrders.length === filteredOrders.length}
+                                        onChange={toggleSelectAll}
+                                        className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-gray-300"
+                                    />
+                                </th>
                                 <th className="p-7">Pedido</th>
                                 <th className="p-7">Cliente</th>
                                 <th className="p-7">Total</th>
@@ -294,7 +539,15 @@ export default function OrdersList() {
                         </thead>
                         <tbody className="divide-y divide-gray-50">
                             {filteredOrders.length > 0 ? filteredOrders.map(order => (
-                                <tr key={order.id} className="hover:bg-gray-50/80 transition-colors group">
+                                <tr key={order.id} className={`hover:bg-gray-50/80 transition-colors group ${selectedOrders.includes(order.id) ? 'bg-primary/5' : ''}`}>
+                                    <td className="p-7">
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedOrders.includes(order.id)}
+                                            onChange={() => toggleSelectOrder(order.id)}
+                                            className="w-4 h-4 rounded text-primary focus:ring-primary/20 border-gray-300"
+                                        />
+                                    </td>
                                     <td className="p-7">
                                         <div className="flex flex-col">
                                             <span className="font-mono text-[10px] font-black text-blue-600 bg-blue-50 px-2.5 py-1.5 rounded-lg w-fit mb-1 shadow-sm">
@@ -324,10 +577,15 @@ export default function OrdersList() {
                                             className={`appearance-none px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border-none focus:ring-0 cursor-pointer shadow-sm font-outfit ${getStatusStyles(order.status)}`}
                                         >
                                             <option value="PENDING">Pendiente</option>
-                                            <option value="PAID">Pagado</option>
+                                            <option value="AWAITING_PAYMENT">Pago Pendiente</option>
+                                            <option value="PAID">Pagado / Confirmado</option>
+                                            <option value="PROCESSING">Procesando</option>
+                                            <option value="READY_TO_SHIP">Listo para Envío</option>
                                             <option value="SHIPPED">Enviado</option>
+                                            <option value="IN_TRANSIT">En Tránsito</option>
                                             <option value="DELIVERED">Entregado</option>
                                             <option value="CANCELLED">Cancelado</option>
+                                            <option value="RETURNED">Devuelto / Reembolsado</option>
                                         </select>
                                     </td>
                                     <td className="p-7">
@@ -347,12 +605,22 @@ export default function OrdersList() {
                                         </div>
                                     </td>
                                     <td className="p-7 text-right">
-                                        <button
-                                            onClick={() => handleViewOrder(order)}
-                                            className="w-10 h-10 bg-white border border-gray-100 text-gray-400 hover:text-blue-600 hover:border-blue-100 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                        >
-                                            <Eye className="w-4 h-4" />
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={() => handleViewOrder(order)}
+                                                title="Ver Detalle"
+                                                className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-blue-600 hover:border-blue-100 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteSingle(order.id)}
+                                                title="Eliminar Pedido"
+                                                className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-red-600 hover:border-red-100 hover:bg-red-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             )) : (
@@ -376,21 +644,42 @@ export default function OrdersList() {
                             <div>
                                 <div className="flex items-center gap-4 mb-2">
                                     <h2 className="text-3xl font-black text-brand-carbon uppercase italic leading-none font-outfit">Pedido #{selectedOrder.id.slice(0, 8).toUpperCase()}</h2>
-                                    <span className={`px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest font-outfit ${getStatusStyles(selectedOrder.status)}`}>
-                                        {selectedOrder.status}
-                                    </span>
+                                    <select
+                                        value={selectedOrder.status || 'PENDING'}
+                                        onChange={(e) => updateStatus(selectedOrder.id, e.target.value)}
+                                        className={`appearance-none px-5 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest border-none focus:ring-0 cursor-pointer shadow-sm font-outfit ${getStatusStyles(selectedOrder.status)}`}
+                                    >
+                                        <option value="PENDING">Pendiente</option>
+                                        <option value="AWAITING_PAYMENT">Pago Pendiente</option>
+                                        <option value="PAID">Pagado / Confirmado</option>
+                                        <option value="PROCESSING">Procesando</option>
+                                        <option value="READY_TO_SHIP">Listo para Envío</option>
+                                        <option value="SHIPPED">Enviado</option>
+                                        <option value="IN_TRANSIT">En Tránsito</option>
+                                        <option value="DELIVERED">Entregado</option>
+                                        <option value="CANCELLED">Cancelado</option>
+                                        <option value="RETURNED">Devuelto / Reembolsado</option>
+                                    </select>
                                 </div>
                                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest font-outfit">Ref: {selectedOrder.id} • {new Date(selectedOrder.created_at).toLocaleString()}</p>
                             </div>
-                            <button
-                                onClick={() => setSelectedOrder(null)}
-                                className="p-4 bg-white border border-gray-100 rounded-full flex items-center justify-center hover:bg-gray-50 transition-all text-gray-400 shadow-sm"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
+                            <div className="flex items-center gap-3">
+                                <button
+                                    onClick={printOrder}
+                                    className="px-5 py-3 border border-gray-200 text-gray-600 rounded-full flex items-center gap-2 hover:bg-gray-50 transition-all font-outfit text-xs font-black uppercase tracking-widest shadow-sm"
+                                >
+                                    <Printer className="w-4 h-4" /> Imprimir
+                                </button>
+                                <button
+                                    onClick={() => setSelectedOrder(null)}
+                                    className="p-4 bg-white border border-gray-100 rounded-full flex items-center justify-center hover:bg-gray-50 transition-all text-gray-400 shadow-sm"
+                                >
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-12 custom-scrollbar" id="printable-order">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
                                 {/* Columna Izquierda: Información del Cliente y Envío */}
                                 <div className="lg:col-span-1 space-y-12">
@@ -424,11 +713,17 @@ export default function OrdersList() {
                                             </div>
                                             <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit">Dirección Boutique</h3>
                                         </div>
-                                        <div className="bg-gray-50/50 p-8 rounded-[2rem] border border-gray-100 font-outfit">
+                                        <div className="bg-gray-50/50 p-8 rounded-[2rem] border border-gray-100 font-outfit space-y-4">
                                             <p className="text-xs font-bold text-gray-600 leading-relaxed uppercase tracking-wider">
                                                 {selectedOrder.shipping_address}<br />
                                                 <span className="text-brand-carbon font-black">{selectedOrder.shipping_zip} {selectedOrder.shipping_city}</span>
                                             </p>
+                                            {selectedOrder.notes && (
+                                                <div className="pt-4 border-t border-gray-200/50">
+                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notas del Cliente</p>
+                                                    <p className="text-xs font-bold text-brand-carbon italic">{selectedOrder.notes}</p>
+                                                </div>
+                                            )}
                                         </div>
                                     </section>
 
@@ -509,6 +804,22 @@ export default function OrdersList() {
                                             </div>
                                         </div>
                                     )}
+
+                                    {/* Admin Notes */}
+                                    <div className="mt-8 border-t border-gray-100 pt-8 print:hidden">
+                                        <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit mb-4">Notas Internas (Admin)</h3>
+                                        <textarea
+                                            value={adminNotes}
+                                            onChange={(e) => setAdminNotes(e.target.value)}
+                                            placeholder="Información privada, llamadas al cliente, problemas con stock..."
+                                            className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-xs font-bold text-brand-carbon placeholder:text-gray-400 focus:ring-2 focus:ring-primary/20 outline-none resize-none h-32"
+                                        />
+                                        <div className="mt-3 flex justify-end">
+                                            <button onClick={saveAdminNotes} className="px-6 py-2.5 bg-brand-carbon text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary transition-colors">
+                                                Guardar Notas
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -661,9 +972,9 @@ export default function OrdersList() {
                                                 onChange={e => setOrderForm({ ...orderForm, status: e.target.value })}
                                                 className="w-full p-6 bg-gray-50 border-none rounded-[1.5rem] font-black text-xs uppercase italic tracking-widest focus:ring-2 focus:ring-primary/20 outline-none appearance-none"
                                             >
-                                                <option value="PENDING">⚡ Pago Pendiente</option>
-                                                <option value="PAID">💎 Pagado / Saldo</option>
-                                                <option value="SHIPPED">📦 Listo para Envío</option>
+                                                <option value="PENDING">⚡ Pendiente</option>
+                                                <option value="AWAITING_PAYMENT">⏳ Pago en Espera</option>
+                                                <option value="PAID">💎 Pagado / Confirmado</option>
                                             </select>
                                         </div>
                                         <div className="space-y-4">

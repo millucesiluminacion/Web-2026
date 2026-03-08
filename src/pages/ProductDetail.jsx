@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, ChevronRight, Zap, Package, BadgePercent } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +22,7 @@ const COLOR_MAP = {
 
 export default function ProductDetail() {
     const { slug } = useParams();
+    const navigate = useNavigate();
     const { addToCart } = useCart();
     const { isPro, discountPercent: proDiscountPercent } = useAuth();
     const [qty, setQty] = useState(1);
@@ -32,6 +33,7 @@ export default function ProductDetail() {
     const [loading, setLoading] = useState(true);
     const [relatedProducts, setRelatedProducts] = useState([]);
     const [categoryName, setCategoryName] = useState('');
+    const [categorySlug, setCategorySlug] = useState('');
 
     // Selection state
     const [selectedAttributes, setSelectedAttributes] = useState({});
@@ -54,7 +56,7 @@ export default function ProductDetail() {
             // 1. Fetch Main Product (Trial 1: By Slug)
             let { data: product, error } = await supabase
                 .from('products')
-                .select('*, categories(name)')
+                .select('*, categories(name, slug)')
                 .eq('slug', slug)
                 .maybeSingle();
 
@@ -62,7 +64,7 @@ export default function ProductDetail() {
             if (error || !product) {
                 const { data: productById, error: idError } = await supabase
                     .from('products')
-                    .select('*, categories(name)')
+                    .select('*, categories(name, slug)')
                     .eq('id', slug)
                     .maybeSingle();
 
@@ -73,6 +75,7 @@ export default function ProductDetail() {
             if (!product) throw new Error("Producto no encontrado");
             setParentProduct(product);
             setCategoryName(product.categories?.name || '');
+            setCategorySlug(product.categories?.slug || product.category_id);
 
             // Fetch related products (same category, excluding self)
             if (product.category_id) {
@@ -209,7 +212,7 @@ export default function ProductDetail() {
         return (
             <div className="container mx-auto px-4 py-20 text-center">
                 <h2 className="text-2xl font-bold mb-4">Producto no encontrado</h2>
-                <Link to="/search" className="text-blue-600 hover:underline">Volver a la tienda</Link>
+                <button onClick={() => navigate(-1)} className="text-blue-600 hover:underline">Volver a la tienda</button>
             </div>
         );
     }
@@ -225,7 +228,7 @@ export default function ProductDetail() {
                     {categoryName && (
                         <>
                             <ChevronRight className="w-3 h-3 text-brand-carbon/20" />
-                            <Link to={`/search?category=${parentProduct?.category_id}`} className="text-brand-carbon/30 hover:text-primary transition-colors">{categoryName}</Link>
+                            <Link to={`/search?category=${categorySlug}`} className="text-brand-carbon/30 hover:text-primary transition-colors">{categoryName}</Link>
                         </>
                     )}
                     <ChevronRight className="w-3 h-3 text-brand-carbon/20" />
@@ -234,10 +237,10 @@ export default function ProductDetail() {
 
                 {/* Back link */}
                 <div className="flex items-center justify-between mb-12">
-                    <Link to="/search" className="group flex items-center gap-3 text-[10px] font-black text-brand-carbon/40 uppercase italic tracking-[.3em] hover:text-primary transition-all">
+                    <button onClick={() => navigate(-1)} className="group flex items-center gap-3 text-[10px] font-black text-brand-carbon/40 uppercase italic tracking-[.3em] hover:text-primary transition-all">
                         <ArrowLeft className="w-4 h-4 transition-transform group-hover:-translate-x-2" />
                         Volver a la Galería
-                    </Link>
+                    </button>
                     <div className="hidden md:block text-[10px] font-black text-brand-carbon/20 uppercase tracking-[.4em]">
                         Mil Luces Boutique Selection
                     </div>
@@ -521,7 +524,7 @@ export default function ProductDetail() {
                             {relatedProducts.map(rp => {
                                 const rpHasDiscount = rp.discount_price && parseFloat(rp.discount_price) > 0 && parseFloat(rp.discount_price) < parseFloat(rp.price);
                                 return (
-                                    <Link key={rp.id} to={`/product/${rp.slug}`} className="group">
+                                    <Link key={rp.id} to={`/product/${rp.slug || rp.id}`} className="group">
                                         <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1">
                                             <div className="aspect-square p-6 flex items-center justify-center relative">
                                                 {rpHasDiscount && (

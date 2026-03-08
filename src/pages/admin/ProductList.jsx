@@ -130,6 +130,16 @@ export default function ProductList() {
         }
     }
 
+    // Helper to generate SEO-friendly slug
+    function generateSlug(name, reference) {
+        if (!name) return '';
+        let slug = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '');
+        if (reference) {
+            slug += '-' + reference.toLowerCase().replace(/[^a-z0-9]+/g, '');
+        }
+        return slug;
+    }
+
     // --- CSV IMPORT LOGIC ---
     const handleFileUpload = (event) => {
         const file = event.target.files[0];
@@ -193,7 +203,8 @@ export default function ProductList() {
                         image_url: row['URL de la imagen'],
                         category_id: getCategoryId(row['Categorías']),
                         attributes: parseAttributes(row['Opciones']),
-                        parent_id: null
+                        parent_id: null,
+                        slug: generateSlug(row['Nombre'], row['SKU'])
                     };
 
                     // Check if exists to update or insert
@@ -247,7 +258,8 @@ export default function ProductList() {
                         image_url: row['URL de la imagen'],
                         category_id: getCategoryId(row['Categorías']), // Inherit category?
                         parent_id: finalParentId,
-                        attributes: parseAttributes(row['Opciones'])
+                        attributes: parseAttributes(row['Opciones']),
+                        slug: generateSlug(row['Nombre'], row['SKU'])
                     };
 
                     // Check if exists
@@ -427,7 +439,8 @@ export default function ProductList() {
                 partner_price: formData.partner_price ? parseFloat(formData.partner_price) : null,
                 attributes: formData.attributes,
                 parent_id: formData.parent_id,
-                extra_images: formData.extra_images || []
+                extra_images: formData.extra_images || [],
+                slug: generateSlug(formData.name, formData.reference)
             };
 
             let productId = editingId;
@@ -1379,7 +1392,8 @@ export default function ProductList() {
                                                     discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
                                                     image_url: formData.image_url, // inheriting parent image by default
                                                     category_id: formData.category_id,
-                                                    attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {}
+                                                    attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {},
+                                                    slug: generateSlug(name, refEl.value)
                                                 };
 
                                                 try {
