@@ -17,7 +17,21 @@ const COLOR_MAP = {
     "Azul": "#2563EB",
     "Verde": "#16A34A",
     "Madera": "#8B4513",
-    "Beige": "#F5F5DC"
+    "Beige": "#F5F5DC",
+    // Temperaturas de Luz (Premium Glow Colors)
+    "3000K": "#FFF1DC",
+    "Blanco cálido": "#FFF1DC",
+    "Blanco Cálido": "#FFF1DC",
+    "Blanco calido": "#FFF1DC",
+    "Blanco Calido": "#FFF1DC",
+    "4000K": "#F3F4F6",
+    "Blanco neutro": "#F3F4F6",
+    "Blanco Neutro": "#F3F4F6",
+    "6000K": "#EEF4FF",
+    "Blanco frío": "#EEF4FF",
+    "Blanco Frío": "#EEF4FF",
+    "Blanco frio": "#EEF4FF",
+    "Blanco Frio": "#EEF4FF"
 };
 
 export default function ProductDetail() {
@@ -100,9 +114,42 @@ export default function ProductDetail() {
             const variantList = children || [];
             setVariants(variantList);
 
-            // 3. Initialize: NO auto-select, let user choose
-            setCurrentVariant(null);
-            setSelectedAttributes({});
+            // 3. Compute immediate options for auto-select
+            const initialOptions = {};
+            if (product.attributes) {
+                Object.entries(product.attributes).forEach(([k, v]) => {
+                    const valArray = Array.isArray(v) ? v : [v];
+                    initialOptions[k] = valArray;
+                });
+            }
+            variantList.forEach(v => {
+                if (!v.attributes) return;
+                Object.entries(v.attributes).forEach(([k, vVal]) => {
+                    if (!initialOptions[k]) initialOptions[k] = [];
+                    const valArray = Array.isArray(vVal) ? vVal : [vVal];
+                    valArray.forEach(val => {
+                        if (!initialOptions[k].includes(val)) initialOptions[k].push(val);
+                    });
+                });
+            });
+
+            const initialSelected = {};
+            Object.entries(initialOptions).forEach(([k, v]) => {
+                if (v.length > 1) {
+                    initialSelected[k] = v[0]; // Select the first available option for selectables
+                }
+            });
+
+            let initialVariant = null;
+            if (variantList.length > 0) {
+                initialVariant = variantList.find(v => {
+                    if (!v.attributes) return false;
+                    return Object.entries(initialSelected).every(([k, val]) => v.attributes[k] === val);
+                }) || null;
+            }
+
+            setCurrentVariant(initialVariant);
+            setSelectedAttributes(initialSelected);
 
         } catch (error) {
             console.error('Error fetching details:', error.message);
@@ -180,7 +227,10 @@ export default function ProductDetail() {
     // Derived values for display
     const displayProduct = currentVariant || parentProduct;
     const availableOptions = getAvailableOptions();
-    const hasOptions = Object.keys(availableOptions).length > 0;
+    const selectableOptions = Object.entries(availableOptions).filter(([k, v]) => v.length > 1);
+    const hasSelectableOptions = selectableOptions.length > 0;
+    const staticSpecs = Object.entries(availableOptions).filter(([k, v]) => v.length === 1);
+    const hasStaticSpecs = staticSpecs.length > 0;
 
     const { profile } = useAuth();
 
@@ -354,9 +404,9 @@ export default function ProductDetail() {
                             </div>
 
                             {/* --- OPTIONS SELECTOR (multi-valor) --- */}
-                            {hasOptions && (
+                            {hasSelectableOptions && (
                                 <div className="space-y-6 mb-10 p-6 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                                    {Object.entries(availableOptions).map(([attrName, values]) => (
+                                    {selectableOptions.map(([attrName, values]) => (
                                         <div key={attrName}>
                                             <p className="text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-3">
                                                 {attrName}: <span className="text-primary italic">{selectedAttributes[attrName] || 'Seleccionar'}</span>
@@ -365,25 +415,46 @@ export default function ProductDetail() {
                                                 {values.map(val => {
                                                     const isSelected = selectedAttributes[attrName] === val;
 
-                                                    // Render Color Swatches
-                                                    if (attrName === 'Color' || attrName === 'Acabado') {
-                                                        const colorCode = COLOR_MAP[val] || val;
+                                                    // Render Color or Temperature Swatches
+                                                    const isColorSwatch = ['Color', 'Acabado', 'Temperatura', 'Temperatura de Color', 'Tono de Luz'].includes(attrName);
+
+                                                    if (isColorSwatch) {
+                                                        const normalizedVal = val.toLowerCase().trim();
+                                                        const mapKey = Object.keys(COLOR_MAP).find(k => k.toLowerCase() === normalizedVal);
+                                                        const colorCode = mapKey ? COLOR_MAP[mapKey] : val;
+
+                                                        const isLightTemp = normalizedVal.includes('k') || normalizedVal.includes('blanco ');
+                                                        let displayLabel = val;
+                                                        if (isLightTemp) {
+                                                            displayLabel = val.replace(/blanco/ig, '').trim();
+                                                            if (!displayLabel) displayLabel = 'Blanco';
+                                                        }
+
                                                         return (
                                                             <button
                                                                 key={val}
                                                                 onClick={() => handleAttributeSelect(attrName, val)}
                                                                 title={val}
                                                                 className={`
-                                                                    w-10 h-10 rounded-full border-2 transition-all shadow-sm
+                                                                    relative w-12 h-12 rounded-full border flex items-center justify-center transition-all duration-300
                                                                     ${isSelected
-                                                                        ? 'border-brand-carbon scale-110 ring-2 ring-brand-carbon/20'
-                                                                        : 'border-gray-200 hover:scale-105'
+                                                                        ? 'scale-110 ring-4 ring-brand-carbon/10 border-brand-carbon shadow-lg z-10'
+                                                                        : 'border-gray-200 hover:scale-105 hover:shadow-md'
                                                                     }
                                                                 `}
-                                                                style={{ backgroundColor: colorCode }}
+                                                                style={{
+                                                                    backgroundColor: colorCode,
+                                                                    boxShadow: isSelected ? `0 0 20px ${colorCode}` : `0 4px 14px ${colorCode}60`
+                                                                }}
                                                             >
-                                                                {isSelected && (
-                                                                    <span className={`block w-2 h-2 mx-auto rounded-full ${['Blanco', 'Beige', 'Plateado'].includes(val) ? 'bg-black' : 'bg-white'}`}></span>
+                                                                {isLightTemp ? (
+                                                                    <span className="text-[9px] font-black uppercase tracking-tighter text-gray-800/70 text-center leading-none px-0.5">
+                                                                        {displayLabel}
+                                                                    </span>
+                                                                ) : (
+                                                                    isSelected && (
+                                                                        <span className={`block w-2.5 h-2.5 mx-auto rounded-full shadow-sm ${['Blanco', 'Beige', 'Plateado'].includes(val) ? 'bg-brand-carbon' : 'bg-white'}`}></span>
+                                                                    )
                                                                 )}
                                                             </button>
                                                         );
@@ -418,18 +489,18 @@ export default function ProductDetail() {
                                 </p>
 
                                 {/* Ficha Técnica - Attributes as Specs */}
-                                {hasOptions && (
+                                {hasStaticSpecs && (
                                     <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
                                         <h3 className="text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-3 flex items-center gap-2">
                                             <Zap className="w-3.5 h-3.5 text-primary" />
                                             Especificaciones
                                         </h3>
                                         <div className="divide-y divide-gray-50">
-                                            {Object.entries(availableOptions).map(([key, values]) => (
+                                            {staticSpecs.map(([key, values]) => (
                                                 <div key={key} className="flex justify-between py-2">
                                                     <span className="text-[11px] font-bold text-gray-400 uppercase">{key}</span>
                                                     <span className="text-[11px] font-bold text-brand-carbon">
-                                                        {selectedAttributes[key] || values.join(' / ')}
+                                                        {values[0]}
                                                     </span>
                                                 </div>
                                             ))}
