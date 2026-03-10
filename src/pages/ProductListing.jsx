@@ -5,8 +5,9 @@ import {
     BoxSelect, Square, Grid, Zap, Lightbulb, Tag, X, Settings,
     ChevronLeft, ChevronRight, ArrowUpDown, SlidersHorizontal
 } from 'lucide-react';
-import { useCart } from '../context/CartContext';
+import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
 import { calculateProductPrice } from '../lib/pricingUtils';
 
@@ -508,9 +509,7 @@ export default function ProductListing() {
                                             </Link>
                                             <div className="p-8 pt-0 flex-1 flex flex-col">
                                                 <div className="mb-4">
-                                                    <div className="flex gap-1 mb-3">
-                                                        {[1, 2, 3, 4, 5].map(i => <Star key={i} className="w-2 h-2 text-primary fill-primary" />)}
-                                                    </div>
+                                                    <StarRating rating={product.rating_avg} count={product.reviews_count} />
                                                     <Link to={`/product/${product.slug || product.id}`}>
                                                         <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight group-hover:text-primary transition-colors line-clamp-2">
                                                             {product.name}

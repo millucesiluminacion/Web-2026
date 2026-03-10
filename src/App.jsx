@@ -27,6 +27,8 @@ import RoomsList from './pages/admin/RoomsList';
 import SliderList from './pages/admin/SliderList';
 import BlogAdmin from './pages/admin/BlogAdmin';
 import ProjectsAdmin from './pages/admin/ProjectsAdmin';
+import ReviewsAdmin from './pages/admin/ReviewsAdmin';
+import BadgesAdmin from './pages/admin/BadgesAdmin';
 
 import PaymentSettings from './pages/admin/PaymentSettings';
 import UsersAdmin from './pages/admin/UsersAdmin';
@@ -34,6 +36,7 @@ import ProfessionalsAdmin from './pages/admin/ProfessionalsAdmin';
 import ProfessionsAdmin from './pages/admin/ProfessionsAdmin';
 import CategoriesAdmin from './pages/admin/CategoriesAdmin';
 import SEOAdmin from './pages/admin/SEOAdmin';
+import TrustBadgesAdmin from './pages/admin/TrustBadgesAdmin';
 import SEOManager from './components/common/SEOManager';
 
 import { AuthProvider } from './context/AuthContext';
@@ -83,6 +86,9 @@ function App() {
               <Route path="professionals" element={<ProfessionalsAdmin />} />
               <Route path="professions" element={<ProfessionsAdmin />} />
               <Route path="seo" element={<SEOAdmin />} />
+              <Route path="trust-badges" element={<TrustBadgesAdmin />} />
+              <Route path="reviews" element={<ReviewsAdmin />} />
+              <Route path="badges" element={<BadgesAdmin />} />
             </Route>
           </Routes>
         </BrowserRouter>

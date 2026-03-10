@@ -3,6 +3,8 @@ import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Aw
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 
 export default function ProductList() {
     const PREDEFINED_ATTRIBUTES = {
@@ -22,6 +24,7 @@ export default function ProductList() {
     const [brands, setBrands] = useState([]);
     const [rooms, setRooms] = useState([]);
     const [professions, setProfessions] = useState([]);
+    const [allBadges, setAllBadges] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
@@ -54,7 +57,12 @@ export default function ProductList() {
         partner_price: '',
         parent_id: null,
         attributes: {},
-        extra_images: [] // gallery images
+        extra_images: [], // gallery images
+        related_product_ids: [], // IDs of related products
+        long_description: '', // New rich text description
+        original_price: '', // PVP for discount calculation
+        badge_tags: [], // Manual badges
+        badge_ids: [] // IDs of dynamic badges
     });
 
     // Variants State (only for editing parent products)
@@ -80,6 +88,13 @@ export default function ProductList() {
                 supabase.from('rooms').select('id, name').order('name'),
                 supabase.from('professions').select('id, name').order('name')
             ]);
+
+            // Fetch badges separately (table may not exist yet)
+            let badgesResult = [];
+            const { data: badgesData, error: badgesErr } = await supabase.from('badges').select('*').order('name');
+            if (!badgesErr) {
+                badgesResult = badgesData || [];
+            }
 
             const allData = prodRes.data || [];
 
@@ -123,6 +138,7 @@ export default function ProductList() {
             setBrands(brandRes.data || []);
             setRooms(roomRes.data || []);
             setProfessions(profRes.data || []);
+            setAllBadges(badgesResult);
         } catch (error) {
             console.error('Error fetching data:', error.message);
         } finally {
@@ -375,7 +391,12 @@ export default function ProductList() {
             partner_price: product.partner_price || '',
             parent_id: product.parent_id,
             attributes: product.attributes || {},
-            extra_images: product.extra_images || []
+            extra_images: product.extra_images || [],
+            related_product_ids: product.related_product_ids || [],
+            long_description: product.long_description || '',
+            original_price: product.original_price || '',
+            badge_tags: product.badge_tags || [],
+            badge_ids: []
         });
 
         // Load relations
@@ -399,10 +420,18 @@ export default function ProductList() {
                 supabase.from('product_professions').select('profession_id').eq('product_id', productId)
             ]);
 
+            // Try loading badges separately (table may not exist)
+            let badgeIds = [];
+            const { data: badgesData, error: badgesLoadErr } = await supabase.from('product_badges').select('badge_id').eq('product_id', productId);
+            if (!badgesLoadErr && badgesData) {
+                badgeIds = badgesData.map(b => b.badge_id);
+            }
+
             setFormData(prev => ({
                 ...prev,
                 room_ids: roomsData.data?.map(r => r.room_id) || [],
-                profession_ids: profsData.data?.map(p => p.profession_id) || []
+                profession_ids: profsData.data?.map(p => p.profession_id) || [],
+                badge_ids: badgeIds
             }));
         } catch (error) {
             console.error("Error loading relations:", error);
@@ -416,7 +445,9 @@ export default function ProductList() {
             name: '', reference: '', price: '', stock: 0,
             category_id: '', brand_id: '', room_ids: [], profession_ids: [],
             image_url: '', description: '', discount_price: '', partner_price: '',
-            parent_id: null, attributes: {}, extra_images: []
+            parent_id: null, attributes: {}, extra_images: [],
+            related_product_ids: [], long_description: '', original_price: '',
+            badge_tags: [], badge_ids: []
         });
         setVariants([]);
         setIsModalOpen(true);
@@ -440,7 +471,11 @@ export default function ProductList() {
                 attributes: formData.attributes,
                 parent_id: formData.parent_id,
                 extra_images: formData.extra_images || [],
-                slug: generateSlug(formData.name, formData.reference)
+                slug: generateSlug(formData.name, formData.reference),
+                related_product_ids: formData.related_product_ids || [],
+                long_description: formData.long_description,
+                original_price: formData.original_price ? parseFloat(formData.original_price) : null,
+                badge_tags: formData.badge_tags || []
             };
 
             let productId = editingId;
@@ -473,6 +508,16 @@ export default function ProductList() {
                         profession_id: profId
                     }));
                     await supabase.from('product_professions').insert(profInserts);
+                }
+
+                // Save Dynamic Badges (table may not exist)
+                const { error: delBadgeErr } = await supabase.from('product_badges').delete().eq('product_id', productId);
+                if (!delBadgeErr && formData.badge_ids && formData.badge_ids.length > 0) {
+                    const badgeInserts = formData.badge_ids.map(badgeId => ({
+                        product_id: productId,
+                        badge_id: badgeId
+                    }));
+                    await supabase.from('product_badges').insert(badgeInserts);
                 }
             }
 
@@ -630,7 +675,7 @@ export default function ProductList() {
 
 
     return (
-        <div>
+        <>
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-10 font-outfit">
                 <div>
                     <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Gestión de Productos</h1>
@@ -1091,6 +1136,64 @@ export default function ProductList() {
                                                 </div>
                                             </div>
 
+                                            <div className="grid grid-cols-1 gap-4">
+                                                <div>
+                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Precio Original / PVP (€)</label>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-bold text-gray-400 bg-gray-50 italic"
+                                                        placeholder="Para mostrar tachado y calcular %"
+                                                        value={formData.original_price}
+                                                        onChange={e => setFormData({ ...formData, original_price: e.target.value })}
+                                                    />
+                                                </div>
+                                            </div>
+
+
+                                            <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
+                                                <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-3">🎨 Badges Boutique (Dinámicos)</label>
+                                                <div className="flex flex-wrap gap-2 mb-3">
+                                                    {(formData.badge_ids || []).map(badgeId => {
+                                                        const badge = allBadges.find(b => b.id === badgeId);
+                                                        if (!badge) return null;
+                                                        return (
+                                                            <span
+                                                                key={badgeId}
+                                                                className="flex items-center gap-2 px-3 py-1 text-[9px] font-black uppercase rounded-lg shadow-sm text-white"
+                                                                style={{ backgroundColor: badge.color }}
+                                                            >
+                                                                {badge.name}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setFormData(prev => ({ ...prev, badge_ids: prev.badge_ids.filter(id => id !== badgeId) }))}
+                                                                    className="hover:text-white/70"
+                                                                >
+                                                                    <X className="w-3 h-3" />
+                                                                </button>
+                                                            </span>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div className="relative">
+                                                    <select
+                                                        className="w-full h-9 bg-white border border-gray-100 rounded-xl px-4 text-[10px] font-bold outline-none focus:ring-2 ring-primary/10 appearance-none"
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            if (val && !formData.badge_ids.includes(val)) {
+                                                                setFormData(prev => ({ ...prev, badge_ids: [...prev.badge_ids, val] }));
+                                                            }
+                                                            e.target.value = '';
+                                                        }}
+                                                    >
+                                                        <option value="">+ Seleccionar Badge Boutique...</option>
+                                                        {allBadges.filter(b => !formData.badge_ids.includes(b.id)).map(badge => (
+                                                            <option key={badge.id} value={badge.id}>{badge.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
+
                                             <div>
                                                 <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5">💰 Precio Socio / Partner (€)</label>
                                                 <input
@@ -1190,6 +1293,64 @@ export default function ProductList() {
                                                 </div>
                                             </div>
 
+                                            {/* === PRODUCTOS RELACIONADOS MANUALE S === */}
+                                            <div>
+                                                <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-2">Explorar Más (Relacionados Manuales)</label>
+                                                <div className="border rounded-xl p-4 bg-white space-y-4 shadow-sm border-gray-100">
+                                                    {/* Lista de seleccionados */}
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {formData.related_product_ids?.map(id => {
+                                                            const p = products.find(prod => prod.id === id);
+                                                            if (!p) return null;
+                                                            return (
+                                                                <div key={id} className="flex items-center gap-2 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg group">
+                                                                    <div className="w-6 h-6 rounded bg-white border border-gray-100 flex items-center justify-center overflow-hidden">
+                                                                        {p.image_url ? <img src={p.image_url} className="w-full h-full object-contain" /> : <div className="text-[10px]">💡</div>}
+                                                                    </div>
+                                                                    <span className="text-[10px] font-bold text-gray-600 truncate max-w-[120px]">{p.name}</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setFormData(prev => ({ ...prev, related_product_ids: prev.related_product_ids.filter(rid => rid !== id) }))}
+                                                                        className="text-gray-300 hover:text-red-500 transition-colors"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                        {(!formData.related_product_ids || formData.related_product_ids.length === 0) && (
+                                                            <p className="text-[10px] text-gray-400 italic">No hay productos seleccionados. Usando automáticos por categoría.</p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Selector de búsqueda */}
+                                                    <div className="relative">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                                                        <select
+                                                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-[10px] font-bold uppercase focus:ring-1 focus:ring-brand-carbon outline-none appearance-none bg-gray-50/50"
+                                                            onChange={(e) => {
+                                                                const val = e.target.value;
+                                                                if (val && !formData.related_product_ids?.includes(val)) {
+                                                                    setFormData(prev => ({
+                                                                        ...prev,
+                                                                        related_product_ids: [...(prev.related_product_ids || []), val]
+                                                                    }));
+                                                                }
+                                                                e.target.value = ""; // Reset select
+                                                            }}
+                                                        >
+                                                            <option value="">+ Añadir Producto a Relacionados...</option>
+                                                            {products
+                                                                .filter(p => p.id !== editingId && !p.parent_id && !formData.related_product_ids?.includes(p.id))
+                                                                .map(p => (
+                                                                    <option key={p.id} value={p.id}>{p.name} ({p.reference || 'Sin Ref.'})</option>
+                                                                ))
+                                                            }
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            </div>
+
                                             {/* === ATRIBUTOS MULTI-VALOR === */}
                                             <div>
                                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Opciones del Producto</label>
@@ -1265,13 +1426,34 @@ export default function ProductList() {
                                             </div>
 
                                             <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Descripción Corta</label>
+                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Descripción Corta (Resumen)</label>
                                                 <textarea
-                                                    className="w-full border rounded-lg px-3 py-2.5 text-xs focus:outline-none min-h-[100px] resize-none"
-                                                    placeholder="Detalles del producto..."
+                                                    className="w-full border rounded-lg px-3 py-2.5 text-xs focus:outline-none min-h-[80px] resize-none"
+                                                    placeholder="Breve resumen para la parte superior..."
                                                     value={formData.description}
                                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                                                 ></textarea>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-1.5">Descripción Larga / Detallada (WordPress Style)</label>
+                                                <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
+                                                    <ReactQuill
+                                                        theme="snow"
+                                                        value={formData.long_description}
+                                                        onChange={(content) => setFormData(prev => ({ ...prev, long_description: content }))}
+                                                        className="h-64 mb-12"
+                                                        modules={{
+                                                            toolbar: [
+                                                                [{ 'header': [1, 2, 3, false] }],
+                                                                ['bold', 'italic', 'underline', 'strike'],
+                                                                [{ 'color': [] }, { 'background': [] }],
+                                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                                                ['clean']
+                                                            ]
+                                                        }}
+                                                    />
+                                                </div>
                                             </div>
 
                                             <button
@@ -1517,9 +1699,7 @@ export default function ProductList() {
                         </div>
                     </div>
                 </div>
-            )
-            }
-        </div>
+            )}
+        </>
     );
 }
-

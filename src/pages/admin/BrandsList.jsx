@@ -15,6 +15,7 @@ export default function BrandsList() {
     const [formData, setFormData] = useState({
         name: '',
         image_url: '',
+        bg_image_url: '', // New field for cover image
         description: '',
         order_index: 0
     });
@@ -53,6 +54,7 @@ export default function BrandsList() {
         setFormData({
             name: brand.name,
             image_url: brand.image_url || '',
+            bg_image_url: brand.bg_image_url || '',
             description: brand.description || '',
             order_index: brand.order_index || 0
         });
@@ -61,7 +63,7 @@ export default function BrandsList() {
 
     function openCreate() {
         setEditingId(null);
-        setFormData({ name: '', image_url: '', description: '', order_index: brands.length });
+        setFormData({ name: '', image_url: '', bg_image_url: '', description: '', order_index: brands.length });
         setIsModalOpen(true);
     }
 
@@ -204,10 +206,22 @@ export default function BrandsList() {
                             </button>
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-                            <ImageUpload
-                                defaultValue={formData.image_url}
-                                onUpload={(url) => setFormData({ ...formData, image_url: url })}
-                            />
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">Logo Marca</label>
+                                    <ImageUpload
+                                        defaultValue={formData.image_url}
+                                        onUpload={(url) => setFormData({ ...formData, image_url: url })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 text-center">Portada / Fondo</label>
+                                    <ImageUpload
+                                        defaultValue={formData.bg_image_url}
+                                        onUpload={(url) => setFormData({ ...formData, bg_image_url: url })}
+                                    />
+                                </div>
+                            </div>
                             <div>
                                 <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Nombre de la Marca</label>
                                 <input

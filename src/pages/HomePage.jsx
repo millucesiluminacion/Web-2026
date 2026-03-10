@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Loader2, Briefcase, Zap, Layout } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Loader2, Briefcase, Zap, Layout, ShoppingBag, Plus } from 'lucide-react';
 import { CategoryGrid } from '../components/home/CategoryGrid';
 import { BrandsSection } from '../components/home/BrandsSection';
 import { RoomsSection } from '../components/home/RoomsSection';
 import { WhyChooseUsSection } from '../components/home/WhyChooseUsSection';
+import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
+import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
 
 export default function HomePage() {
+    const { addToCart } = useCart();
     const [featuredProducts, setFeaturedProducts] = useState([]);
     const [sliders, setSliders] = useState([]);
     const [sideBanners, setSideBanners] = useState([]);
@@ -23,8 +26,23 @@ export default function HomePage() {
     async function fetchAllData() {
         try {
             setLoading(true);
-            const [prodRes, sliderRes, profRes] = await Promise.all([
-                supabase.from('products').select('*').order('created_at', { ascending: false }).limit(3),
+
+            // Try fetching products with badges join, fallback without if table missing
+            let prodRes;
+            const prodQuery = supabase.from('products')
+                .select('*, product_badges(badges(*))')
+                .order('created_at', { ascending: false })
+                .limit(7);
+            prodRes = await prodQuery;
+            if (prodRes.error && prodRes.error.message.includes('product_badges')) {
+                // Fallback: badges table doesn't exist yet
+                prodRes = await supabase.from('products')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(7);
+            }
+
+            const [sliderRes, profRes] = await Promise.all([
                 supabase.from('sliders').select('*').eq('is_active', true).order('order_index', { ascending: true }),
                 supabase.from('professions').select('*').order('order_index', { ascending: true })
             ]);
@@ -66,29 +84,9 @@ export default function HomePage() {
         return () => clearInterval(timer);
     }, [professions]);
 
-    const proSlides = [
-        {
-            title: "Expertos\nRotulistas",
-            desc: "Acceso directo a Tiras LED, Módulos y Perfiles para tus luminosos.",
-            link: "/search?category=tiras",
-            image: "/assets/pro/rotulistas.png",
-            icon: Zap
-        },
-        {
-            title: "Reformas &\nInteriorismo",
-            desc: "Lámparas y Downlights con tarifas especiales para tus obras.",
-            link: "/search?category=lamparas",
-            image: "/assets/pro/reformas.png",
-            icon: Layout
-        }
-    ];
-
-    // Default Fallbacks (Empty to avoid FOUC with external images)
-    const defaultSliders = [];
-    const defaultSideBanner = { image_url: '', link_url: '/profesionales' };
-
-    const activeSliders = sliders.length > 0 ? sliders : defaultSliders;
-    const activeSideBanner = sideBanners.length > 0 ? sideBanners[0] : defaultSideBanner;
+    // Default Fallbacks
+    const activeSliders = sliders.length > 0 ? sliders : [];
+    const activeSideBanner = sideBanners.length > 0 ? sideBanners[0] : { image_url: '', link_url: '/profesionales' };
 
     return (
         <div className="js-main-container">
@@ -99,7 +97,6 @@ export default function HomePage() {
 
                         {/* Main Cinematic Feature (75%) */}
                         <div className="lg:col-span-9 relative group rounded-[2rem] lg:rounded-[3.5rem] overflow-hidden shadow-luxury h-[48vh] min-h-[320px] max-h-[480px] lg:h-[500px] lg:min-h-0 lg:max-h-none bg-brand-carbon">
-                            {/* Background Image with Overlay */}
                             <div className="absolute inset-0 transition-transform duration-1000 group-hover:scale-105">
                                 {activeSliders[currentSlider]?.image_url && (
                                     <img
@@ -111,7 +108,6 @@ export default function HomePage() {
                                 <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon via-brand-carbon/20 to-transparent"></div>
                             </div>
 
-                            {/* Content Overlay */}
                             <div className="absolute inset-0 p-6 sm:p-10 lg:p-20 flex flex-col justify-end">
                                 <div className="max-w-2xl animate-in fade-in slide-in-from-bottom-8 duration-1000">
                                     {activeSliders[currentSlider]?.subtitle && (
@@ -133,38 +129,27 @@ export default function HomePage() {
                                         >
                                             {activeSliders[currentSlider]?.button_text || 'Ver Boutique'}
                                         </Link>
-                                        {activeSliders[currentSlider]?.secondary_button_text && (
-                                            <Link
-                                                to={activeSliders[currentSlider]?.secondary_button_link || '#'}
-                                                className="px-8 lg:px-12 py-4 lg:py-6 glass text-white rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-white/10 transition-all border border-white/20"
-                                            >
-                                                {activeSliders[currentSlider].secondary_button_text}
-                                            </Link>
-                                        )}
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Navigation Micro-Dots */}
                             <div className="absolute bottom-4 right-4 sm:bottom-10 sm:right-10 flex gap-3">
                                 {activeSliders.map((_, i) => (
                                     <button
                                         key={i}
                                         onClick={() => setCurrentSlider(i)}
-                                        className={`w-12 h-1 rounded-full transition-all duration-500 ${i === currentSlider ? 'bg-primary w-20' : 'bg-white/20 hover:bg-white/40'
-                                            }`}
+                                        className={`w-12 h-1 rounded-full transition-all duration-500 ${i === currentSlider ? 'bg-primary w-20' : 'bg-white/20 hover:bg-white/40'}`}
                                     />
                                 ))}
                             </div>
                         </div>
 
-                        {/* Side Narrative Feature (3%) - Mini Slider PRO */}
+                        {/* Side Narrative Feature - Mini Slider PRO */}
                         <div className="lg:col-span-3 lg:flex flex-col gap-6 hidden lg:h-[500px]">
                             <Link
                                 to={professions.length > 0 ? `/search?profession=${professions[proSlider]?.slug}` : "/profesionales"}
                                 className="flex-1 bg-brand-carbon rounded-[2.5rem] shadow-luxury border border-white/5 flex flex-col justify-between group cursor-pointer hover:border-primary/40 transition-all relative overflow-hidden"
                             >
-                                {/* Background Image with Overlay */}
                                 <div className="absolute inset-0 z-0">
                                     {professions.length > 0 && professions[proSlider]?.image_url ? (
                                         <img
@@ -191,7 +176,7 @@ export default function HomePage() {
                                             </div>
                                         </div>
 
-                                        <div className="min-h-[140px] animate-in fade-in slide-in-from-right-4 duration-500" key={proSlider}>
+                                        <div className="min-h-[140px]" key={proSlider}>
                                             <h3 className="text-2xl font-black uppercase italic leading-none mb-4 whitespace-pre-line text-white">
                                                 {professions.length > 0 ? professions[proSlider].name : 'Cargando...'}
                                             </h3>
@@ -221,7 +206,7 @@ export default function HomePage() {
                                 <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                 <div className="absolute top-8 left-8">
                                     <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-widest rounded-lg border border-white/10">
-                                        {activeSideBanner.title || activeSideBanner.subtitle || 'New Arrival'}
+                                        {activeSideBanner.title || 'New Arrival'}
                                     </span>
                                 </div>
                             </a>
@@ -230,10 +215,9 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* Category Grid Section */}
             <CategoryGrid />
 
-            {/* Featured Section - Boutique Edit */}
+            {/* Featured Section */}
             <section className="mb-12 max-w-[1600px] mx-auto px-6">
                 <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
                     <div>
@@ -251,90 +235,137 @@ export default function HomePage() {
                         <p className="text-[10px] font-black uppercase tracking-widest">Sincronizando Boutique...</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                         {featuredProducts.length > 0 ? (
                             <>
-                                {/* Masterpiece Feature (First Product) */}
-                                <div className="lg:col-span-7 group relative bg-white rounded-[3rem] overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100/50 min-h-[500px]">
-                                    <div className="absolute inset-0 p-12 flex flex-col justify-between">
-                                        <div className="z-10">
-                                            <span className="px-3 py-1 bg-brand-carbon text-white text-[9px] font-black uppercase tracking-widest rounded-lg">
-                                                Featured Masterpiece
-                                            </span>
-                                            <h3 className="text-3xl font-black text-brand-carbon uppercase italic leading-tight mt-6 mb-2 max-w-sm">
-                                                {featuredProducts[0].name}
-                                            </h3>
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-6">{featuredProducts[0].category}</p>
-                                            <p className="text-3xl font-black text-primary italic">{featuredProducts[0].price} €</p>
+                                {/* MASTERPIECE */}
+                                <div className="lg:col-span-1 lg:row-span-2 group relative bg-white rounded-3xl overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100 flex flex-col p-8 min-h-[450px]">
+                                    <BadgeRenderer product={featuredProducts[0]} />
+
+                                    <div className="z-10 relative mb-6">
+                                        <div className="mb-2">
+                                            <StarRating rating={featuredProducts[0].rating_avg} count={featuredProducts[0].reviews_count} />
                                         </div>
-                                        <div className="z-10">
-                                            <Link
-                                                to={`/product/${featuredProducts[0].slug || featuredProducts[0].id}`}
-                                                className="inline-flex items-center gap-4 px-8 py-4 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] hover:bg-primary transition-all shadow-xl shadow-black/20"
-                                            >
-                                                Ver Detalles <div className="w-8 h-[1px] bg-white opacity-40"></div>
-                                            </Link>
-                                        </div>
+                                        <h3 className="text-xl font-black text-brand-carbon uppercase italic leading-tight mt-2 line-clamp-2">
+                                            {featuredProducts[0].name}
+                                        </h3>
                                     </div>
-                                    <div className="absolute top-0 right-0 w-full h-full p-20 flex items-center justify-end pointer-events-none">
+
+                                    <div className="flex-1 flex items-center justify-center p-6 relative">
                                         {featuredProducts[0].image_url ? (
                                             <img
                                                 src={featuredProducts[0].image_url}
                                                 alt={featuredProducts[0].name}
-                                                className="max-h-full object-contain group-hover:scale-110 group-hover:-rotate-3 transition-transform duration-700 opacity-80 group-hover:opacity-100"
+                                                className="max-h-64 object-contain group-hover:scale-110 transition-transform duration-700"
                                             />
                                         ) : (
-                                            <div className="text-[150px] opacity-10 group-hover:scale-110 transition-transform duration-700">💡</div>
+                                            <div className="text-8xl opacity-10">💡</div>
                                         )}
+
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 bg-white/10 backdrop-blur-[2px]">
+                                            <Link
+                                                to={`/product/${featuredProducts[0].slug || featuredProducts[0].id}`}
+                                                className="px-6 py-2 bg-brand-carbon text-white rounded-full font-black uppercase italic text-[9px] hover:bg-primary transition-all shadow-xl"
+                                            >
+                                                Ver Detalles
+                                            </Link>
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-4 space-y-4">
+                                        <div className="flex items-baseline gap-2">
+                                            <p className="text-2xl font-black text-brand-carbon italic">{featuredProducts[0].price} €</p>
+                                            {featuredProducts[0].original_price > featuredProducts[0].price && (
+                                                <p className="text-sm text-gray-400 line-through font-bold">{featuredProducts[0].original_price} €</p>
+                                            )}
+                                        </div>
+
+                                        <button
+                                            onClick={() => addToCart(featuredProducts[0])}
+                                            disabled={featuredProducts[0].stock <= 0}
+                                            className={`
+                                                w-full rounded-2xl py-4 px-6 font-black uppercase italic text-[10px] transition-all shadow-xl flex items-center justify-center gap-3 group
+                                                ${featuredProducts[0].stock <= 0
+                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                    : 'bg-brand-carbon text-white hover:bg-primary shadow-black/10 hover:shadow-primary/20 active:scale-95'
+                                                }
+                                            `}
+                                        >
+                                            <ShoppingBag className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                            {featuredProducts[0].stock > 0 ? 'Añadir a la Cesta' : 'Agotado'}
+                                        </button>
                                     </div>
                                 </div>
 
-                                {/* Curated Pair (Next 2) */}
-                                <div className="lg:col-span-5 flex flex-col gap-8">
-                                    {featuredProducts.slice(1, 3).map((prod) => (
-                                        <Link
-                                            key={prod.id}
-                                            to={`/product/${prod.slug || prod.id}`}
-                                            className="flex-1 group relative bg-white rounded-[2.5rem] p-8 overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-500 border border-gray-100/50 flex items-center"
-                                        >
-                                            <div className="w-1/2 relative z-10">
-                                                <p className="text-[8px] font-black text-primary uppercase tracking-[.3em] mb-2">{prod.category}</p>
-                                                <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-tight mb-4 group-hover:text-primary transition-colors line-clamp-2">
-                                                    {prod.name}
-                                                </h3>
-                                                <p className="text-xl font-black text-brand-carbon italic">{prod.price} €</p>
+                                {/* OTHERS */}
+                                {featuredProducts.slice(1, 7).map((prod) => (
+                                    <div key={prod.id} className="group relative bg-white rounded-3xl p-5 overflow-hidden shadow-sm hover:shadow-luxury transition-all duration-500 border border-gray-50 flex flex-col justify-between">
+                                        <BadgeRenderer product={prod} />
+
+                                        <div className="h-32 flex items-center justify-center p-2 mb-4 relative overflow-hidden">
+                                            {prod.image_url ? (
+                                                <img
+                                                    src={prod.image_url}
+                                                    alt={prod.name}
+                                                    className="max-h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                                />
+                                            ) : (
+                                                <div className="text-4xl opacity-10">💡</div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex flex-col flex-1">
+                                            <div className="mb-2">
+                                                <StarRating rating={prod.rating_avg} count={prod.reviews_count} />
                                             </div>
-                                            <div className="w-1/2 h-full flex items-center justify-center p-4">
-                                                {prod.image_url ? (
-                                                    <img
-                                                        src={prod.image_url}
-                                                        alt={prod.name}
-                                                        className="max-h-full object-contain group-hover:scale-110 group-hover:rotate-6 transition-transform duration-500"
-                                                    />
-                                                ) : (
-                                                    <div className="text-5xl opacity-20">💡</div>
-                                                )}
+                                            <p className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-1">{prod.category || 'Iluminación'}</p>
+                                            <h3 className="text-[11px] font-black text-brand-carbon uppercase italic leading-tight mb-3 group-hover:text-primary transition-colors line-clamp-1">
+                                                <Link to={`/product/${prod.slug || prod.id}`}>{prod.name}</Link>
+                                            </h3>
+
+                                            <div className="mt-auto">
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        addToCart(prod);
+                                                    }}
+                                                    disabled={prod.stock <= 0}
+                                                    className={`
+                                                        w-full rounded-xl py-2.5 px-4 font-black uppercase italic text-[8px] transition-all flex items-center justify-between group/btn mb-3
+                                                        ${prod.stock <= 0
+                                                            ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                                                            : 'bg-brand-carbon text-white hover:bg-primary shadow-lg shadow-black/5 active:scale-95'
+                                                        }
+                                                    `}
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <ShoppingBag className="w-3 h-3 group-hover/btn:scale-110 transition-transform" />
+                                                        {prod.stock > 0 ? 'Comprar' : 'Agotado'}
+                                                    </span>
+                                                    <span className="font-bold">{prod.price}€</span>
+                                                </button>
+
+                                                <div className="flex items-center gap-2 opacity-60">
+                                                    {prod.original_price > prod.price && (
+                                                        <p className="text-[9px] text-gray-400 line-through font-bold">{prod.original_price} €</p>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </Link>
-                                    ))}
-                                </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </>
                         ) : (
-                            <div className="lg:col-span-12 py-32 text-center glass rounded-[3rem] border-dashed border-2 border-gray-100">
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">La galería de novedades está siendo preparada.</p>
+                            <div className="lg:col-span-4 py-20 text-center glass rounded-3xl border-dashed border-2 border-gray-100">
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">No hay novedades disponibles en este momento.</p>
                             </div>
                         )}
                     </div>
                 )}
             </section>
 
-            {/* Brands Section */}
             <BrandsSection />
-
-            {/* Rooms Section */}
             <RoomsSection />
-
-            {/* Why Choose Us Section */}
             <WhyChooseUsSection />
         </div>
     );

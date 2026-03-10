@@ -28,8 +28,8 @@ export function BrandsSection() {
                 if (data && data.length > 0) {
                     const formatted = data.map(brand => ({
                         name: brand.name,
-                        img: brand.image_url || 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Philips_logo_new.svg/200px-Philips_logo_new.svg.png',
-                        bg: brand.bg_image_url || 'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?w=400&h=200&fit=crop'
+                        img: brand.image_url || '',
+                        bg: brand.bg_image_url || 'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?q=80&w=2000'
                     }));
                     setBrands(formatted);
                 } else {
