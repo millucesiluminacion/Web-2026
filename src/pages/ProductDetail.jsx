@@ -181,7 +181,7 @@ export default function ProductDetail() {
             if (product.category_id) {
                 const { data: related } = await supabase
                     .from('products')
-                    .select('id, slug, name, price, discount_price, image_url, stock')
+                    .select('id, slug, name, price, discount_price, image_url, stock, created_at, product_badges(badges(*))')
                     .eq('category_id', product.category_id)
                     .is('parent_id', null)
                     .neq('id', product.id)
@@ -192,7 +192,7 @@ export default function ProductDetail() {
             // 2. Fetch Variants (Children)
             const { data: children, error: varError } = await supabase
                 .from('products')
-                .select('*')
+                .select('*, product_badges(badges(*))')
                 .eq('parent_id', product.id);
 
             if (varError) console.error("Error fetching variants:", varError);
@@ -847,14 +847,7 @@ export default function ProductDetail() {
                                     <Link key={rp.id} to={`/product/${rp.slug || rp.id}`} className="group">
                                         <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-xl transition-all duration-500 hover:-translate-y-1">
                                             <div className="aspect-square p-6 flex items-center justify-center relative">
-                                                {rpHasDiscount && (
-                                                    <span className="absolute top-3 left-3 bg-red-500 text-white text-[9px] font-black px-2 py-1 rounded-lg uppercase italic">
-                                                        -{Math.round(((parseFloat(rp.price) - parseFloat(rp.discount_price)) / parseFloat(rp.price)) * 100)}%
-                                                    </span>
-                                                )}
-                                                <span className={`absolute top-3 right-3 text-[8px] font-black px-2 py-0.5 rounded-full uppercase ${rp.stock > 0 ? 'bg-emerald-50 text-emerald-500' : 'bg-amber-50 text-amber-500'}`}>
-                                                    {rp.stock > 0 ? 'Stock' : 'Pedido'}
-                                                </span>
+                                                <BadgeRenderer product={rp} />
                                                 {rp.image_url ? (
                                                     <img src={rp.image_url} alt={rp.name} className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-110" />
                                                 ) : (

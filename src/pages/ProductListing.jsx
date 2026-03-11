@@ -98,9 +98,9 @@ export default function ProductListing() {
                 setSubcategories([]);
             }
 
-            let querySelect = '*, product_rooms(room_id), product_professions(profession_id)';
-            if (roomId) querySelect = '*, product_rooms!inner(room_id), product_professions(profession_id)';
-            if (professionSlug) querySelect = '*, product_rooms(room_id), product_professions!inner(profession_id)';
+            let querySelect = '*, product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))';
+            if (roomId) querySelect = '*, product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
+            if (professionSlug) querySelect = '*, product_rooms(room_id), product_professions!inner(profession_id), product_badges(badges(*))';
 
             let productQuery = supabase.from('products').select(querySelect).is('parent_id', null);
 
@@ -497,15 +497,9 @@ export default function ProductListing() {
                                             <Link to={`/product/${product.slug || product.id}`}
                                                 className="block relative aspect-square p-8 overflow-hidden group/img">
                                                 <div className="absolute inset-0 bg-gray-50/20 opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                                <BadgeRenderer product={product} />
                                                 <img src={product.image_url || '/placeholder.jpg'} alt={product.name}
                                                     className="w-full h-full object-contain transition-transform duration-700 group-hover/img:scale-110" />
-                                                {pricing.hasAnyDiscount && (
-                                                    <div className="absolute top-6 left-6">
-                                                        <span className="bg-red-500 text-white text-[9px] font-black uppercase px-3 py-1.5 rounded-xl italic shadow-xl">
-                                                            -{pricing.displayDiscountPercent}% OFF
-                                                        </span>
-                                                    </div>
-                                                )}
                                             </Link>
                                             <div className="p-8 pt-0 flex-1 flex flex-col">
                                                 <div className="mb-4">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, Percent, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
@@ -29,6 +29,8 @@ export default function ProductList() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterBrand, setFilterBrand] = useState('');
+    const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'low_stock', 'no_image', 'on_offer'
+    const [sortBy, setSortBy] = useState('created_at_desc'); // 'name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc', 'created_at_desc', 'created_at_asc'
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -81,7 +83,7 @@ export default function ProductList() {
             setLoading(true);
             const [prodRes, catRes, brandRes, roomRes, profRes] = await Promise.all([
                 supabase.from('products')
-                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)')
+                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))')
                     .order('created_at', { ascending: false }),
                 supabase.from('categories').select('id, name, parent_id, slug').order('name'),
                 supabase.from('brands').select('id, name').order('name'),
@@ -596,13 +598,79 @@ export default function ProductList() {
         setFormData(prev => ({ ...prev, attributes: newAttrs }));
     };
 
-    const filteredProducts = products.filter(p => {
-        const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchCat = !filterCategory || p.category_id === filterCategory;
-        const matchBrand = !filterBrand || p.brand_id === filterBrand;
-        return matchSearch && matchCat && matchBrand;
-    });
+    const filteredProducts = useMemo(() => {
+        // 1. First, apply primitive filters to all products
+        const baseFiltered = products.filter(p => {
+            const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchCategory = !filterCategory || p.category_id === filterCategory;
+            const matchBrand = !filterBrand || p.brand_id === filterBrand;
+
+            let matchStatus = true;
+            if (filterStatus === 'low_stock') matchStatus = (p.stock || 0) < 5;
+            if (filterStatus === 'no_image') matchStatus = !p.image_url;
+            if (filterStatus === 'on_offer') matchStatus = p.discount_price && parseFloat(p.discount_price) > 0;
+
+            return matchSearch && matchCategory && matchBrand && matchStatus;
+        });
+
+        // 2. Separate parents and variants
+        const parents = baseFiltered.filter(p => !p.parent_id);
+        const variantsMap = {};
+
+        // We look for variants in the FULL products list to ensure they appear if the parent is visible
+        products.forEach(p => {
+            if (p.parent_id) {
+                if (!variantsMap[p.parent_id]) variantsMap[p.parent_id] = [];
+                // Only include variants that match the base filters too
+                const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
+                const matchStatus = filterStatus === 'all' || (
+                    (filterStatus === 'low_stock' && (p.stock || 0) < 5) ||
+                    (filterStatus === 'no_image' && !p.image_url) ||
+                    (filterStatus === 'on_offer' && p.discount_price && parseFloat(p.discount_price) > 0)
+                );
+
+                if (matchSearch && matchStatus) {
+                    variantsMap[p.parent_id].push(p);
+                }
+            }
+        });
+
+        // 3. Sort parents
+        parents.sort((a, b) => {
+            switch (sortBy) {
+                case 'name_asc': return a.name.localeCompare(b.name);
+                case 'name_desc': return b.name.localeCompare(a.name);
+                case 'price_asc': return parseFloat(a.price) - parseFloat(b.price);
+                case 'price_desc': return parseFloat(b.price) - parseFloat(a.price);
+                case 'stock_asc': return (a.stock || 0) - (b.stock || 0);
+                case 'stock_desc': return (b.stock || 0) - (a.stock || 0);
+                case 'created_at_asc': return new Date(a.created_at) - new Date(b.created_at);
+                case 'created_at_desc': return new Date(b.created_at) - new Date(a.created_at);
+                default: return 0;
+            }
+        });
+
+        // 4. Flatten hierarchy: Parent -> its variants
+        const final = [];
+        parents.forEach(parent => {
+            final.push(parent);
+            if (variantsMap[parent.id]) {
+                const sortedVariants = [...variantsMap[parent.id]].sort((a, b) => a.name.localeCompare(b.name));
+                final.push(...sortedVariants);
+            }
+        });
+
+        // 5. Detect and add filtered "orphan" variants (variants whose parent didn't match filters)
+        baseFiltered.forEach(p => {
+            if (p.parent_id && !final.find(f => f.id === p.id)) {
+                final.push(p);
+            }
+        });
+
+        return final;
+    }, [products, searchQuery, filterCategory, filterBrand, filterStatus, sortBy]);
 
     // Bulk selection helpers
     const allFilteredIds = filteredProducts.map(p => p.id);
@@ -853,9 +921,40 @@ export default function ProductList() {
                         {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                     </select>
 
-                    {(filterCategory || filterBrand) && (
+                    {/* Status Filter */}
+                    <select
+                        value={filterStatus}
+                        onChange={e => setFilterStatus(e.target.value)}
+                        className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                    >
+                        <option value="all">Filtro Estado: Todos</option>
+                        <option value="low_stock">⚠️ Stock Bajo (&lt;5)</option>
+                        <option value="no_image">🖼️ Sin Imagen</option>
+                        <option value="on_offer">🏷️ En Oferta</option>
+                    </select>
+
+                    {/* Sort Selector */}
+                    <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl h-12 px-4 shadow-sm">
+                        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                        <select
+                            value={sortBy}
+                            onChange={e => setSortBy(e.target.value)}
+                            className="text-[10px] font-black uppercase text-brand-carbon focus:outline-none bg-transparent"
+                        >
+                            <option value="created_at_desc">Más Nuevos</option>
+                            <option value="created_at_asc">Más Antiguos</option>
+                            <option value="name_asc">Nombre (A-Z)</option>
+                            <option value="name_desc">Nombre (Z-A)</option>
+                            <option value="price_asc">Precio (Menor a Mayor)</option>
+                            <option value="price_desc">Precio (Mayor a Menor)</option>
+                            <option value="stock_desc">Más Stock</option>
+                            <option value="stock_asc">Menos Stock</option>
+                        </select>
+                    </div>
+
+                    {(filterCategory || filterBrand || filterStatus !== 'all' || sortBy !== 'created_at_desc') && (
                         <button
-                            onClick={() => { setFilterCategory(''); setFilterBrand(''); }}
+                            onClick={() => { setFilterCategory(''); setFilterBrand(''); setFilterStatus('all'); setSortBy('created_at_desc'); }}
                             className="text-[9px] font-black uppercase text-gray-400 hover:text-primary transition-colors flex items-center gap-1"
                         >
                             <X className="w-3 h-3" /> Limpiar
@@ -886,7 +985,7 @@ export default function ProductList() {
                                         </button>
                                     </th>
                                     <th className="p-4">Producto</th>
-                                    <th className="p-4">Categoría / Atributos</th>
+                                    <th className="p-4">Categoría / Atributos / Badges</th>
                                     <th className="p-4">Precio / Stock</th>
                                     <th className="p-4 text-right">Acciones</th>
                                 </tr>
@@ -961,6 +1060,48 @@ export default function ProductList() {
                                                         ))}
                                                     </div>
                                                 )}
+                                                {/* Badges Column Data */}
+                                                <div className="flex flex-wrap gap-1 mt-1 border-t border-gray-50 pt-1.5">
+                                                    {/* 1. AUTOMATIC BADGES (Parity with Web) */}
+                                                    {(() => {
+                                                        const autoBadges = [];
+                                                        // New
+                                                        const createdDate = new Date(product.created_at);
+                                                        const diffDays = Math.ceil((new Date() - createdDate) / (1000 * 60 * 60 * 24));
+                                                        if (diffDays <= 30) autoBadges.push({ label: 'NUEVO', color: 'bg-yellow-500' });
+
+                                                        // Stock
+                                                        if (product.stock === 0) autoBadges.push({ label: 'AGOTADO', color: 'bg-gray-800' });
+                                                        else if (product.stock <= 5) autoBadges.push({ label: 'ÚLTIMAS UNDS', color: 'bg-orange-500' });
+
+                                                        // Free Shipping
+                                                        if (product.price >= 100) autoBadges.push({ label: 'ENVÍO GRATIS', color: 'bg-emerald-500' });
+
+                                                        return autoBadges.map(ab => (
+                                                            <span key={ab.label} className={`px-1.5 py-0.5 text-[7px] font-black uppercase rounded text-white shadow-sm ${ab.color}`}>
+                                                                {ab.label}
+                                                            </span>
+                                                        ));
+                                                    })()}
+
+                                                    {/* 2. DYNAMIC BADGES */}
+                                                    {product.product_badges?.map(pb => (
+                                                        <span
+                                                            key={pb.badge_id}
+                                                            className="px-1.5 py-0.5 text-[7px] font-black uppercase rounded text-white shadow-sm"
+                                                            style={{ backgroundColor: pb.badges?.bg_color || '#333' }}
+                                                        >
+                                                            {pb.badges?.name}
+                                                        </span>
+                                                    ))}
+
+                                                    {/* 3. LEGACY TAGS */}
+                                                    {product.badge_tags?.map(tag => (
+                                                        <span key={tag} className="px-1.5 py-0.5 bg-gray-100 text-gray-400 text-[7px] font-black uppercase rounded border border-gray-200">
+                                                            {tag}
+                                                        </span>
+                                                    ))}
+                                                </div>
                                             </div>
                                         </td>
 
@@ -1161,7 +1302,7 @@ export default function ProductList() {
                                                             <span
                                                                 key={badgeId}
                                                                 className="flex items-center gap-2 px-3 py-1 text-[9px] font-black uppercase rounded-lg shadow-sm text-white"
-                                                                style={{ backgroundColor: badge.color }}
+                                                                style={{ backgroundColor: badge.bg_color }}
                                                             >
                                                                 {badge.name}
                                                                 <button
