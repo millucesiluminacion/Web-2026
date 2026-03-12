@@ -141,7 +141,21 @@ export default function ProductDetail() {
                 .from('products')
                 .select(selectWithBadges)
                 .eq('slug', slug)
+                .neq('is_active', false)
                 .maybeSingle();
+
+            // Resilience: is_active missing
+            if (error && error.message.includes('is_active')) {
+                const res = await supabase
+                    .from('products')
+                    .select(selectWithBadges)
+                    .eq('slug', slug)
+                    .maybeSingle();
+                product = res.data;
+                error = res.error;
+            }
+
+
 
             // Fallback if product_badges table doesn't exist
             if (error && error.message.includes('product_badges')) {
@@ -149,7 +163,18 @@ export default function ProductDetail() {
                     .from('products')
                     .select(selectWithout)
                     .eq('slug', slug)
+                    .neq('is_active', false)
                     .maybeSingle());
+
+                if (error && error.message.includes('is_active')) {
+                    ({ data: product, error } = await supabase
+                        .from('products')
+                        .select(selectWithout)
+                        .eq('slug', slug)
+                        .maybeSingle());
+                }
+
+
             }
 
             // Trial 2: By ID (Fallback for legacy links or missing slugs)
@@ -158,7 +183,9 @@ export default function ProductDetail() {
                     .from('products')
                     .select(selectWithBadges)
                     .eq('id', slug)
+                    .neq('is_active', false)
                     .maybeSingle();
+
 
                 if (res2.error && res2.error.message.includes('product_badges')) {
                     res2 = await supabase
@@ -167,6 +194,15 @@ export default function ProductDetail() {
                         .eq('id', slug)
                         .maybeSingle();
                 }
+
+                if (res2.error && res2.error.message.includes('is_active')) {
+                    res2 = await supabase
+                        .from('products')
+                        .select(res2.error.message.includes('product_badges') ? selectWithout : selectWithBadges)
+                        .eq('id', slug)
+                        .maybeSingle();
+                }
+
 
                 if (res2.error) throw res2.error;
                 product = res2.data;
@@ -240,11 +276,22 @@ export default function ProductDetail() {
             // Fetch related products (manual or category-based fallback)
             if (product.category_id) {
                 if (product.related_product_ids && product.related_product_ids.length > 0) {
-                    const { data: related } = await supabase
+                    let { data: related, error: relErr } = await supabase
                         .from('products')
                         .select('id, slug, name, price, discount_price, image_url, stock')
-                        .in('id', product.related_product_ids);
+                        .in('id', product.related_product_ids)
+                        .neq('is_active', false);
+
+                    if (relErr && relErr.message.includes('is_active')) {
+                        const retry = await supabase
+                            .from('products')
+                            .select('id, slug, name, price, discount_price, image_url, stock')
+                            .in('id', product.related_product_ids);
+                        related = retry.data;
+                    }
                     setRelatedProducts(related || []);
+
+
                 } else {
                     const { data: related } = await supabase
                         .from('products')
@@ -542,12 +589,6 @@ export default function ProductDetail() {
 
                         {/* Stock & Urgency Badges */}
                         <div className="flex flex-col gap-3 mb-8">
-                            {parseInt(displayProduct?.stock) > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                                    <span className="text-[10px] font-black text-green-600 uppercase tracking-widest italic">En Stock, entrega en 24/48h</span>
-                                </div>
-                            )}
                             {(() => {
                                 const now = new Date();
                                 const hours = now.getHours();
@@ -562,6 +603,49 @@ export default function ProductDetail() {
                                 return null;
                             })()}
                         </div>
+
+                        {/* DESCUENTOS POR VOLUMEN (Si existen) */}
+                        {displayProduct?.volume_pricing && Array.isArray(displayProduct.volume_pricing) && displayProduct.volume_pricing.length > 0 && (
+                            <div className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                <div className="bg-brand-carbon/[0.03] border border-brand-carbon/5 rounded-[2rem] p-6 lg:p-8">
+                                    <h3 className="text-[10px] font-black text-brand-carbon uppercase tracking-[.4em] mb-6 flex items-center gap-3">
+                                        <div className="w-8 h-px bg-brand-carbon/20"></div>
+                                        Tarifas por Volumen
+                                    </h3>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {displayProduct.volume_pricing.map((tier, idx) => {
+                                            const tierPrice = calculateProductPrice(displayProduct, profile, tier.min_qty).finalPrice;
+                                            const saving = ((1 - (tierPrice / originalPrice)) * 100).toFixed(0);
+
+                                            return (
+                                                <div
+                                                    key={idx}
+                                                    className={`
+                                                        flex items-center justify-between p-4 rounded-2xl border transition-all
+                                                        ${qty >= tier.min_qty ? 'bg-white border-primary shadow-lg scale-[1.02]' : 'bg-white/50 border-gray-100 opacity-80'}
+                                                    `}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black italic shadow-sm ${qty >= tier.min_qty ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                                            {tier.min_qty}+
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[10px] font-black text-brand-carbon uppercase italic leading-none mb-1">Unidades</p>
+                                                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest leading-none">Compra al por mayor</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-lg font-black text-brand-carbon italic leading-none">{tierPrice.toFixed(2)}€</p>
+                                                        <p className="text-[9px] text-green-600 font-black uppercase italic tracking-tighter">Ahorras {saving}%</p>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="mt-4 text-[9px] text-gray-400 italic text-center font-medium">El descuento se aplicará automáticamente al añadir al carrito.</p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Luxury Action Section - Repositioned UP */}
                         <div className="bg-white p-6 rounded-[2rem] shadow-luxury border border-gray-100 flex flex-col gap-4 mb-10">

@@ -108,9 +108,12 @@ export default function BadgesAdmin() {
             <div className="flex justify-between items-end mb-12 pb-8 border-b border-gray-100">
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-3 block">Estética Boutique</span>
-                    <h1 className="text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">
+                    <h1 className="text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-2">
                         Gestión de <span className="text-primary/40">Badges</span>
                     </h1>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase italic">
+                        * Los badges de sistema (NUEVO, AGOTADO, ENVÍO GRATIS) se calculan automáticamente.
+                    </p>
                 </div>
                 <button
                     onClick={openCreate}

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, Percent, AlertTriangle } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, Percent, AlertTriangle, BadgePercent } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
@@ -64,7 +64,8 @@ export default function ProductList() {
         long_description: '', // New rich text description
         original_price: '', // PVP for discount calculation
         badge_tags: [], // Manual badges
-        badge_ids: [] // IDs of dynamic badges
+        badge_ids: [], // IDs of dynamic badges
+        is_active: true // Product visibility
     });
 
     // Variants State (only for editing parent products)
@@ -81,15 +82,26 @@ export default function ProductList() {
     async function fetchAllData() {
         try {
             setLoading(true);
-            const [prodRes, catRes, brandRes, roomRes, profRes] = await Promise.all([
-                supabase.from('products')
-                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))')
-                    .order('created_at', { ascending: false }),
+
+            // Fetch metadata first
+            const [catRes, brandRes, roomRes, profRes] = await Promise.all([
                 supabase.from('categories').select('id, name, parent_id, slug').order('name'),
                 supabase.from('brands').select('id, name').order('name'),
                 supabase.from('rooms').select('id, name').order('name'),
                 supabase.from('professions').select('id, name').order('name')
             ]);
+
+            let prodRes = await supabase.from('products')
+                .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))')
+                .order('created_at', { ascending: false });
+
+            // Resilience: If product_badges or badges doesn't exist, retry simple fetch
+            if (prodRes.error && (prodRes.error.message.includes('product_badges') || prodRes.error.message.includes('badges'))) {
+                console.warn('Badges tables missing, retrying simple product fetch...');
+                prodRes = await supabase.from('products')
+                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)')
+                    .order('created_at', { ascending: false });
+            }
 
             // Fetch badges separately (table may not exist yet)
             let badgesResult = [];
@@ -148,6 +160,7 @@ export default function ProductList() {
         }
     }
 
+
     // Helper to generate SEO-friendly slug
     function generateSlug(name, reference) {
         if (!name) return '';
@@ -166,14 +179,22 @@ export default function ProductList() {
         Papa.parse(file, {
             header: true,
             skipEmptyLines: true,
+            dynamicTyping: true, // Auto-convert numbers/booleans
             complete: async (results) => {
-                await processImport(results.data);
+                if (results.data && results.data.length > 0) {
+                    await processImport(results.data);
+                } else {
+                    alert('El archivo CSV parece estar vacío o no tiene el formato correcto.');
+                }
+                event.target.value = ''; // Reset to allow re-uploading same file
             },
             error: (error) => {
                 alert('Error al leer CSV: ' + error.message);
+                event.target.value = '';
             }
         });
     };
+
 
     async function processImport(rows) {
         setIsSaving(true);
@@ -231,13 +252,22 @@ export default function ProductList() {
                     let productId;
                     if (existing) {
                         // Update existing parent
-                        await supabase.from('products').update(payload).eq('id', existing.id);
+                        let res = await supabase.from('products').update(payload).eq('id', existing.id);
+                        if (res.error && res.error.message.includes('is_active')) {
+                            const { is_active, ...resilientPayload } = payload;
+                            res = await supabase.from('products').update(resilientPayload).eq('id', existing.id);
+                        }
                         productId = existing.id;
                     } else {
-                        const { data: newProd, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
-                        if (error) throw error;
-                        productId = newProd.id;
+                        let res = await supabase.from('products').insert([payload]).select().maybeSingle();
+                        if (res.error && res.error.message.includes('is_active')) {
+                            const { is_active, ...resilientPayload } = payload;
+                            res = await supabase.from('products').insert([resilientPayload]).select().maybeSingle();
+                        }
+                        if (res.error) throw res.error;
+                        productId = res.data.id;
                     }
+
                     parentMap.set(payload.reference, productId);
                     processed++;
                 } catch (err) {
@@ -284,10 +314,19 @@ export default function ProductList() {
                     const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).maybeSingle();
 
                     if (existing) {
-                        await supabase.from('products').update(payload).eq('id', existing.id);
+                        let res = await supabase.from('products').update(payload).eq('id', existing.id);
+                        if (res.error && res.error.message.includes('is_active')) {
+                            const { is_active, ...resilientPayload } = payload;
+                            await supabase.from('products').update(resilientPayload).eq('id', existing.id);
+                        }
                     } else {
-                        await supabase.from('products').insert([payload]);
+                        let res = await supabase.from('products').insert([payload]);
+                        if (res.error && res.error.message.includes('is_active')) {
+                            const { is_active, ...resilientPayload } = payload;
+                            await supabase.from('products').insert([resilientPayload]);
+                        }
                     }
+
                     processed++;
 
                 } catch (err) {
@@ -386,11 +425,13 @@ export default function ProductList() {
             category_id: product.category_id || '',
             brand_id: product.brand_id || '',
             room_ids: product.room_ids || [],
-            profession_ids: [], // Fetch this separately or from a joined select
+            profession_ids: [],
             image_url: product.image_url || '',
             description: product.description || '',
             discount_price: product.discount_price || '',
             partner_price: product.partner_price || '',
+            professional_price: product.professional_price || '',
+            volume_pricing: product.volume_pricing || { individual: [], profesional: [], partner: [] },
             parent_id: product.parent_id,
             attributes: product.attributes || {},
             extra_images: product.extra_images || [],
@@ -398,8 +439,10 @@ export default function ProductList() {
             long_description: product.long_description || '',
             original_price: product.original_price || '',
             badge_tags: product.badge_tags || [],
-            badge_ids: []
+            badge_ids: [],
+            is_active: product.is_active !== false // default to true
         });
+
 
         // Load relations
         loadProductRelations(product.id);
@@ -447,10 +490,14 @@ export default function ProductList() {
             name: '', reference: '', price: '', stock: 0,
             category_id: '', brand_id: '', room_ids: [], profession_ids: [],
             image_url: '', description: '', discount_price: '', partner_price: '',
+            professional_price: '',
+            volume_pricing: { individual: [], profesional: [], partner: [] },
             parent_id: null, attributes: {}, extra_images: [],
             related_product_ids: [], long_description: '', original_price: '',
-            badge_tags: [], badge_ids: []
+            badge_tags: [], badge_ids: [],
+            is_active: true
         });
+
         setVariants([]);
         setIsModalOpen(true);
     }
@@ -470,6 +517,8 @@ export default function ProductList() {
                 description: formData.description,
                 discount_price: formData.discount_price ? parseFloat(formData.discount_price) : null,
                 partner_price: formData.partner_price ? parseFloat(formData.partner_price) : null,
+                professional_price: formData.professional_price ? parseFloat(formData.professional_price) : null,
+                volume_pricing: formData.volume_pricing || { individual: [], profesional: [], partner: [] },
                 attributes: formData.attributes,
                 parent_id: formData.parent_id,
                 extra_images: formData.extra_images || [],
@@ -477,19 +526,32 @@ export default function ProductList() {
                 related_product_ids: formData.related_product_ids || [],
                 long_description: formData.long_description,
                 original_price: formData.original_price ? parseFloat(formData.original_price) : null,
-                badge_tags: formData.badge_tags || []
+                badge_tags: formData.badge_tags || [],
+                is_active: formData.is_active
             };
+
 
             let productId = editingId;
 
             if (editingId) {
-                const { error } = await supabase.from('products').update(payload).eq('id', editingId);
-                if (error) throw error;
+                let res = await supabase.from('products').update(payload).eq('id', editingId);
+                if (res.error && res.error.message.includes('is_active')) {
+                    console.warn('Saving without is_active...');
+                    const { is_active, ...resilientPayload } = payload;
+                    res = await supabase.from('products').update(resilientPayload).eq('id', editingId);
+                }
+                if (res.error) throw res.error;
             } else {
-                const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
-                if (error) throw error;
-                productId = data.id;
+                let res = await supabase.from('products').insert([payload]).select().maybeSingle();
+                if (res.error && res.error.message.includes('is_active')) {
+                    console.warn('Inserting without is_active...');
+                    const { is_active, ...resilientPayload } = payload;
+                    res = await supabase.from('products').insert([resilientPayload]).select().maybeSingle();
+                }
+                if (res.error) throw res.error;
+                productId = res.data.id;
             }
+
 
             if (productId) {
                 // Save Rooms
@@ -610,6 +672,8 @@ export default function ProductList() {
             if (filterStatus === 'low_stock') matchStatus = (p.stock || 0) < 5;
             if (filterStatus === 'no_image') matchStatus = !p.image_url;
             if (filterStatus === 'on_offer') matchStatus = p.discount_price && parseFloat(p.discount_price) > 0;
+            if (filterStatus === 'draft') matchStatus = p.is_active === false;
+            if (filterStatus === 'published') matchStatus = p.is_active !== false;
 
             return matchSearch && matchCategory && matchBrand && matchStatus;
         });
@@ -751,10 +815,22 @@ export default function ProductList() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-                    <label className="bg-white border border-gray-200 text-gray-600 h-14 px-6 rounded-2xl flex items-center gap-3 hover:border-primary transition-all font-black uppercase italic shadow-sm cursor-pointer text-[10px] font-outfit">
-                        <Upload className="w-4 h-4 text-primary" /> Importar CSV
-                        <input type="file" accept=".csv" className="hidden" onChange={handleFileUpload} />
+                    <label className={`bg-white border border-gray-200 text-gray-600 h-14 px-6 rounded-2xl flex items-center gap-3 hover:border-primary transition-all font-black uppercase italic shadow-sm text-[10px] font-outfit ${isSaving ? 'opacity-50 cursor-wait' : 'cursor-pointer'}`}>
+                        {isSaving ? (
+                            <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                        ) : (
+                            <Upload className="w-4 h-4 text-primary" />
+                        )}
+                        {isSaving ? 'Procesando...' : 'Importar CSV'}
+                        <input
+                            type="file"
+                            accept=".csv"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                            disabled={isSaving}
+                        />
                     </label>
+
                     <button
                         onClick={handleExport}
                         className="bg-white border border-gray-200 text-gray-600 h-14 px-6 rounded-2xl flex items-center gap-3 hover:border-primary transition-all font-black uppercase italic shadow-sm text-[10px] font-outfit"
@@ -928,6 +1004,8 @@ export default function ProductList() {
                         className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
                     >
                         <option value="all">Filtro Estado: Todos</option>
+                        <option value="published">🟢 Publicados</option>
+                        <option value="draft">📁 Borradores</option>
                         <option value="low_stock">⚠️ Stock Bajo (&lt;5)</option>
                         <option value="no_image">🖼️ Sin Imagen</option>
                         <option value="on_offer">🏷️ En Oferta</option>
@@ -999,15 +1077,21 @@ export default function ProductList() {
                                     >
                                         {/* Checkbox */}
                                         <td className="pl-6 w-10">
-                                            <button
-                                                onClick={() => toggleSelect(product.id)}
-                                                className="text-gray-200 hover:text-primary transition-colors mt-1"
-                                            >
-                                                {selectedIds.has(product.id)
-                                                    ? <CheckSquare className="w-4 h-4 text-primary" />
-                                                    : <Square className="w-4 h-4" />
-                                                }
-                                            </button>
+                                            <div className="flex flex-col items-center gap-2 mt-1">
+                                                <button
+                                                    onClick={() => toggleSelect(product.id)}
+                                                    className="text-gray-200 hover:text-primary transition-colors"
+                                                >
+                                                    {selectedIds.has(product.id)
+                                                        ? <CheckSquare className="w-4 h-4 text-primary" />
+                                                        : <Square className="w-4 h-4" />
+                                                    }
+                                                </button>
+                                                <div
+                                                    className={`w-1.5 h-1.5 rounded-full ${product.is_active !== false ? 'bg-emerald-500 shadow-sm shadow-emerald-500/50' : 'bg-gray-300'}`}
+                                                    title={product.is_active !== false ? 'Publicado' : 'Borrador'}
+                                                ></div>
+                                            </div>
                                         </td>
 
                                         {/* Producto */}
@@ -1149,6 +1233,8 @@ export default function ProductList() {
             {isModalOpen && (
                 <div className="fixed inset-0 bg-brand-carbon/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto font-outfit">
                     <div className="bg-white rounded-[3rem] shadow-2xl w-full max-w-5xl my-8 overflow-hidden h-[90vh] flex flex-col border border-white/20">
+
+                        {/* Modal Header */}
                         <div className="p-8 border-b border-gray-100 flex justify-between items-center bg-white flex-shrink-0">
                             <div>
                                 <h2 className="text-xl font-black uppercase italic text-brand-carbon tracking-tighter">
@@ -1156,684 +1242,628 @@ export default function ProductList() {
                                 </h2>
                                 {formData.parent_id && <span className="text-[10px] text-blue-500 font-black uppercase tracking-widest mt-1 block">Variante de Inteligencia</span>}
                             </div>
-
                             <button onClick={() => setIsModalOpen(false)} className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
                                 <X className="w-6 h-6" />
                             </button>
                         </div>
 
-                        {/* Tabs Premium */}
+                        {/* Tabs */}
                         {!formData.parent_id && editingId && (
-                            <div className="flex border-b border-gray-100 px-8 bg-gray-50/30 gap-8 flex-shrink-0">
-                                <button
-                                    onClick={() => setActiveTab('general')}
-                                    className={`py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'general' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                                >
-                                    Datos Maestros
-                                </button>
-                                <button
-                                    onClick={() => setActiveTab('variants')}
-                                    className={`py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${activeTab === 'variants' ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                                >
-                                    Variantes ({variants.length})
-                                </button>
+                            <div className="flex border-b border-gray-100 px-8 bg-gray-50/30 gap-1 lg:gap-6 flex-shrink-0 overflow-x-auto no-scrollbar">
+                                {[
+                                    { id: 'general', label: '🏷️ Identidad' },
+                                    { id: 'pricing', label: '💰 Estrategia B2B' },
+                                    { id: 'content', label: '📄 Contenido & Logística' },
+                                    { id: 'variants', label: `🌿 Variantes (${variants.length})` }
+                                ].map(tab => (
+                                    <button
+                                        key={tab.id}
+                                        onClick={() => setActiveTab(tab.id)}
+                                        className={`py-4 px-2 text-[9px] font-black uppercase tracking-widest border-b-2 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
                             </div>
                         )}
 
-                        <div className="flex-1 overflow-y-auto p-6">
-                            {activeTab === 'general' ? (
-                                <form onSubmit={handleSubmit}>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* Columna Izquierda: Imagen y Datos básicos */}
-                                        <div className="space-y-5">
-                                            <ImageUpload
-                                                defaultValue={formData.image_url}
-                                                onUpload={(url) => setFormData({ ...formData, image_url: url })}
-                                            />
+                        {/* Tab Content */}
+                        <div className="flex-1 min-h-0">
+                            {activeTab !== 'variants' ? (
+                                <form onSubmit={handleSubmit} className="h-full flex flex-col">
+                                    <div className="flex-1 overflow-y-auto p-6 no-scrollbar">
 
-                                            {/* Extra Gallery Images */}
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Galería de Imágenes</label>
-                                                <div className="flex flex-wrap gap-2 mb-2">
-                                                    {(formData.extra_images || []).map((img, idx) => (
-                                                        <div key={idx} className="relative w-16 h-16 rounded-lg border border-gray-200 overflow-hidden group">
-                                                            <img src={img} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover" />
-                                                            <button
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    const updated = [...formData.extra_images];
-                                                                    updated.splice(idx, 1);
-                                                                    setFormData({ ...formData, extra_images: updated });
-                                                                }}
-                                                                className="absolute inset-0 bg-red-500/80 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                                                            >
-                                                                <X className="w-4 h-4" />
-                                                            </button>
+                                        {/* TAB: IDENTIDAD */}
+                                        {activeTab === 'general' && (
+                                            <div className="space-y-6 animate-in fade-in duration-300">
+                                                <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+                                                    <div className="flex items-center gap-3 mb-6">
+                                                        <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-500">
+                                                            <Package className="w-5 h-5" />
                                                         </div>
-                                                    ))}
-                                                </div>
-                                                <ImageUpload
-                                                    defaultValue=""
-                                                    onUpload={(url) => {
-                                                        if (url) setFormData(prev => ({ ...prev, extra_images: [...(prev.extra_images || []), url] }));
-                                                    }}
-                                                />
-                                                <p className="text-[9px] text-gray-400 mt-1">Sube imágenes adicionales para la galería del producto</p>
-                                            </div>
+                                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-brand-carbon">Identidad & Activos</h3>
+                                                    </div>
 
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Nombre del Producto</label>
-                                                <input
-                                                    required
-                                                    type="text"
-                                                    className="w-full border rounded-lg px-3 py-2.5 focus:ring-1 focus:ring-blue-500 focus:outline-none font-bold text-sm"
-                                                    value={formData.name}
-                                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                                />
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Referencia / SKU</label>
-                                                    <input
-                                                        type="text"
-                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-mono"
-                                                        value={formData.reference}
-                                                        onChange={e => setFormData({ ...formData, reference: e.target.value })}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Stock</label>
-                                                    <input
-                                                        type="number"
-                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-bold"
-                                                        value={formData.stock}
-                                                        onChange={e => setFormData({ ...formData, stock: parseInt(e.target.value) })}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Precio (€)</label>
-                                                    <input
-                                                        required
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-black"
-                                                        value={formData.price}
-                                                        onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Precio Oferta (€)</label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-black text-red-600 bg-red-50"
-                                                        value={formData.discount_price}
-                                                        onChange={e => setFormData({ ...formData, discount_price: e.target.value })}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <div className="grid grid-cols-1 gap-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Precio Original / PVP (€)</label>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-bold text-gray-400 bg-gray-50 italic"
-                                                        placeholder="Para mostrar tachado y calcular %"
-                                                        value={formData.original_price}
-                                                        onChange={e => setFormData({ ...formData, original_price: e.target.value })}
-                                                    />
-                                                </div>
-                                            </div>
-
-
-                                            <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-100">
-                                                <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-3">🎨 Badges Boutique (Dinámicos)</label>
-                                                <div className="flex flex-wrap gap-2 mb-3">
-                                                    {(formData.badge_ids || []).map(badgeId => {
-                                                        const badge = allBadges.find(b => b.id === badgeId);
-                                                        if (!badge) return null;
-                                                        return (
-                                                            <span
-                                                                key={badgeId}
-                                                                className="flex items-center gap-2 px-3 py-1 text-[9px] font-black uppercase rounded-lg shadow-sm text-white"
-                                                                style={{ backgroundColor: badge.bg_color }}
-                                                            >
-                                                                {badge.name}
-                                                                <button
-                                                                    type="button"
-                                                                    onClick={() => setFormData(prev => ({ ...prev, badge_ids: prev.badge_ids.filter(id => id !== badgeId) }))}
-                                                                    className="hover:text-white/70"
-                                                                >
-                                                                    <X className="w-3 h-3" />
-                                                                </button>
-                                                            </span>
-                                                        );
-                                                    })}
-                                                </div>
-                                                <div className="relative">
-                                                    <select
-                                                        className="w-full h-9 bg-white border border-gray-100 rounded-xl px-4 text-[10px] font-bold outline-none focus:ring-2 ring-primary/10 appearance-none"
-                                                        onChange={(e) => {
-                                                            const val = e.target.value;
-                                                            if (val && !formData.badge_ids.includes(val)) {
-                                                                setFormData(prev => ({ ...prev, badge_ids: [...prev.badge_ids, val] }));
-                                                            }
-                                                            e.target.value = '';
-                                                        }}
-                                                    >
-                                                        <option value="">+ Seleccionar Badge Boutique...</option>
-                                                        {allBadges.filter(b => !formData.badge_ids.includes(b.id)).map(badge => (
-                                                            <option key={badge.id} value={badge.id}>{badge.name}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1.5">💰 Precio Socio / Partner (€)</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    className="w-full border-2 border-indigo-100 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none font-black text-indigo-700 bg-indigo-50/50"
-                                                    placeholder="Precio fijo para socios..."
-                                                    value={formData.partner_price}
-                                                    onChange={e => setFormData({ ...formData, partner_price: e.target.value })}
-                                                />
-                                                <p className="text-[9px] text-gray-400 mt-1">Este precio tiene prioridad máxima para usuarios marcados como "Socio".</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Columna Derecha: Relaciones y Descripción */}
-                                        <div className="space-y-5">
-                                            {/* Si es variante, hereda categoría/marca generalmente, pero permitimos editar */}
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Categoría</label>
-                                                    <select
-                                                        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none font-bold uppercase"
-                                                        value={formData.category_id}
-                                                        onChange={e => setFormData({ ...formData, category_id: e.target.value })}
-                                                    >
-                                                        <option value="">Sin Categoría</option>
-                                                        {categories.filter(c => !c.parent_id).map(parent => (
-                                                            <optgroup key={parent.id} label={`── ${parent.name}`}>
-                                                                <option value={parent.id}>{parent.name} (general)</option>
-                                                                {categories.filter(c => c.parent_id === parent.id).map(sub => (
-                                                                    <option key={sub.id} value={sub.id}>• {sub.name}</option>
-                                                                ))}
-                                                            </optgroup>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Marca</label>
-                                                    <select
-                                                        className="w-full border rounded-lg px-3 py-2 text-[10px] focus:outline-none font-bold uppercase"
-                                                        value={formData.brand_id}
-                                                        onChange={e => setFormData({ ...formData, brand_id: e.target.value })}
-                                                    >
-                                                        <option value="">Genérica</option>
-                                                        {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                                                    </select>
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Estancias</label>
-                                                <div className="border rounded-lg p-3 max-h-32 overflow-y-auto space-y-2 bg-gray-50/50">
-                                                    {rooms.map(room => (
-                                                        <label key={room.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded transition-colors">
-                                                            <input
-                                                                type="checkbox"
-                                                                className="rounded text-blue-600 focus:ring-blue-500"
-                                                                checked={formData.room_ids?.includes(room.id)}
-                                                                onChange={(e) => {
-                                                                    const checked = e.target.checked;
-                                                                    setFormData(prev => ({
-                                                                        ...prev,
-                                                                        room_ids: checked
-                                                                            ? [...prev.room_ids, room.id]
-                                                                            : prev.room_ids.filter(id => id !== room.id)
-                                                                    }));
-                                                                }}
+                                                    {/* ROW 1: Imagen principal (fixed width) + datos a la derecha */}
+                                                    <div className="flex gap-6 mb-6">
+                                                        {/* Imagen principal — ancho fijo para controlar ImageUpload */}
+                                                        <div className="w-44 flex-shrink-0">
+                                                            <ImageUpload
+                                                                defaultValue={formData.image_url}
+                                                                onUpload={(url) => setFormData({ ...formData, image_url: url })}
                                                             />
-                                                            <span className="text-xs font-bold uppercase text-gray-600">{room.name}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                                        </div>
 
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Sectores B2B (Mega Menú)</label>
-                                                <div className="border rounded-lg p-3 max-h-32 overflow-y-auto space-y-2 bg-gray-50/50">
-                                                    {professions.map(prof => (
-                                                        <label key={prof.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-1 rounded transition-colors">
-                                                            <input
-                                                                type="checkbox"
-                                                                className="rounded text-primary focus:ring-primary"
-                                                                checked={formData.profession_ids?.includes(prof.id)}
-                                                                onChange={(e) => {
-                                                                    const checked = e.target.checked;
-                                                                    setFormData(prev => ({
-                                                                        ...prev,
-                                                                        profession_ids: checked
-                                                                            ? [...prev.profession_ids, prof.id]
-                                                                            : prev.profession_ids.filter(id => id !== prof.id)
-                                                                    }));
-                                                                }}
-                                                            />
-                                                            <span className="text-xs font-bold uppercase text-gray-600">{prof.name}</span>
-                                                        </label>
-                                                    ))}
-                                                </div>
-                                            </div>
+                                                        {/* Columna derecha: nombre + SKU/marca + categoría */}
+                                                        <div className="flex-1 min-w-0 flex flex-col gap-4">
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Nombre del Producto *</label>
+                                                                <input
+                                                                    required
+                                                                    type="text"
+                                                                    className="w-full border-b-2 border-gray-100 py-2 focus:border-primary focus:outline-none font-bold text-base transition-colors placeholder:text-gray-200"
+                                                                    placeholder="Nombre del activo..."
+                                                                    value={formData.name}
+                                                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                                                                />
+                                                            </div>
+                                                            <div className="grid grid-cols-3 gap-3">
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Referencia / SKU</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        className="w-full border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 font-mono bg-gray-50/50 border-gray-100"
+                                                                        value={formData.reference}
+                                                                        onChange={e => setFormData({ ...formData, reference: e.target.value })}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Marca</label>
+                                                                    <select
+                                                                        className="w-full border rounded-xl px-3 py-2 text-[10px] focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold uppercase bg-gray-50/50 border-gray-100"
+                                                                        value={formData.brand_id}
+                                                                        onChange={e => setFormData({ ...formData, brand_id: e.target.value })}
+                                                                    >
+                                                                        <option value="">Genérica</option>
+                                                                        {brands.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                                                                    </select>
+                                                                </div>
+                                                                <div>
+                                                                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Categoría</label>
+                                                                    <select
+                                                                        className="w-full border rounded-xl px-3 py-2 text-[10px] focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold uppercase bg-gray-50/50 border-gray-100"
+                                                                        value={formData.category_id}
+                                                                        onChange={e => setFormData({ ...formData, category_id: e.target.value })}
+                                                                    >
+                                                                        <option value="">Sin Categoría</option>
+                                                                        {categories.filter(c => !c.parent_id).map(parent => (
+                                                                            <optgroup key={parent.id} label={`── ${parent.name}`}>
+                                                                                <option value={parent.id}>{parent.name} (general)</option>
+                                                                                {categories.filter(c => c.parent_id === parent.id).map(sub => (
+                                                                                    <option key={sub.id} value={sub.id}>• {sub.name}</option>
+                                                                                ))}
+                                                                            </optgroup>
+                                                                        ))}
+                                                                    </select>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
-                                            {/* === PRODUCTOS RELACIONADOS MANUALE S === */}
-                                            <div>
-                                                <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-2">Explorar Más (Relacionados Manuales)</label>
-                                                <div className="border rounded-xl p-4 bg-white space-y-4 shadow-sm border-gray-100">
-                                                    {/* Lista de seleccionados */}
-                                                    <div className="flex flex-wrap gap-2">
-                                                        {formData.related_product_ids?.map(id => {
-                                                            const p = products.find(prod => prod.id === id);
-                                                            if (!p) return null;
-                                                            return (
-                                                                <div key={id} className="flex items-center gap-2 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-lg group">
-                                                                    <div className="w-6 h-6 rounded bg-white border border-gray-100 flex items-center justify-center overflow-hidden">
-                                                                        {p.image_url ? <img src={p.image_url} className="w-full h-full object-contain" /> : <div className="text-[10px]">💡</div>}
-                                                                    </div>
-                                                                    <span className="text-[10px] font-bold text-gray-600 truncate max-w-[120px]">{p.name}</span>
+                                                    {/* ROW 2: Galería de imágenes extra */}
+                                                    <div>
+                                                        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">🖼️ Galería Boutique</label>
+                                                        <div className="flex flex-wrap gap-3">
+                                                            {(formData.extra_images || []).map((img, idx) => (
+                                                                <div key={idx} className="relative w-16 h-16 rounded-xl border border-gray-100 overflow-hidden group/img shadow-sm flex-shrink-0">
+                                                                    <img src={img} alt={`Extra ${idx + 1}`} className="w-full h-full object-cover" />
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => setFormData(prev => ({ ...prev, related_product_ids: prev.related_product_ids.filter(rid => rid !== id) }))}
-                                                                        className="text-gray-300 hover:text-red-500 transition-colors"
+                                                                        onClick={() => {
+                                                                            const updated = [...formData.extra_images];
+                                                                            updated.splice(idx, 1);
+                                                                            setFormData({ ...formData, extra_images: updated });
+                                                                        }}
+                                                                        className="absolute inset-0 bg-red-600/80 text-white opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center"
                                                                     >
-                                                                        <X className="w-3 h-3" />
+                                                                        <Trash2 className="w-3 h-3" />
                                                                     </button>
                                                                 </div>
-                                                            );
-                                                        })}
-                                                        {(!formData.related_product_ids || formData.related_product_ids.length === 0) && (
-                                                            <p className="text-[10px] text-gray-400 italic">No hay productos seleccionados. Usando automáticos por categoría.</p>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Selector de búsqueda */}
-                                                    <div className="relative">
-                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                                                        <select
-                                                            className="w-full pl-9 pr-3 py-2 border rounded-lg text-[10px] font-bold uppercase focus:ring-1 focus:ring-brand-carbon outline-none appearance-none bg-gray-50/50"
-                                                            onChange={(e) => {
-                                                                const val = e.target.value;
-                                                                if (val && !formData.related_product_ids?.includes(val)) {
-                                                                    setFormData(prev => ({
-                                                                        ...prev,
-                                                                        related_product_ids: [...(prev.related_product_ids || []), val]
-                                                                    }));
-                                                                }
-                                                                e.target.value = ""; // Reset select
-                                                            }}
-                                                        >
-                                                            <option value="">+ Añadir Producto a Relacionados...</option>
-                                                            {products
-                                                                .filter(p => p.id !== editingId && !p.parent_id && !formData.related_product_ids?.includes(p.id))
-                                                                .map(p => (
-                                                                    <option key={p.id} value={p.id}>{p.name} ({p.reference || 'Sin Ref.'})</option>
-                                                                ))
-                                                            }
-                                                        </select>
+                                                            ))}
+                                                            {/* Botón añadir imagen extra */}
+                                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-gray-200 flex items-center justify-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors flex-shrink-0">
+                                                                <Plus className="w-5 h-5 text-gray-300" />
+                                                                <input
+                                                                    type="file"
+                                                                    accept="image/*"
+                                                                    className="hidden"
+                                                                    onChange={async (e) => {
+                                                                        const file = e.target.files[0];
+                                                                        if (!file) return;
+                                                                        const fileExt = file.name.split('.').pop();
+                                                                        const fileName = `${Math.random()}.${fileExt}`;
+                                                                        const { error } = await supabase.storage.from('images').upload(fileName, file);
+                                                                        if (!error) {
+                                                                            const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
+                                                                            setFormData(prev => ({ ...prev, extra_images: [...(prev.extra_images || []), publicUrl] }));
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </label>
+                                                        </div>
+                                                        <p className="text-[9px] text-gray-400 mt-2 italic">Haz clic en + para añadir imágenes adicionales</p>
                                                     </div>
                                                 </div>
                                             </div>
+                                        )}
 
-                                            {/* === ATRIBUTOS MULTI-VALOR === */}
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Opciones del Producto</label>
-
-                                                {/* Lista de atributos actuales como tags */}
-                                                <div className="border rounded-lg p-3 bg-gray-50/50 space-y-3 mb-3">
-                                                    {Object.entries(formData.attributes).length > 0 ? Object.entries(formData.attributes).map(([key, values]) => {
-                                                        // Asegurar que values sea array (compatibilidad con datos antiguos)
-                                                        const valArray = Array.isArray(values) ? values : [values];
-                                                        return (
-                                                            <div key={key}>
-                                                                <div className="flex items-center justify-between mb-1.5">
-                                                                    <span className="text-[10px] font-black text-gray-600 uppercase tracking-wider">{key}</span>
-                                                                    <button type="button" onClick={() => removeAttributeGroup(key)} className="text-[9px] text-red-400 hover:text-red-600 font-bold uppercase">Eliminar grupo</button>
+                                        {/* TAB: ESTRATEGIA B2B */}
+                                        {activeTab === 'pricing' && (
+                                            <div className="space-y-8 animate-in fade-in duration-300">
+                                                <div className="bg-brand-carbon text-white rounded-[2rem] p-6 lg:p-10 shadow-2xl relative overflow-hidden">
+                                                    <div className="flex items-center gap-3 mb-10 relative z-10">
+                                                        <div className="w-12 h-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shadow-inner">
+                                                            <Percent className="w-6 h-6" />
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-base font-black uppercase italic tracking-tighter">Estrategia Comercial & B2B</h3>
+                                                            <p className="text-[9px] text-gray-500 font-bold uppercase tracking-widest mt-1">Gestión de márgenes y tarifas especiales</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-10 relative z-10">
+                                                        <div className="xl:col-span-7 space-y-8">
+                                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                                <div className="bg-white/5 p-5 rounded-2xl border border-white/10">
+                                                                    <label className="block text-[8px] font-black text-gray-400 uppercase mb-3 tracking-widest">Original / PVP (€)</label>
+                                                                    <input type="number" step="0.01" className="w-full bg-transparent border-none p-0 text-2xl font-black text-gray-400 focus:ring-0" placeholder="0.00" value={formData.original_price} onChange={e => setFormData({ ...formData, original_price: e.target.value })} />
+                                                                    <p className="text-[7px] text-gray-600 mt-2 uppercase font-bold italic">Referencia tachada</p>
                                                                 </div>
-                                                                <div className="flex flex-wrap gap-1.5">
-                                                                    {valArray.map(val => (
-                                                                        <span key={val} className="inline-flex items-center gap-1 px-2.5 py-1 bg-white rounded-full border border-gray-200 text-[10px] font-bold text-gray-700 uppercase shadow-sm">
-                                                                            {key === 'Color' && (
-                                                                                <span className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: { 'Blanco': '#fff', 'Negro': '#1a1a1a', 'Gris': '#808080', 'Dorado': '#D4AF37', 'Plateado': '#C0C0C0', 'Cobre': '#B87333', 'Rojo': '#DC2626', 'Azul': '#2563EB', 'Verde': '#16A34A', 'Madera': '#8B4513', 'RGB': 'linear-gradient(90deg,red,green,blue)' }[val] || '#ccc' }}></span>
-                                                                            )}
-                                                                            {val}
-                                                                            <button type="button" onClick={() => removeAttributeValue(key, val)} className="text-red-300 hover:text-red-600 ml-0.5">
-                                                                                <X className="w-3 h-3" />
-                                                                            </button>
-                                                                        </span>
+                                                                <div className="bg-white/5 p-5 rounded-2xl border border-primary/30 ring-1 ring-primary/20">
+                                                                    <label className="block text-[8px] font-black text-primary uppercase mb-3 tracking-widest">PVP Web (€)</label>
+                                                                    <input required type="number" step="0.01" className="w-full bg-transparent border-none p-0 text-2xl font-black text-white focus:ring-0" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} />
+                                                                    <p className="text-[7px] text-primary/60 mt-2 uppercase font-bold italic">Público Final / B2C</p>
+                                                                </div>
+                                                                <div className="bg-red-500/5 p-5 rounded-2xl border border-red-500/20">
+                                                                    <label className="block text-[8px] font-black text-red-400 uppercase mb-3 tracking-widest">Oferta (€)</label>
+                                                                    <input type="number" step="0.01" className="w-full bg-transparent border-none p-0 text-2xl font-black text-red-500 focus:ring-0" placeholder="Opcional" value={formData.discount_price} onChange={e => setFormData({ ...formData, discount_price: e.target.value })} />
+                                                                    <p className="text-[7px] text-red-500/60 mt-2 uppercase font-bold italic">Activa Badge Oferta</p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                                <div className="bg-indigo-500/5 p-6 rounded-2xl border border-indigo-500/20">
+                                                                    <label className="block text-[9px] font-black text-indigo-300 uppercase mb-3 italic tracking-wider">💰 Tarifa Profesional (€)</label>
+                                                                    <input type="number" step="0.01" className="w-full bg-transparent border-none p-0 text-3xl font-black text-indigo-400 focus:ring-0" placeholder="0.00" value={formData.professional_price} onChange={e => setFormData({ ...formData, professional_price: e.target.value })} />
+                                                                    <p className="text-[8px] text-indigo-400/40 mt-3 uppercase font-black tracking-tighter italic">Nivel Mayorista Intermedio</p>
+                                                                </div>
+                                                                <div className="bg-blue-500/5 p-6 rounded-2xl border border-blue-500/20">
+                                                                    <label className="block text-[9px] font-black text-blue-300 uppercase mb-3 italic tracking-wider">💎 Tarifa Socio / Partner (€)</label>
+                                                                    <input type="number" step="0.01" className="w-full bg-transparent border-none p-0 text-3xl font-black text-blue-400 focus:ring-0" placeholder="0.00" value={formData.partner_price} onChange={e => setFormData({ ...formData, partner_price: e.target.value })} />
+                                                                    <p className="text-[8px] text-blue-400/40 mt-3 uppercase font-black tracking-tighter italic">Nivel Premium Estratégico</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="xl:col-span-5">
+                                                            <div className="bg-white/5 rounded-[2.5rem] border border-white/10 p-6 lg:p-8 h-full">
+                                                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[.3em] mb-8 flex items-center justify-between">
+                                                                    <span>📦 Escalamiento por Volumen</span>
+                                                                    <BadgePercent className="w-4 h-4 text-primary/40" />
+                                                                </h4>
+                                                                <div className="space-y-8 max-h-[350px] overflow-y-auto pr-4 custom-scrollbar">
+                                                                    {['individual', 'profesional', 'partner'].map(role => (
+                                                                        <div key={role} className="space-y-4">
+                                                                            <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                                                                                <span className="text-[10px] font-black uppercase text-gray-300 italic tracking-widest">
+                                                                                    {role === 'individual' ? 'Tarifas Web B2C' : `Tarifas ${role}`}
+                                                                                </span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        const qty = prompt('¿A partir de qué cantidad?');
+                                                                                        const price = prompt('¿Precio unitario?');
+                                                                                        if (qty && price) {
+                                                                                            setFormData(prev => ({
+                                                                                                ...prev,
+                                                                                                volume_pricing: {
+                                                                                                    ...prev.volume_pricing,
+                                                                                                    [role]: [...(prev.volume_pricing?.[role] || []), { qty: parseInt(qty), price: parseFloat(price) }].sort((a, b) => a.qty - b.qty)
+                                                                                                }
+                                                                                            }));
+                                                                                        }
+                                                                                    }}
+                                                                                    className="text-primary hover:text-white text-[9px] font-black uppercase transition-colors flex items-center gap-1.5"
+                                                                                >
+                                                                                    <Plus className="w-3 h-3" />
+                                                                                    Añadir Escala
+                                                                                </button>
+                                                                            </div>
+                                                                            <div className="flex flex-wrap gap-2">
+                                                                                {(formData.volume_pricing?.[role] || []).map((scale, i) => (
+                                                                                    <div key={i} className="flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-xl border border-white/5 group/scale transition-colors">
+                                                                                        <span className="text-[11px] font-black text-white italic">+{scale.qty}</span>
+                                                                                        <span className="text-[11px] font-black text-primary">{scale.price}€</span>
+                                                                                        <button
+                                                                                            type="button"
+                                                                                            onClick={() => {
+                                                                                                setFormData(prev => ({
+                                                                                                    ...prev,
+                                                                                                    volume_pricing: {
+                                                                                                        ...prev.volume_pricing,
+                                                                                                        [role]: prev.volume_pricing[role].filter((_, idx) => idx !== i)
+                                                                                                    }
+                                                                                                }));
+                                                                                            }}
+                                                                                            className="opacity-0 group-hover/scale:opacity-100 text-red-400 transition-opacity"
+                                                                                        >
+                                                                                            <X className="w-3 h-3" />
+                                                                                        </button>
+                                                                                    </div>
+                                                                                ))}
+                                                                                {(!formData.volume_pricing?.[role] || formData.volume_pricing[role].length === 0) && (
+                                                                                    <p className="text-[9px] text-gray-600 italic font-medium">Sin escalas definidas.</p>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
                                                                     ))}
                                                                 </div>
                                                             </div>
-                                                        );
-                                                    }) : (
-                                                        <p className="text-xs text-gray-400 italic text-center py-3">Sin opciones definidas. Añade voltajes, potencias, colores...</p>
-                                                    )}
-                                                </div>
-
-                                                {/* Selector para añadir nuevos valores */}
-                                                <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100">
-                                                    <div className="grid grid-cols-2 gap-2 mb-2">
-                                                        <div>
-                                                            <input
-                                                                list="attr-keys"
-                                                                placeholder="Atributo (ej. Voltaje, W/M)"
-                                                                className="w-full text-[10px] font-bold uppercase p-2 border rounded"
-                                                                value={newAttrKey}
-                                                                onChange={e => setNewAttrKey(e.target.value)}
-                                                            />
-                                                            <datalist id="attr-keys">
-                                                                {Object.keys(PREDEFINED_ATTRIBUTES).map(k => <option key={k} value={k} />)}
-                                                            </datalist>
-                                                        </div>
-                                                        <div>
-                                                            <input
-                                                                list="attr-values"
-                                                                placeholder="Valor o escribe libre"
-                                                                className="w-full text-[10px] font-bold uppercase p-2 border rounded"
-                                                                value={newAttrValue}
-                                                                onChange={e => setNewAttrValue(e.target.value)}
-                                                            />
-                                                            <datalist id="attr-values">
-                                                                {(PREDEFINED_ATTRIBUTES[newAttrKey] || []).map(v => <option key={v} value={v} />)}
-                                                            </datalist>
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        type="button"
-                                                        onClick={addAttribute}
-                                                        disabled={!newAttrKey || !newAttrValue}
-                                                        className="w-full bg-blue-600 text-white text-[10px] font-black uppercase py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
-                                                    >
-                                                        + Añadir Valor
-                                                    </button>
                                                 </div>
                                             </div>
+                                        )}
 
-                                            <div>
-                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Descripción Corta (Resumen)</label>
-                                                <textarea
-                                                    className="w-full border rounded-lg px-3 py-2.5 text-xs focus:outline-none min-h-[80px] resize-none"
-                                                    placeholder="Breve resumen para la parte superior..."
-                                                    value={formData.description}
-                                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                                ></textarea>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-1.5">Descripción Larga / Detallada (WordPress Style)</label>
-                                                <div className="bg-white rounded-lg border border-gray-100 overflow-hidden">
-                                                    <ReactQuill
-                                                        theme="snow"
-                                                        value={formData.long_description}
-                                                        onChange={(content) => setFormData(prev => ({ ...prev, long_description: content }))}
-                                                        className="h-64 mb-12"
-                                                        modules={{
-                                                            toolbar: [
-                                                                [{ 'header': [1, 2, 3, false] }],
-                                                                ['bold', 'italic', 'underline', 'strike'],
-                                                                [{ 'color': [] }, { 'background': [] }],
-                                                                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                                                                ['clean']
-                                                            ]
-                                                        }}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            <button
-                                                disabled={isSaving}
-                                                type="submit"
-                                                className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl shadow-brand-carbon/10 disabled:opacity-50 mt-10 font-outfit"
-                                            >
-                                                {isSaving ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <Save className="w-4 h-4 text-primary" />}
-                                                Guardar Máster Maestro
-                                            </button>
-                                        </div>
-                                    </div>
-                                </form>
-                            ) : (
-                                <div className="space-y-6">
-                                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                        <h3 className="font-bold text-blue-900 uppercase text-sm mb-1">Variantes del Producto</h3>
-                                        <p className="text-xs text-blue-600">Cada variante tiene su <b>propio precio</b>, <b>stock</b> e imagen. Ej: Tira LED 5m = 15€, Tira LED 10m = 28€</p>
-                                    </div>
-
-                                    {/* Inline New Variant Form */}
-                                    <div className="bg-white p-5 rounded-xl border-2 border-dashed border-blue-200">
-                                        <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">+ Crear Nueva Variante</h4>
-
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                            <div>
-                                                <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio (€) *</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    placeholder="Ej: 15.99"
-                                                    className="w-full border rounded-lg px-3 py-2 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    id="new-variant-price"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Stock *</label>
-                                                <input
-                                                    type="number"
-                                                    placeholder="Ej: 50"
-                                                    className="w-full border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    id="new-variant-stock"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-3 mb-3">
-                                            <div>
-                                                <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Referencia / SKU</label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="Ej: TIRA-LED-5M-ROJO"
-                                                    className="w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                    id="new-variant-ref"
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio Oferta (€)</label>
-                                                <input
-                                                    type="number"
-                                                    step="0.01"
-                                                    placeholder="Opcional"
-                                                    className="w-full border rounded-lg px-3 py-2 text-sm font-bold text-red-600 bg-red-50 focus:outline-none"
-                                                    id="new-variant-discount"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        {/* Variant Attributes - compact inline */}
-                                        <div className="mb-3">
-                                            <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Atributos de esta variante</label>
-                                            <div id="new-variant-attrs-display" className="flex flex-wrap gap-1 mb-2"></div>
-                                            <div className="flex gap-2">
-                                                <input
-                                                    list="attr-keys-variant"
-                                                    placeholder="Atributo"
-                                                    className="flex-1 text-[10px] font-bold uppercase p-2 border rounded"
-                                                    id="new-variant-attr-key"
-                                                />
-                                                <datalist id="attr-keys-variant">
-                                                    {Object.keys(PREDEFINED_ATTRIBUTES).map(k => <option key={k} value={k} />)}
-                                                </datalist>
-                                                <input
-                                                    list="attr-values-variant"
-                                                    placeholder="Valor"
-                                                    className="flex-1 text-[10px] font-bold uppercase p-2 border rounded"
-                                                    id="new-variant-attr-val"
-                                                />
-                                                <datalist id="attr-values-variant">
-                                                    {(() => {
-                                                        const keyEl = typeof document !== 'undefined' ? document.getElementById('new-variant-attr-key') : null;
-                                                        const key = keyEl?.value || '';
-                                                        return (PREDEFINED_ATTRIBUTES[key] || []).map(v => <option key={v} value={v} />);
-                                                    })()}
-                                                </datalist>
-                                            </div>
-                                        </div>
-
-                                        <button
-                                            disabled={isSaving}
-                                            onClick={async () => {
-                                                const name = formData.name;
-                                                const priceEl = document.getElementById('new-variant-price');
-                                                const stockEl = document.getElementById('new-variant-stock');
-                                                const refEl = document.getElementById('new-variant-ref');
-                                                const discountEl = document.getElementById('new-variant-discount');
-                                                const attrKeyEl = document.getElementById('new-variant-attr-key');
-                                                const attrValEl = document.getElementById('new-variant-attr-val');
-
-                                                if (!priceEl?.value || !refEl?.value) return alert('Precio y Referencia son obligatorios');
-
-                                                const payload = {
-                                                    name: name,
-                                                    parent_id: editingId,
-                                                    price: parseFloat(priceEl.value),
-                                                    stock: parseInt(stockEl?.value || 0),
-                                                    reference: refEl.value,
-                                                    discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
-                                                    image_url: formData.image_url, // inheriting parent image by default
-                                                    category_id: formData.category_id,
-                                                    attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {},
-                                                    slug: generateSlug(name, refEl.value)
-                                                };
-
-                                                try {
-                                                    setIsSaving(true);
-                                                    const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
-                                                    if (error) throw error;
-                                                    setVariants(prev => [...prev, data]);
-                                                    // Reset form
-                                                    if (priceEl) priceEl.value = '';
-                                                    if (stockEl) stockEl.value = '';
-                                                    if (refEl) refEl.value = '';
-                                                    if (discountEl) discountEl.value = '';
-                                                    if (attrKeyEl) attrKeyEl.value = '';
-                                                    if (attrValEl) attrValEl.value = '';
-                                                    alert('Variante creada con éxito');
-                                                } catch (err) {
-                                                    alert('Error: ' + err.message);
-                                                } finally {
-                                                    setIsSaving(false);
-                                                }
-                                            }}
-                                            className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl shadow-brand-carbon/10 disabled:opacity-50 mt-4 font-outfit"
-                                        >
-                                            {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Plus className="w-4 h-4 text-primary" />}
-                                            Crear Variante Inteligente
-                                        </button>
-                                    </div>
-
-                                    {/* Existing Variants List */}
-                                    <div className="space-y-3">
-                                        <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Variantes Existentes ({variants.length})</h4>
-
-                                        {variants.map(variant => (
-                                            <div key={variant.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
-                                                <div className="flex items-center justify-between p-4">
-                                                    <div className="flex items-center gap-4 flex-1">
-                                                        <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                            {variant.image_url ? <img src={variant.image_url} className="w-full h-full object-contain rounded-lg" /> : <Tag className="w-4 h-4 text-gray-300" />}
+                                        {/* TAB: CONTENIDO & LOGISTICA */}
+                                        {activeTab === 'content' && (
+                                            <div className="space-y-8 animate-in fade-in duration-300">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                    <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+                                                        <div className="flex items-center gap-3 mb-4">
+                                                            <Layers className="w-4 h-4 text-blue-500" />
+                                                            <h3 className="text-[10px] font-black uppercase text-brand-carbon">Stock & Inventario</h3>
                                                         </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-mono text-xs text-gray-500 mb-1">{variant.reference}</p>
-                                                            <div className="flex gap-1.5 flex-wrap">
-                                                                {variant.attributes && Object.entries(variant.attributes).map(([k, v]) => {
-                                                                    const valStr = Array.isArray(v) ? v.join(', ') : v;
+                                                        <input type="number" className="w-full border-2 border-gray-50 rounded-2xl px-4 py-3 text-2xl font-black text-brand-carbon focus:border-primary focus:outline-none" value={formData.stock} onChange={e => setFormData({ ...formData, stock: parseInt(e.target.value) })} />
+                                                    </div>
+                                                    <div className="col-span-2 bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+                                                        <div className="flex items-center gap-3 mb-4">
+                                                            <CheckSquare className="w-4 h-4 text-green-500" />
+                                                            <h3 className="text-[10px] font-black uppercase text-brand-carbon">Visibilidad & Estado</h3>
+                                                        </div>
+                                                        <label className="flex items-center gap-3 cursor-pointer">
+                                                            <div className="relative">
+                                                                <input type="checkbox" className="sr-only" checked={formData.is_active} onChange={e => setFormData({ ...formData, is_active: e.target.checked })} />
+                                                                <div className={`w-14 h-8 rounded-full transition-colors duration-300 ${formData.is_active ? 'bg-primary' : 'bg-gray-200'}`}></div>
+                                                                <div className={`absolute top-1 left-1 bg-white w-6 h-6 rounded-full shadow-lg transform transition-transform duration-300 ${formData.is_active ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                                                            </div>
+                                                            <span className={`text-[11px] font-black uppercase italic ${formData.is_active ? 'text-primary' : 'text-gray-400'}`}>
+                                                                {formData.is_active ? 'Visible en Boutique' : 'Oculto (Borrador)'}
+                                                            </span>
+                                                        </label>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                                                    <div className="flex items-center gap-3 mb-8">
+                                                        <Award className="w-5 h-5 text-orange-500" />
+                                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-brand-carbon">Marketing & Target</h3>
+                                                    </div>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                                                        <div className="space-y-4">
+                                                            <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest">🎨 Badges Boutique</label>
+                                                            <div className="flex flex-wrap gap-2 mb-3 min-h-[40px]">
+                                                                {(formData.badge_ids || []).map(badgeId => {
+                                                                    const badge = allBadges.find(b => b.id === badgeId);
+                                                                    if (!badge) return null;
                                                                     return (
-                                                                        <span key={k} className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[9px] font-bold uppercase rounded border border-purple-100">
-                                                                            {k}: {valStr}
+                                                                        <span key={badgeId} className="flex items-center gap-2 px-3 py-1 text-[9px] font-black uppercase rounded-lg text-white" style={{ backgroundColor: badge.bg_color }}>
+                                                                            {badge.name}
+                                                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, badge_ids: prev.badge_ids.filter(id => id !== badgeId) }))}><X className="w-3 h-3" /></button>
                                                                         </span>
                                                                     );
                                                                 })}
                                                             </div>
+                                                            <select className="w-full h-11 border border-gray-100 rounded-xl px-4 text-[10px] font-bold outline-none" onChange={(e) => { const val = e.target.value; if (val && !formData.badge_ids.includes(val)) setFormData(prev => ({ ...prev, badge_ids: [...prev.badge_ids, val] })); e.target.value = ''; }}>
+                                                                <option value="">+ Seleccionar Badge...</option>
+                                                                {allBadges.filter(b => !formData.badge_ids.includes(b.id)).map(badge => (
+                                                                    <option key={badge.id} value={badge.id}>{badge.name}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Sectores B2B</label>
+                                                            <div className="border border-gray-100 rounded-2xl p-4 max-h-40 overflow-y-auto space-y-2 bg-gray-50/50">
+                                                                {professions.map(prof => (
+                                                                    <label key={prof.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-2 rounded-xl">
+                                                                        <input type="checkbox" className="w-4 h-4 rounded-lg text-primary" checked={formData.profession_ids?.includes(prof.id)} onChange={(e) => { const checked = e.target.checked; setFormData(prev => ({ ...prev, profession_ids: checked ? [...prev.profession_ids, prof.id] : prev.profession_ids.filter(id => id !== prof.id) })); }} />
+                                                                        <span className="text-[10px] font-black uppercase text-gray-500">{prof.name}</span>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Estancias Recomendadas</label>
+                                                            <div className="border border-gray-100 rounded-2xl p-4 max-h-40 overflow-y-auto space-y-2 bg-gray-50/50">
+                                                                {rooms.map(room => (
+                                                                    <label key={room.id} className="flex items-center gap-2 cursor-pointer hover:bg-white p-2 rounded-xl">
+                                                                        <input type="checkbox" className="w-4 h-4 rounded-lg text-blue-500" checked={formData.room_ids?.includes(room.id)} onChange={(e) => { const checked = e.target.checked; setFormData(prev => ({ ...prev, room_ids: checked ? [...prev.room_ids, room.id] : prev.room_ids.filter(id => id !== room.id) })); }} />
+                                                                        <span className="text-[10px] font-black uppercase text-gray-500">{room.name}</span>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
                                                         </div>
                                                     </div>
-
-                                                    <div className="flex items-center gap-5 flex-shrink-0">
-                                                        <div className="text-right">
-                                                            <span className="block text-lg font-black text-brand-carbon">{parseFloat(variant.price).toFixed(2)}€</span>
-                                                            {variant.discount_price && parseFloat(variant.discount_price) > 0 && (
-                                                                <span className="block text-xs text-red-500 font-bold">Oferta: {parseFloat(variant.discount_price).toFixed(2)}€</span>
-                                                            )}
+                                                </div>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                    <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                                                        <h3 className="text-[11px] font-black uppercase italic text-brand-carbon mb-6 flex items-center gap-2">
+                                                            <Sofa className="w-4 h-4 text-primary" /> Relacionados Manuales
+                                                        </h3>
+                                                        <div className="flex flex-wrap gap-2 mb-4">
+                                                            {formData.related_product_ids?.map(id => {
+                                                                const p = products.find(prod => prod.id === id);
+                                                                if (!p) return null;
+                                                                return (
+                                                                    <div key={id} className="flex items-center gap-2 bg-gray-50 border border-gray-100 px-3 py-1.5 rounded-xl">
+                                                                        <img src={p.image_url} className="w-6 h-6 rounded-lg object-cover" />
+                                                                        <span className="text-[9px] font-black text-gray-600 truncate max-w-[100px] uppercase italic">{p.name}</span>
+                                                                        <button type="button" onClick={() => setFormData(prev => ({ ...prev, related_product_ids: prev.related_product_ids.filter(rid => rid !== id) }))} className="text-gray-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
-                                                        <div className="text-center px-3 py-1 bg-gray-50 rounded-lg">
-                                                            <span className="block text-[9px] font-black text-gray-400 uppercase">Stock</span>
-                                                            <span className={`block text-sm font-black ${parseInt(variant.stock) > 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                                                {variant.stock || 0}
-                                                            </span>
+                                                        <select className="w-full h-12 border border-blue-50 rounded-2xl text-[10px] font-black uppercase outline-none bg-gray-50/50" onChange={(e) => { const val = e.target.value; if (val && !formData.related_product_ids?.includes(val)) setFormData(prev => ({ ...prev, related_product_ids: [...(prev.related_product_ids || []), val] })); e.target.value = ''; }}>
+                                                            <option value="">+ Vincular Producto...</option>
+                                                            {products.filter(p => p.id !== editingId && !p.parent_id && !formData.related_product_ids?.includes(p.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                                                        <h3 className="text-[11px] font-black uppercase italic text-brand-carbon mb-6 flex items-center gap-2">
+                                                            <Square className="w-4 h-4 text-indigo-500" /> Atributos Avanzados
+                                                        </h3>
+                                                        <div className="space-y-4">
+                                                            <div className="flex flex-wrap gap-2 mb-2 min-h-[50px]">
+                                                                {Object.entries(formData.attributes || {}).map(([key, values]) => (
+                                                                    <div key={key} className="bg-indigo-50 rounded-2xl p-3 border border-indigo-100 w-full">
+                                                                        <div className="flex items-center justify-between mb-2">
+                                                                            <span className="text-[10px] font-black text-indigo-900 uppercase italic">/ {key}</span>
+                                                                            <button type="button" onClick={() => removeAttributeGroup(key)} className="text-[9px] text-red-400 font-bold uppercase hover:text-red-600">Limpiar</button>
+                                                                        </div>
+                                                                        <div className="flex flex-wrap gap-1.5">
+                                                                            {(Array.isArray(values) ? values : [values]).map(val => (
+                                                                                <span key={val} className="inline-flex items-center gap-1.5 px-3 py-1 bg-white rounded-full border border-indigo-100 text-[9px] font-black text-indigo-600 uppercase shadow-sm">
+                                                                                    {val}
+                                                                                    <button type="button" onClick={() => removeAttributeValue(key, val)} className="text-red-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="flex gap-2 p-3 bg-gray-50 rounded-[1.5rem] border border-gray-100">
+                                                                <input list="attr-keys" placeholder="Tipo" className="flex-1 text-[10px] font-bold p-2 bg-transparent border-none focus:ring-0" value={newAttrKey} onChange={e => setNewAttrKey(e.target.value)} />
+                                                                <datalist id="attr-keys">{Object.keys(PREDEFINED_ATTRIBUTES).map(k => <option key={k} value={k} />)}</datalist>
+                                                                <input list="attr-values" placeholder="Valor" className="flex-1 text-[10px] font-bold p-2 bg-transparent border-none focus:ring-0" value={newAttrValue} onChange={e => setNewAttrValue(e.target.value)} />
+                                                                <datalist id="attr-values">{(PREDEFINED_ATTRIBUTES[newAttrKey] || []).map(v => <option key={v} value={v} />)}</datalist>
+                                                                <button type="button" onClick={addAttribute} className="w-10 h-10 rounded-xl bg-brand-carbon text-white flex items-center justify-center hover:bg-primary transition-all"><Plus className="w-4 h-4" /></button>
+                                                            </div>
                                                         </div>
-                                                        <div className="flex gap-1">
-                                                            <button
-                                                                onClick={() => {
-                                                                    setEditingId(variant.id);
-                                                                    setFormData({
-                                                                        name: variant.name,
-                                                                        reference: variant.reference || '',
-                                                                        price: variant.price,
-                                                                        stock: variant.stock || 0,
-                                                                        category_id: variant.category_id || '',
-                                                                        brand_id: variant.brand_id || '',
-                                                                        room_ids: variant.room_ids || [],
-                                                                        profession_ids: variant.profession_ids || [],
-                                                                        image_url: variant.image_url || '',
-                                                                        description: variant.description || '',
-                                                                        discount_price: variant.discount_price || '',
-                                                                        partner_price: variant.partner_price || '',
-                                                                        parent_id: variant.parent_id,
-                                                                        attributes: variant.attributes || {},
-                                                                        extra_images: variant.extra_images || []
-                                                                    });
-                                                                    setActiveTab('general');
-                                                                }}
-                                                                className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
-                                                                title="Editar variante completa"
-                                                            >
-                                                                <Edit2 className="w-4 h-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    deleteProduct(variant.id);
-                                                                    setVariants(prev => prev.filter(v => v.id !== variant.id));
-                                                                }}
-                                                                className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title="Eliminar variante"
-                                                            >
-                                                                <Trash2 className="w-4 h-4" />
-                                                            </button>
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                                                    <div className="flex items-center gap-3 mb-8">
+                                                        <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white">
+                                                            <Layers className="w-5 h-5 text-primary" />
+                                                        </div>
+                                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-brand-carbon">Contenido & Narrativa</h3>
+                                                    </div>
+                                                    <div className="space-y-8">
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 italic">Breve Introducción</label>
+                                                            <textarea className="w-full border-2 border-gray-50 rounded-2xl px-5 py-4 text-xs font-medium focus:ring-2 ring-blue-500/10 focus:outline-none min-h-[100px] resize-none" placeholder="Escribe algo inspirador sobre este activo..." value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })}></textarea>
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-4">🖋️ Editor de Contenido Boutique</label>
+                                                            <div className="bg-gray-50/50 rounded-3xl border border-gray-100 overflow-hidden shadow-inner">
+                                                                <ReactQuill
+                                                                    theme="snow"
+                                                                    value={formData.long_description}
+                                                                    onChange={(content) => setFormData(prev => ({ ...prev, long_description: content }))}
+                                                                    className="h-[400px] mb-12"
+                                                                    modules={{
+                                                                        toolbar: [
+                                                                            [{ 'header': [1, 2, 3, false] }],
+                                                                            ['bold', 'italic', 'underline', 'strike'],
+                                                                            [{ 'color': [] }, { 'background': [] }],
+                                                                            [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                                                                            ['link', 'clean']
+                                                                        ]
+                                                                    }}
+                                                                />
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        ))}
-
-                                        {variants.length === 0 && (
-                                            <div className="text-center p-10 text-gray-400 text-xs italic bg-gray-50 border border-dashed border-gray-200 rounded-xl">
-                                                <Package className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                                                No hay variantes. Crea una arriba con precio y stock propios.
-                                            </div>
                                         )}
+
+                                    </div>
+
+                                    {/* Sticky Save Button */}
+                                    <div className="sticky bottom-0 left-0 right-0 z-30 pt-4 pb-4 px-6 bg-white/90 backdrop-blur-md border-t border-gray-100 flex items-center justify-center flex-shrink-0">
+                                        <button
+                                            disabled={isSaving}
+                                            type="submit"
+                                            className="w-full max-w-4xl bg-brand-carbon text-white h-16 rounded-[2.5rem] font-black uppercase italic tracking-widest hover:scale-[1.01] active:scale-[0.98] transition-all flex items-center justify-center gap-4 shadow-xl shadow-brand-carbon/30 group relative overflow-hidden"
+                                        >
+                                            <div className="absolute inset-0 bg-gradient-to-r from-primary/20 via-transparent to-primary/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                                            {isSaving ? (
+                                                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+                                            ) : (
+                                                <Save className="w-5 h-5 text-primary group-hover:rotate-12 transition-transform" />
+                                            )}
+                                            <span className="text-lg">{isSaving ? 'Sincronizando Activo...' : 'Publicar Evolución Maestra'}</span>
+                                        </button>
+                                    </div>
+                                </form>
+                            ) : (
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar pb-16">
+                                    <div className="space-y-6">
+                                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                            <h3 className="font-bold text-blue-900 uppercase text-sm mb-1">Variantes del Producto</h3>
+                                            <p className="text-xs text-blue-600">Cada variante tiene su <b>propio precio</b>, <b>stock</b> e imagen. Ej: Tira LED 5m = 15€, Tira LED 10m = 28€</p>
+                                        </div>
+
+                                        <div className="bg-white p-5 rounded-xl border-2 border-dashed border-blue-200">
+                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">+ Crear Nueva Variante</h4>
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio (€) *</label>
+                                                    <input type="number" step="0.01" placeholder="Ej: 15.99" className="w-full border rounded-lg px-3 py-2 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-price" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Stock *</label>
+                                                    <input type="number" placeholder="Ej: 50" className="w-full border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-stock" />
+                                                </div>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Referencia / SKU</label>
+                                                    <input type="text" placeholder="Ej: TIRA-LED-5M-ROJO" className="w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-ref" />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio Oferta (€)</label>
+                                                    <input type="number" step="0.01" placeholder="Opcional" className="w-full border rounded-lg px-3 py-2 text-sm font-bold text-red-600 bg-red-50 focus:outline-none" id="new-variant-discount" />
+                                                </div>
+                                            </div>
+                                            <div className="mb-3">
+                                                <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Atributos de esta variante</label>
+                                                <div className="flex gap-2">
+                                                    <input list="attr-keys-variant" placeholder="Atributo" className="flex-1 text-[10px] font-bold uppercase p-2 border rounded" id="new-variant-attr-key" />
+                                                    <datalist id="attr-keys-variant">{Object.keys(PREDEFINED_ATTRIBUTES).map(k => <option key={k} value={k} />)}</datalist>
+                                                    <input list="attr-values-variant" placeholder="Valor" className="flex-1 text-[10px] font-bold uppercase p-2 border rounded" id="new-variant-attr-val" />
+                                                    <datalist id="attr-values-variant">{(PREDEFINED_ATTRIBUTES[''] || []).map(v => <option key={v} value={v} />)}</datalist>
+                                                </div>
+                                            </div>
+                                            <button
+                                                disabled={isSaving}
+                                                onClick={async () => {
+                                                    const priceEl = document.getElementById('new-variant-price');
+                                                    const stockEl = document.getElementById('new-variant-stock');
+                                                    const refEl = document.getElementById('new-variant-ref');
+                                                    const discountEl = document.getElementById('new-variant-discount');
+                                                    const attrKeyEl = document.getElementById('new-variant-attr-key');
+                                                    const attrValEl = document.getElementById('new-variant-attr-val');
+                                                    if (!priceEl?.value || !refEl?.value) return alert('Precio y Referencia son obligatorios');
+                                                    const payload = {
+                                                        name: formData.name,
+                                                        parent_id: editingId,
+                                                        price: parseFloat(priceEl.value),
+                                                        stock: parseInt(stockEl?.value || 0),
+                                                        reference: refEl.value,
+                                                        discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
+                                                        image_url: formData.image_url,
+                                                        category_id: formData.category_id,
+                                                        attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {},
+                                                        slug: generateSlug(formData.name, refEl.value)
+                                                    };
+                                                    try {
+                                                        setIsSaving(true);
+                                                        const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
+                                                        if (error) throw error;
+                                                        setVariants(prev => [...prev, data]);
+                                                        if (priceEl) priceEl.value = '';
+                                                        if (stockEl) stockEl.value = '';
+                                                        if (refEl) refEl.value = '';
+                                                        if (discountEl) discountEl.value = '';
+                                                        if (attrKeyEl) attrKeyEl.value = '';
+                                                        if (attrValEl) attrValEl.value = '';
+                                                        alert('Variante creada con éxito');
+                                                    } catch (err) {
+                                                        alert('Error: ' + err.message);
+                                                    } finally {
+                                                        setIsSaving(false);
+                                                    }
+                                                }}
+                                                className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl disabled:opacity-50 mt-4"
+                                            >
+                                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Plus className="w-4 h-4 text-primary" />}
+                                                Crear Variante Inteligente
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Variantes Existentes ({variants.length})</h4>
+                                            {variants.map(variant => (
+                                                <div key={variant.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                                                    <div className="flex items-center justify-between p-4">
+                                                        <div className="flex items-center gap-4 flex-1">
+                                                            <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                {variant.image_url ? <img src={variant.image_url} className="w-full h-full object-contain rounded-lg" /> : <Tag className="w-4 h-4 text-gray-300" />}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="font-mono text-xs text-gray-500 mb-1">{variant.reference}</p>
+                                                                <div className="flex gap-1.5 flex-wrap">
+                                                                    {variant.attributes && Object.entries(variant.attributes).map(([k, v]) => (
+                                                                        <span key={k} className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[9px] font-bold uppercase rounded border border-purple-100">
+                                                                            {k}: {Array.isArray(v) ? v.join(', ') : v}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-5 flex-shrink-0">
+                                                            <div className="text-right">
+                                                                <span className="block text-lg font-black text-brand-carbon">{parseFloat(variant.price).toFixed(2)}€</span>
+                                                                {variant.discount_price && parseFloat(variant.discount_price) > 0 && (
+                                                                    <span className="block text-xs text-red-500 font-bold">Oferta: {parseFloat(variant.discount_price).toFixed(2)}€</span>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-center px-3 py-1 bg-gray-50 rounded-lg">
+                                                                <span className="block text-[9px] font-black text-gray-400 uppercase">Stock</span>
+                                                                <span className={`block text-sm font-black ${parseInt(variant.stock) > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{variant.stock || 0}</span>
+                                                            </div>
+                                                            <div className="flex gap-1">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingId(variant.id);
+                                                                        setFormData({
+                                                                            name: variant.name,
+                                                                            reference: variant.reference || '',
+                                                                            price: variant.price,
+                                                                            stock: variant.stock || 0,
+                                                                            category_id: variant.category_id || '',
+                                                                            brand_id: variant.brand_id || '',
+                                                                            room_ids: variant.room_ids || [],
+                                                                            profession_ids: variant.profession_ids || [],
+                                                                            image_url: variant.image_url || '',
+                                                                            description: variant.description || '',
+                                                                            discount_price: variant.discount_price || '',
+                                                                            partner_price: variant.partner_price || '',
+                                                                            parent_id: variant.parent_id,
+                                                                            attributes: variant.attributes || {},
+                                                                            extra_images: variant.extra_images || []
+                                                                        });
+                                                                        setActiveTab('general');
+                                                                    }}
+                                                                    className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                    title="Editar variante completa"
+                                                                >
+                                                                    <Edit2 className="w-4 h-4" />
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        deleteProduct(variant.id);
+                                                                        setVariants(prev => prev.filter(v => v.id !== variant.id));
+                                                                    }}
+                                                                    className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
+                                                                    title="Eliminar variante"
+                                                                >
+                                                                    <Trash2 className="w-4 h-4" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             )}

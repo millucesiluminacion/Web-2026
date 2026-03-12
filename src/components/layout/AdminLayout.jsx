@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Menu, Tag, Award,
     CheckSquare, Sofa, Image as ImageIcon, CreditCard, BookOpen, Briefcase, UserPlus, Star,
-    Search, ShieldCheck
+    Search, ShieldCheck, Mail
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
@@ -118,6 +118,7 @@ export function AdminLayout() {
             title: 'Marketing',
             items: [
                 { icon: Search, label: 'SEO Boutique', path: '/admin/seo' },
+                { icon: Mail, label: 'Newsletter', path: '/admin/newsletter' },
             ]
         }
     ];

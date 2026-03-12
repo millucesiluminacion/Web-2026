@@ -16,11 +16,23 @@ const OfertasPage = () => {
         async function fetchOffers() {
             try {
                 // Fetch products that have a discount price or specific tag
-                const { data, error } = await supabase
+                let { data, error } = await supabase
                     .from('products')
                     .select('*')
                     .is('parent_id', null)
+                    .neq('is_active', false)
                     .order('created_at', { ascending: false });
+
+                if (error && error.message.includes('is_active')) {
+                    console.warn('OfertasPage: is_active column missing, retrying without filter...');
+                    const retry = await supabase
+                        .from('products')
+                        .select('*')
+                        .is('parent_id', null)
+                        .order('created_at', { ascending: false });
+                    data = retry.data;
+                    error = retry.error;
+                }
 
                 if (error) throw error;
                 setProducts(data || []);

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
-export default function ImageUpload({ onUpload, defaultValue = '' }) {
+export default function ImageUpload({ onUpload, defaultValue = '', showLabel = true }) {
     const [uploading, setUploading] = useState(false);
     const [preview, setPreview] = useState(defaultValue);
 
@@ -47,7 +47,9 @@ export default function ImageUpload({ onUpload, defaultValue = '' }) {
 
     return (
         <div className="space-y-2">
-            <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Imagen / Logo</label>
+            {showLabel && (
+                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Imagen / Logo</label>
+            )}
 
             {preview ? (
                 <div className="relative w-full h-40 bg-gray-50 rounded-xl border border-dashed border-gray-200 overflow-hidden group">

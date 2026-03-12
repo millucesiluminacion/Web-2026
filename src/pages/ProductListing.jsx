@@ -102,7 +102,8 @@ export default function ProductListing() {
             if (roomId) querySelect = '*, product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
             if (professionSlug) querySelect = '*, product_rooms(room_id), product_professions!inner(profession_id), product_badges(badges(*))';
 
-            let productQuery = supabase.from('products').select(querySelect).is('parent_id', null);
+            let productQuery = supabase.from('products').select(querySelect).is('parent_id', null).neq('is_active', false);
+
 
             if (searchQuery) {
                 productQuery = productQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
@@ -127,8 +128,21 @@ export default function ProductListing() {
                 if (prof) productQuery = productQuery.eq('product_professions.profession_id', prof.id);
             }
 
-            const { data, error } = await productQuery.order('created_at', { ascending: false });
+            let { data, error } = await productQuery.order('created_at', { ascending: false });
+
+            // Resilience: If is_active doesn't exist yet, retry without the filter
+            if (error && error.message.includes('is_active')) {
+                console.warn('is_active column missing, retrying without visibility filter...');
+                let retryQuery = supabase.from('products').select(querySelect).is('parent_id', null);
+                if (searchQuery) retryQuery = retryQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+                // ... (simplified retry for immediate recover)
+                const retryRes = await retryQuery.order('created_at', { ascending: false });
+                data = retryRes.data;
+                error = retryRes.error;
+            }
+
             if (error) throw error;
+
 
             const fetchedProducts = data || [];
             setProducts(fetchedProducts);

@@ -9,12 +9,16 @@ export const BadgeRenderer = ({ product }) => {
     const badges = [];
 
     // 1. AUTOMATIC BADGES (System Driven)
-    if (product.stock === 0) {
+    const stock = parseInt(product.stock || 0);
+    const price = parseFloat(product.price || 0);
+    const salePrice = parseFloat(product.discount_price || 0);
+
+    if (stock === 0) {
         badges.push({
             label: 'AGOTADO',
             className: 'bg-gray-800 text-white'
         });
-    } else if (product.stock > 0 && product.stock <= 5) {
+    } else if (stock > 0 && stock <= 5) {
         badges.push({
             label: 'ÚLTIMAS UNIDADES',
             icon: Clock,
@@ -22,8 +26,8 @@ export const BadgeRenderer = ({ product }) => {
         });
     }
 
-    if (product.original_price && product.original_price > product.price) {
-        const pct = Math.round(((product.original_price - product.price) / product.original_price) * 100);
+    if (salePrice > 0 && salePrice < price) {
+        const pct = Math.round(((price - salePrice) / price) * 100);
         badges.push({
             label: `-${pct}%`,
             className: 'bg-red-500 text-white shadow-lg shadow-red-500/30'
@@ -31,9 +35,11 @@ export const BadgeRenderer = ({ product }) => {
     }
 
     const isNew = () => {
+        if (!product.created_at) return false;
         const createdDate = new Date(product.created_at);
         const now = new Date();
-        const diffDays = Math.ceil((now - createdDate) / (1000 * 60 * 60 * 24));
+        const diffTime = Math.abs(now - createdDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         return diffDays <= 30;
     };
     if (isNew()) {
@@ -44,7 +50,7 @@ export const BadgeRenderer = ({ product }) => {
         });
     }
 
-    if (product.price >= 100) {
+    if (price >= 100) {
         badges.push({
             label: 'ENVÍO GRATIS',
             icon: Zap,
@@ -87,7 +93,7 @@ export const BadgeRenderer = ({ product }) => {
     const visibleBadges = badges.slice(0, 3);
 
     return (
-        <div className="absolute top-4 left-4 flex flex-col gap-2 z-20 pointer-events-none">
+        <div className="absolute top-4 left-4 flex flex-row flex-wrap gap-2 z-20 pointer-events-none">
             {visibleBadges.map((badge, idx) => (
                 <div
                     key={idx}

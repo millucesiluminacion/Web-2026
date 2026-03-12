@@ -31,15 +31,34 @@ export default function HomePage() {
             let prodRes;
             const prodQuery = supabase.from('products')
                 .select('*, product_badges(badges(*))')
+                .neq('is_active', false)
                 .order('created_at', { ascending: false })
                 .limit(7);
+
             prodRes = await prodQuery;
-            if (prodRes.error && prodRes.error.message.includes('product_badges')) {
-                // Fallback: badges table doesn't exist yet
+
+            // Resilience: is_active column may missing
+            if (prodRes.error && prodRes.error.message.includes('is_active')) {
                 prodRes = await supabase.from('products')
-                    .select('*')
+                    .select('*, product_badges(badges(*))')
                     .order('created_at', { ascending: false })
                     .limit(7);
+            }
+
+            // Resilience: badges table may missing
+            if (prodRes.error && prodRes.error.message.includes('product_badges')) {
+                prodRes = await supabase.from('products')
+                    .select('*')
+                    .neq('is_active', false)
+                    .order('created_at', { ascending: false })
+                    .limit(7);
+
+                if (prodRes.error && prodRes.error.message.includes('is_active')) {
+                    prodRes = await supabase.from('products')
+                        .select('*')
+                        .order('created_at', { ascending: false })
+                        .limit(7);
+                }
             }
 
             const [sliderRes, profRes] = await Promise.all([
