@@ -99,13 +99,13 @@ export default function CategoriesAdmin() {
             const filePath = `${fileName}`;
 
             const { error: uploadError } = await supabase.storage
-                .from('categories')
+                .from('images')
                 .upload(filePath, file);
 
             if (uploadError) throw uploadError;
 
             const { data: { publicUrl } } = supabase.storage
-                .from('categories')
+                .from('images')
                 .getPublicUrl(filePath);
 
             return publicUrl;

@@ -458,6 +458,19 @@ export default function ProductList() {
         setIsModalOpen(true);
     }
 
+    function handleDuplicate(product) {
+        // Open as edit to load everything (relations, variants, etc)
+        openEdit(product);
+        // Then convert it to "New Product" mode
+        setEditingId(null);
+        // Append (Copia) to name to distinguish it
+        setFormData(prev => ({
+            ...prev,
+            name: `${prev.name} (Copia)`,
+            reference: prev.reference ? `${prev.reference}-copy` : ''
+        }));
+    }
+
     async function loadProductRelations(productId) {
         try {
             const [roomsData, profsData] = await Promise.all([
@@ -1207,10 +1220,13 @@ export default function ProductList() {
                                         {/* Acciones */}
                                         <td className="p-4 text-right">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                                                <button onClick={() => openEdit(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-primary hover:border-primary transition-all">
+                                                <button onClick={() => openEdit(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-primary hover:border-primary transition-all" title="Editar">
                                                     <Edit2 className="w-3.5 h-3.5" />
                                                 </button>
-                                                <button onClick={() => deleteProduct(product.id)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-red-400 hover:border-red-100 transition-all">
+                                                <button onClick={() => handleDuplicate(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-indigo-400 hover:border-indigo-100 transition-all" title="Duplicar">
+                                                    <Copy className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button onClick={() => deleteProduct(product.id)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-red-400 hover:border-red-100 transition-all" title="Eliminar">
                                                     <Trash2 className="w-3.5 h-3.5" />
                                                 </button>
                                             </div>

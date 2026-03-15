@@ -8,7 +8,7 @@ export function FooterBottom() {
                 <div className="flex flex-wrap justify-center gap-6 md:justify-between items-center w-full xl:w-auto">
                     <Link to="/" className="inline-block" title="Mil Luces Logo">
                         <img
-                            src="/logo.jpg"
+                            src="/Logo-MilLuces.png"
                             alt="Mil Luces"
                             className="h-[25px] md:h-[30px]"
                             loading="lazy"
@@ -30,7 +30,7 @@ export function FooterBottom() {
                     </ul>
                 </div>
                 <div className="flex gap-4 xl:gap-8 items-center max-md:justify-center">
-                    <img src="https://www.efectoled.com/img/core/global/ambilamp.svg" className="w-full max-w-[100px] max-h-[60px]" alt="Ambilamp" loading="lazy" />
+                    <img src="/Logo-MilLuces.png" className="w-full max-w-[100px] max-h-[60px]" alt="MilLuces" loading="lazy" />
                 </div>
             </div>
 
