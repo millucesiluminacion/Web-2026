@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
     Tag, Plus, Edit2, Trash2, ChevronRight, ChevronDown,
     BoxSelect, Square, Grid, Zap, Lightbulb, Save, X, Loader2,
-    Settings, Search, ArrowLeft, Image as ImageIcon, Upload
+    Settings, Search, ArrowLeft, Image as ImageIcon, Upload,
+    ArrowUp, ArrowDown
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
@@ -162,22 +163,42 @@ export default function CategoriesAdmin() {
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!confirm('¿Estás seguro de eliminar esta categoría? Esto podría afectar a los productos asociados.')) return;
+    const handleMove = async (category, direction) => {
+        const siblings = category.parent_id
+            ? getSubcategories(category.parent_id)
+            : mainCategories;
+
+        const currentIndex = siblings.findIndex(c => c.id === category.id);
+        const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+        if (targetIndex < 0 || targetIndex >= siblings.length) return;
+
+        const targetCategory = siblings[targetIndex];
+
         try {
-            const { error } = await supabase
+            setIsSaving(true);
+            // Swap order_index
+            const { error: err1 } = await supabase
                 .from('categories')
-                .delete()
-                .eq('id', id);
-            if (error) throw error;
+                .update({ order_index: targetCategory.order_index })
+                .eq('id', category.id);
+
+            const { error: err2 } = await supabase
+                .from('categories')
+                .update({ order_index: category.order_index })
+                .eq('id', targetCategory.id);
+
+            if (err1 || err2) throw (err1 || err2);
             fetchCategories();
         } catch (error) {
-            alert('Error al eliminar: ' + error.message);
+            alert('Error al reordenar: ' + error.message);
+        } finally {
+            setIsSaving(false);
         }
     };
 
-    const mainCategories = categories.filter(c => !c.parent_id);
-    const getSubcategories = (parentId) => categories.filter(c => c.parent_id === parentId);
+    const mainCategories = categories.filter(c => !c.parent_id).sort((a, b) => (a.order_index - b.order_index));
+    const getSubcategories = (parentId) => categories.filter(c => c.parent_id === parentId).sort((a, b) => (a.order_index - b.order_index));
 
     const getIcon = (category) => {
         if (category.image_url) {
@@ -233,10 +254,27 @@ export default function CategoriesAdmin() {
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {mainCategories.map(category => (
+                    {mainCategories.map((category, idx) => (
                         <div key={category.id} className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6 group hover:border-primary/20 transition-all flex flex-col justify-between relative overflow-hidden">
-                            <div className="absolute top-1 right-1 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button onClick={() => handleDelete(category.id)} className="p-1.5 text-gray-300 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                            <div className="absolute top-1 right-1 p-2 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col gap-1">
+                                <button onClick={() => handleDelete(category.id)} className="p-1.5 text-gray-300 hover:text-red-500 transition-colors" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></button>
+                                <div className="h-px bg-gray-50 my-1"></div>
+                                <button
+                                    disabled={idx === 0}
+                                    onClick={() => handleMove(category, 'up')}
+                                    className="p-1.5 text-gray-300 hover:text-primary disabled:opacity-20 transition-colors"
+                                    title="Mover Arriba"
+                                >
+                                    <ArrowUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                    disabled={idx === mainCategories.length - 1}
+                                    onClick={() => handleMove(category, 'down')}
+                                    className="p-1.5 text-gray-300 hover:text-primary disabled:opacity-20 transition-colors"
+                                    title="Mover Abajo"
+                                >
+                                    <ArrowDown className="w-3.5 h-3.5" />
+                                </button>
                             </div>
                             <div>
                                 <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center text-primary mb-4 group-hover:scale-105 transition-transform overflow-hidden">
@@ -297,7 +335,7 @@ export default function CategoriesAdmin() {
                                 {/* Connection Line */}
                                 <div className="absolute left-5 top-[-30px] bottom-12 w-[1px] bg-gradient-to-b from-primary/10 to-transparent rounded-full hidden md:block"></div>
 
-                                {getSubcategories(parent.id).map(sub => (
+                                {getSubcategories(parent.id).map((sub, idx, arr) => (
                                     <div key={sub.id} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-lg hover:border-primary/20 transition-all group/sub relative flex flex-col justify-between h-36">
                                         <div className="absolute left-[-30px] top-1/2 w-8 h-[1px] bg-primary/10 hidden md:block"></div>
                                         <div>
@@ -305,7 +343,22 @@ export default function CategoriesAdmin() {
                                                 <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-primary group-hover/sub:bg-primary group-hover/sub:text-white transition-all shadow-sm overflow-hidden">
                                                     {getIcon(sub)}
                                                 </div>
-                                                <div className="flex gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity">
+                                                <div className="flex gap-1 opacity-0 group-hover/sub:opacity-100 transition-opacity items-center">
+                                                    <button
+                                                        disabled={idx === 0}
+                                                        onClick={() => handleMove(sub, 'up')}
+                                                        className="p-1.5 text-gray-300 hover:text-primary disabled:opacity-20 transition-colors"
+                                                    >
+                                                        <ArrowUp className="w-3 h-3" />
+                                                    </button>
+                                                    <button
+                                                        disabled={idx === arr.length - 1}
+                                                        onClick={() => handleMove(sub, 'down')}
+                                                        className="p-1.5 text-gray-300 hover:text-primary disabled:opacity-20 transition-colors"
+                                                    >
+                                                        <ArrowDown className="w-3 h-3" />
+                                                    </button>
+                                                    <div className="w-px h-3 bg-gray-100 mx-1"></div>
                                                     <button onClick={() => handleOpenModal(sub)} className="p-1.5 text-gray-300 hover:text-primary"><Edit2 className="w-3 h-3" /></button>
                                                     <button onClick={() => handleDelete(sub.id)} className="p-1.5 text-gray-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
                                                 </div>
@@ -350,8 +403,8 @@ export default function CategoriesAdmin() {
                             </header>
 
                             <form onSubmit={handleSave} className="space-y-6">
-                                <div className="grid grid-cols-2 gap-6">
-                                    <div className="space-y-2">
+                                <div className="grid grid-cols-3 gap-6">
+                                    <div className="space-y-2 col-span-2">
                                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Etimología / Nombre</label>
                                         <input
                                             type="text"
@@ -363,16 +416,26 @@ export default function CategoriesAdmin() {
                                         />
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Slug (Ruta Semántica)</label>
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Orden de Visualización</label>
                                         <input
-                                            type="text"
-                                            required
-                                            value={formData.slug}
-                                            onChange={e => setFormData({ ...formData, slug: e.target.value })}
+                                            type="number"
+                                            value={formData.order_index}
+                                            onChange={e => setFormData({ ...formData, order_index: parseInt(e.target.value) || 0 })}
                                             className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none"
-                                            placeholder="downlights-pro"
+                                            placeholder="0"
                                         />
                                     </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Slug (Ruta Semántica)</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={formData.slug}
+                                        onChange={e => setFormData({ ...formData, slug: e.target.value })}
+                                        className="w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                                        placeholder="downlights-pro"
+                                    />
                                 </div>
 
                                 <div className="space-y-2">
