@@ -17,7 +17,7 @@ const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-wide
 const API_BASE = import.meta.env.DEV ? '' : '';
 
 export default function Cart() {
-    const { cart, removeFromCart, updateQuantity, totalOriginal, totalSavings, totalPrice, clearCart } = useCart();
+    const { cart, removeFromCart, updateQuantity, totalOriginal, totalSavings, totalPrice, subtotal, shippingCost, shippingConfig, clearCart } = useCart();
     const { profile, user } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -126,6 +126,25 @@ export default function Cart() {
         }));
         const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
         if (itemsError) throw itemsError;
+
+        // Trigger Order Confirmation Email
+        try {
+            await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: formData.email,
+                    templateKey: 'order_confirmation',
+                    variables: {
+                        name: formData.name,
+                        order_id: order.id.slice(0, 8).toUpperCase(),
+                        site_name: 'Mil Luces Boutique'
+                    }
+                })
+            });
+        } catch (emailErr) {
+            console.error('Error triggering order confirmation email:', emailErr);
+        }
 
         return order;
     }
@@ -276,7 +295,7 @@ export default function Cart() {
                                         </div>
                                         <div className="text-left">
                                             <h2 className="text-sm font-black text-brand-carbon uppercase italic leading-none mb-0.5">Tu Selección</h2>
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{cart.length} artículo{cart.length !== 1 ? 's' : ''} · {totalPrice.toFixed(2)} €</p>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{cart.length} artículo{cart.length !== 1 ? 's' : ''} · {subtotal.toFixed(2)} €</p>
                                         </div>
                                     </div>
                                     {showOrderSummary ? <ChevronUp className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" /> : <ChevronDown className="w-4 h-4 text-gray-300 group-hover:text-primary transition-colors" />}
@@ -427,8 +446,18 @@ export default function Cart() {
                                         </div>
                                     )}
                                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
-                                        <span className="text-gray-500">Envío</span><span className="text-primary font-black italic">CONCEDIDO</span>
+                                        <span className="text-gray-500">Envío</span>
+                                        <span className={`${shippingCost === 0 ? 'text-primary' : 'text-white'} font-black italic`}>
+                                            {shippingCost === 0 ? 'GRATIS' : `${shippingCost.toFixed(2)} €`}
+                                        </span>
                                     </div>
+                                    {shippingCost > 0 && (
+                                        <div className="bg-primary/5 px-3 py-2 rounded-xl mt-1">
+                                            <p className="text-[8px] font-black text-primary uppercase tracking-widest italic">
+                                                Envío GRATIS a partir de {shippingConfig.free_shipping_threshold} €
+                                            </p>
+                                        </div>
+                                    )}
                                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
                                         <span className="text-gray-500">IVA (21%)</span><span>{iva.toFixed(2)} €</span>
                                     </div>

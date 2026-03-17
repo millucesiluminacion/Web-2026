@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, Percent, AlertTriangle, BadgePercent } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
@@ -449,7 +449,8 @@ export default function ProductList() {
 
         // Load variants if it is a parent
         if (!product.parent_id) {
-            const productVariants = products.filter(p => p.parent_id === product.id);
+            const productVariants = products.filter(p => p.parent_id === product.id)
+                .sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
             setVariants(productVariants);
         } else {
             setVariants([]);
@@ -469,6 +470,32 @@ export default function ProductList() {
             name: `${prev.name} (Copia)`,
             reference: prev.reference ? `${prev.reference}-copy` : ''
         }));
+    }
+
+    async function moveVariant(variantId, direction) {
+        const index = variants.findIndex(v => v.id === variantId);
+        if (index === -1) return;
+
+        const newIndex = direction === 'up' ? index - 1 : index + 1;
+        if (newIndex < 0 || newIndex >= variants.length) return;
+
+        const newVariants = [...variants];
+        const [movedItem] = newVariants.splice(index, 1);
+        newVariants.splice(newIndex, 0, movedItem);
+
+        // Update order_index for all variants
+        const updatedVariants = newVariants.map((v, i) => ({ ...v, order_index: i }));
+        setVariants(updatedVariants);
+
+        // Persist to database
+        try {
+            const updates = updatedVariants.map(v =>
+                supabase.from('products').update({ order_index: v.order_index }).eq('id', v.id)
+            );
+            await Promise.all(updates);
+        } catch (error) {
+            console.error("Error updating variant order:", error);
+        }
     }
 
     async function loadProductRelations(productId) {
@@ -734,7 +761,12 @@ export default function ProductList() {
         parents.forEach(parent => {
             final.push(parent);
             if (variantsMap[parent.id]) {
-                const sortedVariants = [...variantsMap[parent.id]].sort((a, b) => a.name.localeCompare(b.name));
+                const sortedVariants = [...variantsMap[parent.id]].sort((a, b) => {
+                    if (a.order_index !== undefined && b.order_index !== undefined) {
+                        return a.order_index - b.order_index;
+                    }
+                    return a.name.localeCompare(b.name);
+                });
                 final.push(...sortedVariants);
             }
         });
@@ -1264,24 +1296,23 @@ export default function ProductList() {
                         </div>
 
                         {/* Tabs */}
-                        {!formData.parent_id && editingId && (
-                            <div className="flex border-b border-gray-100 px-8 bg-gray-50/30 gap-1 lg:gap-6 flex-shrink-0 overflow-x-auto no-scrollbar">
-                                {[
-                                    { id: 'general', label: '🏷️ Identidad' },
-                                    { id: 'pricing', label: '💰 Estrategia B2B' },
-                                    { id: 'content', label: '📄 Contenido & Logística' },
-                                    { id: 'variants', label: `🌿 Variantes (${variants.length})` }
-                                ].map(tab => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => setActiveTab(tab.id)}
-                                        className={`py-4 px-2 text-[9px] font-black uppercase tracking-widest border-b-2 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                        <div className="flex border-b border-gray-100 px-8 bg-gray-50/30 gap-1 lg:gap-6 flex-shrink-0 overflow-x-auto no-scrollbar">
+                            {[
+                                { id: 'general', label: '🏷️ Identidad' },
+                                { id: 'pricing', label: '💰 Estrategia B2B' },
+                                { id: 'content', label: '📄 Contenido & Logística' },
+                                // Muestra la pestaña de variantes si es un padre (incluso si es nuevo, pero deshabilitada la creación)
+                                ...(!formData.parent_id ? [{ id: 'variants', label: `🌿 Variantes (${variants.length})` }] : [])
+                            ].map(tab => (
+                                <button
+                                    key={tab.id}
+                                    onClick={() => setActiveTab(tab.id)}
+                                    className={`py-4 px-2 text-[9px] font-black uppercase tracking-widest border-b-2 transition-all whitespace-nowrap ${activeTab === tab.id ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    {tab.label}
+                                </button>
+                            ))}
+                        </div>
 
                         {/* Tab Content */}
                         <div className="flex-1 min-h-0">
@@ -1721,166 +1752,205 @@ export default function ProductList() {
                                 </form>
                             ) : (
                                 <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar pb-16">
-                                    <div className="space-y-6">
-                                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
-                                            <h3 className="font-bold text-blue-900 uppercase text-sm mb-1">Variantes del Producto</h3>
-                                            <p className="text-xs text-blue-600">Cada variante tiene su <b>propio precio</b>, <b>stock</b> e imagen. Ej: Tira LED 5m = 15€, Tira LED 10m = 28€</p>
+                                    {!editingId ? (
+                                        <div className="bg-white rounded-[2rem] border border-gray-100 p-12 text-center shadow-sm h-full flex flex-col items-center justify-center">
+                                            <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-3xl opacity-20 relative">
+                                                <div className="absolute inset-0 border-2 border-dashed border-primary/20 rounded-[2rem] animate-spin-slow"></div>
+                                                🌿
+                                            </div>
+                                            <h3 className="text-xl font-black text-brand-carbon uppercase italic leading-none mb-4">Gestión de Variantes</h3>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[.4em] mb-8 max-w-xs mx-auto">
+                                                Primero debes guardar el Activo Maestro para poder añadir y gestionar sus variantes.
+                                            </p>
                                         </div>
+                                    ) : (
+                                        <div className="space-y-6">
+                                            <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                                                <h3 className="font-bold text-blue-900 uppercase text-sm mb-1">Variantes del Producto</h3>
+                                                <p className="text-xs text-blue-600">Cada variante tiene su <b>propio precio</b>, <b>stock</b> e imagen. Ej: Tira LED 5m = 15€, Tira LED 10m = 28€</p>
+                                            </div>
 
-                                        <div className="bg-white p-5 rounded-xl border-2 border-dashed border-blue-200">
-                                            <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">+ Crear Nueva Variante</h4>
-                                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                                <div>
-                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio (€) *</label>
-                                                    <input type="number" step="0.01" placeholder="Ej: 15.99" className="w-full border rounded-lg px-3 py-2 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-price" />
+                                            <div className="bg-white p-5 rounded-xl border-2 border-dashed border-blue-200">
+                                                <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">+ Crear Nueva Variante</h4>
+                                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                                    <div>
+                                                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio (€) *</label>
+                                                        <input type="number" step="0.01" placeholder="Ej: 15.99" className="w-full border rounded-lg px-3 py-2 text-sm font-black focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-price" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Stock *</label>
+                                                        <input type="number" placeholder="Ej: 50" className="w-full border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-stock" />
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Stock *</label>
-                                                    <input type="number" placeholder="Ej: 50" className="w-full border rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-stock" />
+                                                <div className="grid grid-cols-2 gap-3 mb-3">
+                                                    <div>
+                                                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Referencia / SKU</label>
+                                                        <input type="text" placeholder="Ej: TIRA-LED-5M-ROJO" className="w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-ref" />
+                                                    </div>
+                                                    <div>
+                                                        <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio Oferta (€)</label>
+                                                        <input type="number" step="0.01" placeholder="Opcional" className="w-full border rounded-lg px-3 py-2 text-sm font-bold text-red-600 bg-red-50 focus:outline-none" id="new-variant-discount" />
+                                                    </div>
                                                 </div>
+                                                <div className="mb-3">
+                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Atributos de esta variante</label>
+                                                    <div className="flex gap-2">
+                                                        <input list="attr-keys-variant" placeholder="Atributo" className="flex-1 text-[10px] font-bold uppercase p-2 border rounded" id="new-variant-attr-key" />
+                                                        <datalist id="attr-keys-variant">{Object.keys(PREDEFINED_ATTRIBUTES).map(k => <option key={k} value={k} />)}</datalist>
+                                                        <input list="attr-values-variant" placeholder="Valor" className="flex-1 text-[10px] font-bold uppercase p-2 border rounded" id="new-variant-attr-val" />
+                                                        <datalist id="attr-values-variant">{(PREDEFINED_ATTRIBUTES[''] || []).map(v => <option key={v} value={v} />)}</datalist>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    disabled={isSaving}
+                                                    onClick={async () => {
+                                                        const priceEl = document.getElementById('new-variant-price');
+                                                        const stockEl = document.getElementById('new-variant-stock');
+                                                        const refEl = document.getElementById('new-variant-ref');
+                                                        const discountEl = document.getElementById('new-variant-discount');
+                                                        const attrKeyEl = document.getElementById('new-variant-attr-key');
+                                                        const attrValEl = document.getElementById('new-variant-attr-val');
+                                                        if (!priceEl?.value || !refEl?.value) return alert('Precio y Referencia son obligatorios');
+                                                        const payload = {
+                                                            name: formData.name,
+                                                            parent_id: editingId,
+                                                            price: parseFloat(priceEl.value),
+                                                            stock: parseInt(stockEl?.value || 0),
+                                                            reference: refEl.value,
+                                                            discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
+                                                            image_url: formData.image_url,
+                                                            category_id: formData.category_id,
+                                                            attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {},
+                                                            slug: generateSlug(formData.name, refEl.value)
+                                                        };
+                                                        try {
+                                                            setIsSaving(true);
+                                                            const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
+                                                            if (error) throw error;
+                                                            setVariants(prev => [...prev, data]);
+                                                            if (priceEl) priceEl.value = '';
+                                                            if (stockEl) stockEl.value = '';
+                                                            if (refEl) refEl.value = '';
+                                                            if (discountEl) discountEl.value = '';
+                                                            if (attrKeyEl) attrKeyEl.value = '';
+                                                            if (attrValEl) attrValEl.value = '';
+                                                            alert('Variante creada con éxito');
+                                                        } catch (err) {
+                                                            alert('Error: ' + err.message);
+                                                        } finally {
+                                                            setIsSaving(false);
+                                                        }
+                                                    }}
+                                                    className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl disabled:opacity-50 mt-4"
+                                                >
+                                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Plus className="w-4 h-4 text-primary" />}
+                                                    Crear Variante Inteligente
+                                                </button>
                                             </div>
-                                            <div className="grid grid-cols-2 gap-3 mb-3">
-                                                <div>
-                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Referencia / SKU</label>
-                                                    <input type="text" placeholder="Ej: TIRA-LED-5M-ROJO" className="w-full border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-blue-500" id="new-variant-ref" />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Precio Oferta (€)</label>
-                                                    <input type="number" step="0.01" placeholder="Opcional" className="w-full border rounded-lg px-3 py-2 text-sm font-bold text-red-600 bg-red-50 focus:outline-none" id="new-variant-discount" />
-                                                </div>
-                                            </div>
-                                            <div className="mb-3">
-                                                <label className="block text-[9px] font-black text-gray-400 uppercase mb-1">Atributos de esta variante</label>
-                                                <div className="flex gap-2">
-                                                    <input list="attr-keys-variant" placeholder="Atributo" className="flex-1 text-[10px] font-bold uppercase p-2 border rounded" id="new-variant-attr-key" />
-                                                    <datalist id="attr-keys-variant">{Object.keys(PREDEFINED_ATTRIBUTES).map(k => <option key={k} value={k} />)}</datalist>
-                                                    <input list="attr-values-variant" placeholder="Valor" className="flex-1 text-[10px] font-bold uppercase p-2 border rounded" id="new-variant-attr-val" />
-                                                    <datalist id="attr-values-variant">{(PREDEFINED_ATTRIBUTES[''] || []).map(v => <option key={v} value={v} />)}</datalist>
-                                                </div>
-                                            </div>
-                                            <button
-                                                disabled={isSaving}
-                                                onClick={async () => {
-                                                    const priceEl = document.getElementById('new-variant-price');
-                                                    const stockEl = document.getElementById('new-variant-stock');
-                                                    const refEl = document.getElementById('new-variant-ref');
-                                                    const discountEl = document.getElementById('new-variant-discount');
-                                                    const attrKeyEl = document.getElementById('new-variant-attr-key');
-                                                    const attrValEl = document.getElementById('new-variant-attr-val');
-                                                    if (!priceEl?.value || !refEl?.value) return alert('Precio y Referencia son obligatorios');
-                                                    const payload = {
-                                                        name: formData.name,
-                                                        parent_id: editingId,
-                                                        price: parseFloat(priceEl.value),
-                                                        stock: parseInt(stockEl?.value || 0),
-                                                        reference: refEl.value,
-                                                        discount_price: discountEl?.value ? parseFloat(discountEl.value) : null,
-                                                        image_url: formData.image_url,
-                                                        category_id: formData.category_id,
-                                                        attributes: attrKeyEl?.value && attrValEl?.value ? { [attrKeyEl.value]: attrValEl.value } : {},
-                                                        slug: generateSlug(formData.name, refEl.value)
-                                                    };
-                                                    try {
-                                                        setIsSaving(true);
-                                                        const { data, error } = await supabase.from('products').insert([payload]).select().maybeSingle();
-                                                        if (error) throw error;
-                                                        setVariants(prev => [...prev, data]);
-                                                        if (priceEl) priceEl.value = '';
-                                                        if (stockEl) stockEl.value = '';
-                                                        if (refEl) refEl.value = '';
-                                                        if (discountEl) discountEl.value = '';
-                                                        if (attrKeyEl) attrKeyEl.value = '';
-                                                        if (attrValEl) attrValEl.value = '';
-                                                        alert('Variante creada con éxito');
-                                                    } catch (err) {
-                                                        alert('Error: ' + err.message);
-                                                    } finally {
-                                                        setIsSaving(false);
-                                                    }
-                                                }}
-                                                className="w-full bg-brand-carbon text-white h-14 rounded-2xl font-black uppercase italic tracking-widest hover:bg-primary transition-all flex items-center justify-center gap-3 shadow-xl disabled:opacity-50 mt-4"
-                                            >
-                                                {isSaving ? <Loader2 className="w-4 h-4 animate-spin text-primary" /> : <Plus className="w-4 h-4 text-primary" />}
-                                                Crear Variante Inteligente
-                                            </button>
-                                        </div>
 
-                                        <div className="space-y-3">
-                                            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Variantes Existentes ({variants.length})</h4>
-                                            {variants.map(variant => (
-                                                <div key={variant.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
-                                                    <div className="flex items-center justify-between p-4">
-                                                        <div className="flex items-center gap-4 flex-1">
-                                                            <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                                                                {variant.image_url ? <img src={variant.image_url} className="w-full h-full object-contain rounded-lg" /> : <Tag className="w-4 h-4 text-gray-300" />}
+                                            <div className="space-y-3">
+                                                <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Variantes Existentes ({variants.length})</h4>
+                                                {variants.map(variant => (
+                                                    <div key={variant.id} className="bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden">
+                                                        <div className="flex items-center justify-between p-4">
+                                                            <div className="flex items-center gap-4 flex-1">
+                                                                <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                                                                    {variant.image_url ? <img src={variant.image_url} className="w-full h-full object-contain rounded-lg" /> : <Tag className="w-4 h-4 text-gray-300" />}
+                                                                </div>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="font-mono text-xs text-gray-500 mb-1">{variant.reference}</p>
+                                                                    <div className="flex gap-1.5 flex-wrap">
+                                                                        {variant.attributes && Object.entries(variant.attributes).map(([k, v]) => (
+                                                                            <span key={k} className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[9px] font-bold uppercase rounded border border-purple-100">
+                                                                                {k}: {Array.isArray(v) ? v.join(', ') : v}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="font-mono text-xs text-gray-500 mb-1">{variant.reference}</p>
-                                                                <div className="flex gap-1.5 flex-wrap">
-                                                                    {variant.attributes && Object.entries(variant.attributes).map(([k, v]) => (
-                                                                        <span key={k} className="px-2 py-0.5 bg-purple-50 text-purple-600 text-[9px] font-bold uppercase rounded border border-purple-100">
-                                                                            {k}: {Array.isArray(v) ? v.join(', ') : v}
-                                                                        </span>
-                                                                    ))}
+                                                            <div className="flex items-center gap-5 flex-shrink-0">
+                                                                <div className="text-right">
+                                                                    <span className="block text-lg font-black text-brand-carbon">{parseFloat(variant.price).toFixed(2)}€</span>
+                                                                    {variant.discount_price && parseFloat(variant.discount_price) > 0 && (
+                                                                        <span className="block text-xs text-red-500 font-bold">Oferta: {parseFloat(variant.discount_price).toFixed(2)}€</span>
+                                                                    )}
+                                                                </div>
+                                                                <div className="text-center px-3 py-1 bg-gray-50 rounded-lg">
+                                                                    <span className="block text-[9px] font-black text-gray-400 uppercase">Stock</span>
+                                                                    <span className={`block text-sm font-black ${parseInt(variant.stock) > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{variant.stock || 0}</span>
+                                                                </div>
+                                                                <div className="flex gap-1">
+                                                                    <div className="flex flex-col gap-1 mr-2">
+                                                                        <button
+                                                                            onClick={() => moveVariant(variant.id, 'up')}
+                                                                            disabled={variants.indexOf(variant) === 0}
+                                                                            className="p-1 text-gray-400 hover:text-primary disabled:opacity-20 transition-colors"
+                                                                            title="Subir"
+                                                                        >
+                                                                            <ChevronUp className="w-4 h-4" />
+                                                                        </button>
+                                                                        <button
+                                                                            onClick={() => moveVariant(variant.id, 'down')}
+                                                                            disabled={variants.indexOf(variant) === variants.length - 1}
+                                                                            className="p-1 text-gray-400 hover:text-primary disabled:opacity-20 transition-colors"
+                                                                            title="Bajar"
+                                                                        >
+                                                                            <ChevronDown className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingId(variant.id);
+                                                                            setFormData({
+                                                                                name: variant.name,
+                                                                                reference: variant.reference || '',
+                                                                                price: variant.price,
+                                                                                stock: variant.stock || 0,
+                                                                                category_id: variant.category_id || '',
+                                                                                brand_id: variant.brand_id || '',
+                                                                                room_ids: variant.room_ids || [],
+                                                                                profession_ids: variant.profession_ids || [],
+                                                                                image_url: variant.image_url || '',
+                                                                                description: variant.description || '',
+                                                                                discount_price: variant.discount_price || '',
+                                                                                partner_price: variant.partner_price || '',
+                                                                                professional_price: variant.professional_price || '',
+                                                                                volume_pricing: variant.volume_pricing || { individual: [], profesional: [], partner: [] },
+                                                                                parent_id: variant.parent_id,
+                                                                                attributes: variant.attributes || {},
+                                                                                extra_images: variant.extra_images || [],
+                                                                                related_product_ids: variant.related_product_ids || [],
+                                                                                long_description: variant.long_description || '',
+                                                                                original_price: variant.original_price || '',
+                                                                                badge_tags: variant.badge_tags || [],
+                                                                                badge_ids: [],
+                                                                                is_active: variant.is_active !== false
+                                                                            });
+                                                                            setActiveTab('general');
+                                                                        }}
+                                                                        className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
+                                                                        title="Editar variante completa"
+                                                                    >
+                                                                        <Edit2 className="w-4 h-4" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            deleteProduct(variant.id);
+                                                                            setVariants(prev => prev.filter(v => v.id !== variant.id));
+                                                                        }}
+                                                                        className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
+                                                                        title="Eliminar variante"
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-5 flex-shrink-0">
-                                                            <div className="text-right">
-                                                                <span className="block text-lg font-black text-brand-carbon">{parseFloat(variant.price).toFixed(2)}€</span>
-                                                                {variant.discount_price && parseFloat(variant.discount_price) > 0 && (
-                                                                    <span className="block text-xs text-red-500 font-bold">Oferta: {parseFloat(variant.discount_price).toFixed(2)}€</span>
-                                                                )}
-                                                            </div>
-                                                            <div className="text-center px-3 py-1 bg-gray-50 rounded-lg">
-                                                                <span className="block text-[9px] font-black text-gray-400 uppercase">Stock</span>
-                                                                <span className={`block text-sm font-black ${parseInt(variant.stock) > 0 ? 'text-emerald-600' : 'text-red-500'}`}>{variant.stock || 0}</span>
-                                                            </div>
-                                                            <div className="flex gap-1">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        setEditingId(variant.id);
-                                                                        setFormData({
-                                                                            name: variant.name,
-                                                                            reference: variant.reference || '',
-                                                                            price: variant.price,
-                                                                            stock: variant.stock || 0,
-                                                                            category_id: variant.category_id || '',
-                                                                            brand_id: variant.brand_id || '',
-                                                                            room_ids: variant.room_ids || [],
-                                                                            profession_ids: variant.profession_ids || [],
-                                                                            image_url: variant.image_url || '',
-                                                                            description: variant.description || '',
-                                                                            discount_price: variant.discount_price || '',
-                                                                            partner_price: variant.partner_price || '',
-                                                                            parent_id: variant.parent_id,
-                                                                            attributes: variant.attributes || {},
-                                                                            extra_images: variant.extra_images || []
-                                                                        });
-                                                                        setActiveTab('general');
-                                                                    }}
-                                                                    className="p-2 text-gray-400 hover:text-blue-600 bg-gray-50 hover:bg-blue-50 rounded-lg transition-colors"
-                                                                    title="Editar variante completa"
-                                                                >
-                                                                    <Edit2 className="w-4 h-4" />
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        deleteProduct(variant.id);
-                                                                        setVariants(prev => prev.filter(v => v.id !== variant.id));
-                                                                    }}
-                                                                    className="p-2 text-gray-400 hover:text-red-600 bg-gray-50 hover:bg-red-50 rounded-lg transition-colors"
-                                                                    title="Eliminar variante"
-                                                                >
-                                                                    <Trash2 className="w-4 h-4" />
-                                                                </button>
-                                                            </div>
-                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                             )}
                         </div>

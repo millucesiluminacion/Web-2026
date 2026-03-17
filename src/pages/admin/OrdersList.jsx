@@ -335,6 +335,27 @@ export default function OrdersList() {
                 .eq('id', id);
 
             if (error) throw error;
+
+            // Trigger Status Update Email
+            try {
+                await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: currentOrder.customer_email,
+                        templateKey: 'order_status_update',
+                        variables: {
+                            name: currentOrder.customer_name || 'Cliente',
+                            order_id: id.slice(0, 8).toUpperCase(),
+                            status: newStatus,
+                            site_name: 'Mil Luces Boutique'
+                        }
+                    })
+                });
+            } catch (emailErr) {
+                console.error('Error triggering status update email:', emailErr);
+            }
+
             setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
             if (selectedOrder?.id === id) {
                 setSelectedOrder({ ...selectedOrder, status: newStatus });

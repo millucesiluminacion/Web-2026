@@ -35,6 +35,25 @@ export default function RegisterPage({ isPro = false }) {
             });
 
             if (signUpError) throw signUpError;
+
+            // Trigger Welcome Email
+            try {
+                await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        to: email,
+                        templateKey: 'welcome',
+                        variables: {
+                            name: fullName,
+                            site_name: 'Mil Luces Boutique'
+                        }
+                    })
+                });
+            } catch (emailErr) {
+                console.error('Error triggering welcome email:', emailErr);
+            }
+
             alert('Registro exitoso. Revisa tu email para confirmar o inicia sesión si ya está activa.');
             navigate('/login');
         } catch (err) {

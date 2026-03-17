@@ -42,10 +42,32 @@ export function CartProvider({ children }) {
 
     const clearCart = () => setCart([]);
 
+    const [shippingConfig, setShippingConfig] = useState({ base_cost: 5.95, free_shipping_threshold: 150 });
+
+    useEffect(() => {
+        const fetchShippingConfig = async () => {
+            const { data } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'shipping_config')
+                .maybeSingle();
+
+            if (data?.value) {
+                setShippingConfig(data.value);
+            }
+        };
+        fetchShippingConfig();
+    }, []);
+
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-    const totalPrice = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+
+    // Shipping logic
+    const shippingCost = subtotal >= shippingConfig.free_shipping_threshold ? 0 : shippingConfig.base_cost;
+    const totalPrice = subtotal + shippingCost;
+
     const totalOriginal = cart.reduce((acc, item) => acc + ((item.original_price || item.price) * item.quantity), 0);
-    const totalSavings = totalOriginal - totalPrice;
+    const totalSavings = totalOriginal - subtotal;
 
     return (
         <CartContext.Provider value={{
@@ -55,7 +77,10 @@ export function CartProvider({ children }) {
             updateQuantity,
             clearCart,
             totalItems,
+            subtotal,
             totalPrice,
+            shippingCost,
+            shippingConfig,
             totalOriginal,
             totalSavings,
             discountPercent: profile?.user_type === 'profesional' ? discountPercent : 0

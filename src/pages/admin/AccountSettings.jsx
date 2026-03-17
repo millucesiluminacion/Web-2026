@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
 import {
     Save, User, Lock, Bell, Mail, Shield, Loader2, CheckCircle,
-    Server, Send, Globe, Image as ImageIcon, Briefcase, Info, AlertTriangle, Key
+    Server, Send, Globe, Image as ImageIcon, Briefcase, Info, AlertTriangle, Key,
+    Truck, FileText, Settings, Sliders
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function AccountSettings() {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState('perfil'); // 'perfil', 'smtp', 'marca', 'estado'
+    const [activeTab, setActiveTab] = useState('perfil'); // 'perfil', 'smtp', 'marca', 'envios', 'emails', 'estado'
     const [healthData, setHealthData] = useState(null);
     const [isHealthLoading, setIsHealthLoading] = useState(false);
 
@@ -32,6 +33,18 @@ export default function AccountSettings() {
         site_name: 'Mil Luces',
         contact_email: '',
         support_phone: ''
+    });
+
+    const [shippingConfig, setShippingConfig] = useState({
+        base_cost: 5.95,
+        free_shipping_threshold: 150,
+        enabled: true
+    });
+
+    const [emailTemplates, setEmailTemplates] = useState({
+        welcome: { subject: 'Bienvenido a Mil Luces', body: 'Hola {name}, gracias por registrarte...' },
+        order_confirmation: { subject: 'Confirmación de Pedido #{order_id}', body: 'Hola {name}, hemos recibido tu pedido...' },
+        order_status: { subject: 'Tu pedido #{order_id} ha cambiado de estado', body: 'Hola {name}, tu pedido ahora está: {status}' }
     });
 
     const [testEmail, setTestEmail] = useState('');
@@ -97,7 +110,7 @@ export default function AccountSettings() {
             const { data: settings } = await supabase
                 .from('app_settings')
                 .select('*')
-                .in('key', ['smtp_config', 'site_branding']);
+                .in('key', ['smtp_config', 'site_branding', 'shipping_config', 'email_templates']);
 
             if (settings) {
                 const smtp = settings.find(s => s.key === 'smtp_config');
@@ -105,6 +118,12 @@ export default function AccountSettings() {
 
                 const brand = settings.find(s => s.key === 'site_branding');
                 if (brand) setBranding(brand.value);
+
+                const shipping = settings.find(s => s.key === 'shipping_config');
+                if (shipping) setShippingConfig(shipping.value);
+
+                const emails = settings.find(s => s.key === 'email_templates');
+                if (emails) setEmailTemplates(emails.value);
             }
         } catch (err) {
             console.error("Error fetching settings:", err);
@@ -134,7 +153,25 @@ export default function AccountSettings() {
                     description: 'Configuración visual y de contacto del sitio'
                 }, { onConflict: 'key' });
 
-            if (smtpErr || brandErr) throw new Error("Error al guardar configuraciones");
+            // Save Shipping
+            const { error: shipErr } = await supabase
+                .from('app_settings')
+                .upsert({
+                    key: 'shipping_config',
+                    value: shippingConfig,
+                    description: 'Costes y reglas de envío'
+                }, { onConflict: 'key' });
+
+            // Save Emails
+            const { error: mailErr } = await supabase
+                .from('app_settings')
+                .upsert({
+                    key: 'email_templates',
+                    value: emailTemplates,
+                    description: 'Plantillas de notificaciones por correo'
+                }, { onConflict: 'key' });
+
+            if (smtpErr || brandErr || shipErr || mailErr) throw new Error("Error al guardar configuraciones");
 
             alert('Configuración profesional guardada exitosamente');
         } catch (err) {
@@ -225,6 +262,8 @@ export default function AccountSettings() {
                     { id: 'perfil', label: 'Mi Perfil', icon: User },
                     { id: 'smtp', label: 'Correo SMTP', icon: Server },
                     { id: 'marca', label: 'Marca / Contacto', icon: Globe },
+                    { id: 'envios', label: 'Envíos', icon: Truck },
+                    { id: 'emails', label: 'Emails / Avisos', icon: Mail },
                     { id: 'estado', label: 'Estado del Sistema', icon: Shield }
                 ].map(tab => (
                     <button
@@ -376,7 +415,7 @@ export default function AccountSettings() {
                                         type="text"
                                         value={branding.site_name}
                                         onChange={e => setBranding({ ...branding, site_name: e.target.value })}
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all font-outfit"
                                     />
                                 </div>
                                 <div className="space-y-3">
@@ -386,7 +425,7 @@ export default function AccountSettings() {
                                         value={branding.contact_email}
                                         onChange={e => setBranding({ ...branding, contact_email: e.target.value })}
                                         placeholder="contacto@mi-empresa.com"
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all font-outfit"
                                     />
                                 </div>
                                 <div className="space-y-3">
@@ -395,9 +434,109 @@ export default function AccountSettings() {
                                         type="text"
                                         value={branding.support_phone}
                                         onChange={e => setBranding({ ...branding, support_phone: e.target.value })}
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all font-outfit"
                                     />
                                 </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: ENVÍOS */}
+                    {activeTab === 'envios' && (
+                        <div className="bg-white rounded-[2.5rem] shadow-luxury border border-gray-100 p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-10">
+                            <div className="flex items-start gap-6 bg-emerald-50/50 p-8 rounded-3xl border border-emerald-100/50 text-emerald-900">
+                                <Truck className="w-8 h-8 text-emerald-600 flex-shrink-0" />
+                                <div>
+                                    <h4 className="text-sm font-black uppercase italic italic tracking-tight mb-2">Logística & Tarifas de Envío</h4>
+                                    <p className="text-xs font-bold leading-relaxed opacity-70">
+                                        Configura el coste base de envío y el umbral para envíos gratuitos en toda la boutique.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Coste Envío Estándar (€)</label>
+                                    <div className="relative">
+                                        <Truck className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={shippingConfig.base_cost}
+                                            onChange={e => setShippingConfig({ ...shippingConfig, base_cost: parseFloat(e.target.value) })}
+                                            className="w-full bg-gray-50/50 border-none rounded-2xl pl-16 pr-6 py-5 text-xl font-black focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
+                                        />
+                                    </div>
+                                    <p className="text-[9px] text-gray-400 font-bold uppercase italic ml-2">Este coste se sumará si el pedido no llega al mínimo.</p>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Envío Gratis a partir de (€)</label>
+                                    <div className="relative">
+                                        <CheckCircle className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            value={shippingConfig.free_shipping_threshold}
+                                            onChange={e => setShippingConfig({ ...shippingConfig, free_shipping_threshold: parseFloat(e.target.value) })}
+                                            className="w-full bg-gray-50/50 border-none rounded-2xl pl-16 pr-6 py-5 text-xl font-black text-emerald-600 focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
+                                        />
+                                    </div>
+                                    <p className="text-[9px] text-emerald-600/60 font-black uppercase italic ml-2">Incentiva compras mayores con este beneficio.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* TAB: EMAILS */}
+                    {activeTab === 'emails' && (
+                        <div className="bg-white rounded-[2.5rem] shadow-luxury border border-gray-100 p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
+                            <div className="flex items-center gap-4 mb-2">
+                                <Mail className="w-6 h-6 text-primary" />
+                                <h3 className="text-xl font-black text-brand-carbon uppercase italic">Plantillas de Notificación</h3>
+                            </div>
+
+                            <div className="space-y-8">
+                                {Object.entries(emailTemplates).map(([key, template]) => (
+                                    <div key={key} className="p-8 bg-gray-50/50 rounded-3xl border border-gray-100 hover:border-primary/20 transition-all group">
+                                        <div className="flex items-center justify-between mb-6">
+                                            <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-carbon">
+                                                {key === 'welcome' ? '🎉 Registro de Usuario' :
+                                                    key === 'order_confirmation' ? '📦 Nuevo Pedido Recibido' :
+                                                        '🔄 Cambio de Estado de Pedido'}
+                                            </h4>
+                                            <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[8px] font-black uppercase text-gray-400 group-hover:text-primary transition-colors">Editable</div>
+                                        </div>
+
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Asunto del Email</label>
+                                                <input
+                                                    type="text"
+                                                    value={template.subject}
+                                                    onChange={e => setEmailTemplates({
+                                                        ...emailTemplates,
+                                                        [key]: { ...template, subject: e.target.value }
+                                                    })}
+                                                    className="w-full bg-white border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary/10 transition-all"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Cuerpo del Mensaje (Markdown/HTML)</label>
+                                                <textarea
+                                                    value={template.body}
+                                                    onChange={e => setEmailTemplates({
+                                                        ...emailTemplates,
+                                                        [key]: { ...template, body: e.target.value }
+                                                    })}
+                                                    rows={4}
+                                                    className="w-full bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-medium focus:ring-2 focus:ring-primary/10 transition-all resize-none"
+                                                />
+                                                <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tight">Variables disponibles: &#123;name&#125;, &#123;order_id&#125;, &#123;status&#125;, &#123;site_name&#125;</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     )}
