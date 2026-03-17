@@ -42,6 +42,7 @@ import SEOAdmin from './pages/admin/SEOAdmin';
 import TrustBadgesAdmin from './pages/admin/TrustBadgesAdmin';
 import PagesAdmin from './pages/admin/PagesAdmin';
 import CMSPage from './pages/CMSPage';
+import Checkout from './pages/Checkout';
 import CookieBanner from './components/common/CookieBanner';
 import SEOManager from './components/common/SEOManager';
 
@@ -62,6 +63,7 @@ function App() {
               <Route path="search" element={<ProductListing />} />
               <Route path="product/:slug" element={<ProductDetail />} />
               <Route path="cart" element={<Cart />} />
+              <Route path="checkout" element={<Checkout />} />
 
               <Route path="login" element={<LoginPage />} />
               <Route path="register" element={<RegisterPage />} />
