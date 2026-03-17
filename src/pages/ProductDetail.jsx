@@ -396,7 +396,6 @@ export default function ProductDetail() {
             selectedOptions: selectedAttributes,
             cartLabel: selectedLabel || null
         }, qty);
-        alert('Producto añadido al carrito');
     };
 
     // Derived values for display

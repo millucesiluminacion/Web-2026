@@ -20,6 +20,8 @@ export function CartProvider({ children }) {
         localStorage.setItem('cart', JSON.stringify(cart));
     }, [cart]);
 
+    const [isSideCartOpen, setIsSideCartOpen] = useState(false);
+
     const addToCart = (product, quantity = 1) => {
         setCart(prev => {
             const existing = prev.find(item => item.id === product.id);
@@ -30,6 +32,7 @@ export function CartProvider({ children }) {
             }
             return [...prev, { ...product, quantity }];
         });
+        setIsSideCartOpen(true);
     };
 
     const removeFromCart = (id) => {
@@ -109,6 +112,8 @@ export function CartProvider({ children }) {
             currentShipping,
             totalOriginal,
             totalSavings,
+            isSideCartOpen,
+            setIsSideCartOpen,
             discountPercent: profile?.user_type === 'profesional' ? discountPercent : 0
         }}>
             {children}
