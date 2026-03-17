@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Package, ShoppingCart, Users, TrendingUp, ArrowUpRight, Loader2, Database, AlertCircle } from 'lucide-react';
+import { Package, ShoppingCart, Users, TrendingUp, ArrowUpRight, Loader2, Database, AlertCircle, FileText } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { seedDatabase } from '../../lib/seeder';
+import { seedCMS } from '../../lib/seedCMS';
 
 export default function Dashboard() {
     const [stats, setStats] = useState({
@@ -117,6 +118,21 @@ export default function Dashboard() {
                 fetchStats();
                 window.location.reload();
             }
+        } catch (err) {
+            alert('Error: ' + err.message);
+        } finally {
+            setIsSeeding(false);
+        }
+    };
+
+    const handleSeedCMS = async () => {
+        if (!confirm('¿Quieres sincronizar las páginas legales y de contacto del CMS? Esto creará borradores para Aviso Legal, Privacidad, Envíos, etc.')) return;
+
+        try {
+            setIsSeeding(true);
+            await seedCMS();
+            alert('¡Páginas CMS sincronizadas!');
+            window.location.reload();
         } catch (err) {
             alert('Error: ' + err.message);
         } finally {
@@ -249,7 +265,16 @@ export default function Dashboard() {
                         className="bg-brand-carbon text-white h-14 px-8 rounded-2xl font-black uppercase italic text-[10px] tracking-widest hover:bg-primary transition-all flex items-center gap-4 shadow-xl shadow-brand-carbon/10 disabled:opacity-50 group font-outfit"
                     >
                         {isSeeding ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <Database className="w-4 h-4 text-primary group-hover:scale-110 transition-transform" />}
-                        Sincronizar
+                        Sincronizar Base
+                    </button>
+
+                    <button
+                        onClick={handleSeedCMS}
+                        disabled={isSeeding}
+                        className="bg-white text-brand-carbon h-14 px-8 rounded-2xl font-black uppercase italic text-[10px] tracking-widest hover:bg-gray-50 transition-all flex items-center gap-4 shadow-xl shadow-gray-100/10 border border-gray-100 disabled:opacity-50 group font-outfit"
+                    >
+                        {isSeeding ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : <FileText className="w-4 h-4 text-primary group-hover:rotate-12 transition-transform" />}
+                        Sincronizar CMS
                     </button>
                 </div>
             </div>

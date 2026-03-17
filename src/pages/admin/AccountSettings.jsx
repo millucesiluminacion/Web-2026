@@ -36,10 +36,36 @@ export default function AccountSettings() {
     });
 
     const [shippingConfig, setShippingConfig] = useState({
-        base_cost: 5.95,
-        free_shipping_threshold: 150,
-        enabled: true
+        tiers: {
+            b2c: {
+                label: 'General (B2C)',
+                zones: {
+                    peninsula: { base_cost: 5.95, free_shipping_threshold: 150, delivery_time: '48-72h' },
+                    islands: { base_cost: 15.00, free_shipping_threshold: 300, delivery_time: '3-5 días' },
+                    international: { base_cost: 25.00, free_shipping_threshold: 500, delivery_time: '7-10 días' }
+                }
+            },
+            b2b: {
+                label: 'Profesional (B2B)',
+                zones: {
+                    peninsula: { base_cost: 0, free_shipping_threshold: 100, delivery_time: '48-72h' },
+                    islands: { base_cost: 10.00, free_shipping_threshold: 250, delivery_time: '3-5 días' },
+                    international: { base_cost: 20.00, free_shipping_threshold: 400, delivery_time: '7-10 días' }
+                }
+            },
+            socio: {
+                label: 'Socio / Partner',
+                zones: {
+                    peninsula: { base_cost: 0, free_shipping_threshold: 0, delivery_time: '24h' },
+                    islands: { base_cost: 5.00, free_shipping_threshold: 150, delivery_time: '48-72h' },
+                    international: { base_cost: 15.00, free_shipping_threshold: 300, delivery_time: '5-7 días' }
+                }
+            }
+        }
     });
+
+    const [selectedTier, setSelectedTier] = useState('b2c');
+    const [selectedZone, setSelectedZone] = useState('peninsula');
 
     const [emailTemplates, setEmailTemplates] = useState({
         welcome: { subject: 'Bienvenido a Mil Luces', body: 'Hola {name}, gracias por registrarte...' },
@@ -447,42 +473,106 @@ export default function AccountSettings() {
                             <div className="flex items-start gap-6 bg-emerald-50/50 p-8 rounded-3xl border border-emerald-100/50 text-emerald-900">
                                 <Truck className="w-8 h-8 text-emerald-600 flex-shrink-0" />
                                 <div>
-                                    <h4 className="text-sm font-black uppercase italic italic tracking-tight mb-2">Logística & Tarifas de Envío</h4>
+                                    <h4 className="text-sm font-black uppercase italic tracking-tight mb-2">Matriz de Logística Avanzada</h4>
                                     <p className="text-xs font-bold leading-relaxed opacity-70">
-                                        Configura el coste base de envío y el umbral para envíos gratuitos en toda la boutique.
+                                        Gestiona costes, umbrales y plazos personalizados por tipo de cliente y zona geográfica.
                                     </p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                            {/* Matrix Selectors */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
                                 <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Coste Envío Estándar (€)</label>
-                                    <div className="relative">
-                                        <Truck className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-300" />
-                                        <input
-                                            type="number"
-                                            step="0.01"
-                                            value={shippingConfig.base_cost}
-                                            onChange={e => setShippingConfig({ ...shippingConfig, base_cost: parseFloat(e.target.value) })}
-                                            className="w-full bg-gray-50/50 border-none rounded-2xl pl-16 pr-6 py-5 text-xl font-black focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
-                                        />
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">1. Seleccionar Nivel de Cliente</label>
+                                    <div className="flex gap-2 p-1 bg-gray-50 rounded-2xl border border-gray-100">
+                                        {Object.entries(shippingConfig.tiers).map(([key, tier]) => (
+                                            <button
+                                                key={key}
+                                                onClick={() => setSelectedTier(key)}
+                                                className={`flex-1 py-3 rounded-xl font-black uppercase italic text-[9px] tracking-widest transition-all ${selectedTier === key ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                {tier.label}
+                                            </button>
+                                        ))}
                                     </div>
-                                    <p className="text-[9px] text-gray-400 font-bold uppercase italic ml-2">Este coste se sumará si el pedido no llega al mínimo.</p>
                                 </div>
 
                                 <div className="space-y-4">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Envío Gratis a partir de (€)</label>
-                                    <div className="relative">
-                                        <CheckCircle className="absolute left-6 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500" />
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">2. Seleccionar Zona Geográfica</label>
+                                    <div className="flex gap-2 p-1 bg-gray-50 rounded-2xl border border-gray-100">
+                                        {[
+                                            { id: 'peninsula', label: 'Península' },
+                                            { id: 'islands', label: 'Islas' },
+                                            { id: 'international', label: 'Internacional' }
+                                        ].map(zone => (
+                                            <button
+                                                key={zone.id}
+                                                onClick={() => setSelectedZone(zone.id)}
+                                                className={`flex-1 py-3 rounded-xl font-black uppercase italic text-[9px] tracking-widest transition-all ${selectedZone === zone.id ? 'bg-white text-emerald-600 shadow-sm border border-emerald-100' : 'text-gray-400 hover:text-gray-600'}`}
+                                            >
+                                                {zone.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Active Configuration Editor */}
+                            <div className="p-8 bg-gray-50/30 rounded-[2.5rem] border border-gray-100 space-y-10 animate-in fade-in duration-300">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                        <h5 className="text-[10px] font-black uppercase tracking-[.3em] text-brand-carbon italic">
+                                            Editando: {shippingConfig.tiers[selectedTier].label} &raquo; {selectedZone === 'peninsula' ? 'Península' : selectedZone === 'islands' ? 'Islas' : 'Internacional'}
+                                        </h5>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Coste Base (€)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            value={shippingConfig.tiers[selectedTier].zones[selectedZone].base_cost}
+                                            onChange={e => {
+                                                const newConfig = { ...shippingConfig };
+                                                newConfig.tiers[selectedTier].zones[selectedZone].base_cost = parseFloat(e.target.value);
+                                                setShippingConfig(newConfig);
+                                            }}
+                                            className="w-full bg-white border border-gray-100 rounded-2xl px-6 py-4 text-lg font-black focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Envío Gratis &ge; (€)</label>
                                         <input
                                             type="number"
                                             step="1"
-                                            value={shippingConfig.free_shipping_threshold}
-                                            onChange={e => setShippingConfig({ ...shippingConfig, free_shipping_threshold: parseFloat(e.target.value) })}
-                                            className="w-full bg-gray-50/50 border-none rounded-2xl pl-16 pr-6 py-5 text-xl font-black text-emerald-600 focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
+                                            value={shippingConfig.tiers[selectedTier].zones[selectedZone].free_shipping_threshold}
+                                            onChange={e => {
+                                                const newConfig = { ...shippingConfig };
+                                                newConfig.tiers[selectedTier].zones[selectedZone].free_shipping_threshold = parseFloat(e.target.value);
+                                                setShippingConfig(newConfig);
+                                            }}
+                                            className="w-full bg-white border border-gray-100 rounded-2xl px-6 py-4 text-lg font-black text-emerald-600 focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
                                         />
                                     </div>
-                                    <p className="text-[9px] text-emerald-600/60 font-black uppercase italic ml-2">Incentiva compras mayores con este beneficio.</p>
+
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Plazo de Entrega</label>
+                                        <input
+                                            type="text"
+                                            value={shippingConfig.tiers[selectedTier].zones[selectedZone].delivery_time}
+                                            onChange={e => {
+                                                const newConfig = { ...shippingConfig };
+                                                newConfig.tiers[selectedTier].zones[selectedZone].delivery_time = e.target.value;
+                                                setShippingConfig(newConfig);
+                                            }}
+                                            placeholder="Ej: 48-72h"
+                                            className="w-full bg-white border border-gray-100 rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-emerald-500/10 transition-all font-outfit"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>

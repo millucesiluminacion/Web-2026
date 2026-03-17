@@ -15,6 +15,7 @@ import BlogPage from './pages/BlogPage';
 import BlogPostDetail from './pages/BlogPostDetail';
 import ProyectosPage from './pages/ProyectosPage';
 import ProfessionalsPage from './pages/ProfessionalsPage';
+import ContactPage from './pages/ContactPage';
 import { CartProvider } from './context/CartContext';
 import CategoriesList from './pages/admin/CategoriesList';
 import OrdersList from './pages/admin/OrdersList';
@@ -39,6 +40,9 @@ import ProfessionsAdmin from './pages/admin/ProfessionsAdmin';
 import CategoriesAdmin from './pages/admin/CategoriesAdmin';
 import SEOAdmin from './pages/admin/SEOAdmin';
 import TrustBadgesAdmin from './pages/admin/TrustBadgesAdmin';
+import PagesAdmin from './pages/admin/PagesAdmin';
+import CMSPage from './pages/CMSPage';
+import CookieBanner from './components/common/CookieBanner';
 import SEOManager from './components/common/SEOManager';
 
 import { AuthProvider } from './context/AuthContext';
@@ -51,6 +55,7 @@ function App() {
         <BrowserRouter>
           <ScrollToTop />
           <SEOManager />
+          <CookieBanner />
           <Routes>
             <Route path="/" element={<MainLayout />}>
               <Route index element={<HomePage />} />
@@ -67,6 +72,8 @@ function App() {
               <Route path="blog/:slug" element={<BlogPostDetail />} />
               <Route path="proyectos" element={<ProyectosPage />} />
               <Route path="profesionales" element={<ProfessionalsPage />} />
+              <Route path="contacto" element={<ContactPage />} />
+              <Route path="p/:slug" element={<CMSPage />} />
             </Route>
 
             <Route path="/admin" element={<AdminLayout />}>
@@ -88,6 +95,7 @@ function App() {
               <Route path="professionals" element={<ProfessionalsAdmin />} />
               <Route path="professions" element={<ProfessionsAdmin />} />
               <Route path="seo" element={<SEOAdmin />} />
+              <Route path="pages" element={<PagesAdmin />} />
               <Route path="trust-badges" element={<TrustBadgesAdmin />} />
               <Route path="reviews" element={<ReviewsAdmin />} />
               <Route path="badges" element={<BadgesAdmin />} />

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase as supabaseClient } from '../lib/supabaseClient';
 
 const CartContext = createContext();
 
@@ -42,11 +43,21 @@ export function CartProvider({ children }) {
 
     const clearCart = () => setCart([]);
 
-    const [shippingConfig, setShippingConfig] = useState({ base_cost: 5.95, free_shipping_threshold: 150 });
+    const [shippingConfig, setShippingConfig] = useState({
+        tiers: {
+            b2c: {
+                zones: {
+                    peninsula: { base_cost: 5.95, free_shipping_threshold: 150, delivery_time: '48-72h' }
+                }
+            }
+        }
+    });
+
+    const [shippingZone, setShippingZone] = useState('peninsula');
 
     useEffect(() => {
         const fetchShippingConfig = async () => {
-            const { data } = await supabase
+            const { data } = await supabaseClient
                 .from('app_settings')
                 .select('value')
                 .eq('key', 'shipping_config')
@@ -62,8 +73,20 @@ export function CartProvider({ children }) {
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
     const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
 
-    // Shipping logic
-    const shippingCost = subtotal >= shippingConfig.free_shipping_threshold ? 0 : shippingConfig.base_cost;
+    // Dynamic Shipping Logic
+    const getShippingDetails = () => {
+        let tier = 'b2c';
+        if (profile?.is_partner) tier = 'socio';
+        else if (profile?.user_type === 'profesional') tier = 'b2b';
+
+        const tierConfig = shippingConfig.tiers?.[tier] || shippingConfig.tiers?.['b2c'];
+        const zoneConfig = tierConfig?.zones?.[shippingZone] || tierConfig?.zones?.['peninsula'];
+
+        return zoneConfig || { base_cost: 5.95, free_shipping_threshold: 150, delivery_time: '48-72h' };
+    };
+
+    const currentShipping = getShippingDetails();
+    const shippingCost = subtotal >= currentShipping.free_shipping_threshold ? 0 : currentShipping.base_cost;
     const totalPrice = subtotal + shippingCost;
 
     const totalOriginal = cart.reduce((acc, item) => acc + ((item.original_price || item.price) * item.quantity), 0);
@@ -81,6 +104,9 @@ export function CartProvider({ children }) {
             totalPrice,
             shippingCost,
             shippingConfig,
+            shippingZone,
+            setShippingZone,
+            currentShipping,
             totalOriginal,
             totalSavings,
             discountPercent: profile?.user_type === 'profesional' ? discountPercent : 0
