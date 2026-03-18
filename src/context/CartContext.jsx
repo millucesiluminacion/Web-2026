@@ -66,7 +66,7 @@ export function CartProvider({ children }) {
                 .eq('key', 'shipping_config')
                 .maybeSingle();
 
-            if (data?.value) {
+            if (data?.value && data.value.tiers) {
                 setShippingConfig(data.value);
             }
         };
@@ -78,19 +78,44 @@ export function CartProvider({ children }) {
 
     // Dynamic Shipping Logic
     const getShippingDetails = () => {
-        let tier = 'b2c';
-        if (profile?.is_partner) tier = 'socio';
-        else if (profile?.user_type === 'profesional') tier = 'b2b';
+        let tier = profile?.user_type === 'profesional' ? 'b2b' : (profile?.is_partner ? 'socio' : 'b2c');
 
         const tierConfig = shippingConfig.tiers?.[tier] || shippingConfig.tiers?.['b2c'];
-        const zoneConfig = tierConfig?.zones?.[shippingZone] || tierConfig?.zones?.['peninsula'];
 
-        return zoneConfig || { base_cost: 5.95, free_shipping_threshold: 150, delivery_time: '48-72h' };
+        // Define robust hardcoded fallbacks per zone
+        const zoneDefaults = {
+            peninsula: { base_cost: 5.95, free_shipping_threshold: 150, delivery_time: '48-72h' },
+            islands: { base_cost: 15.00, free_shipping_threshold: 300, delivery_time: '3-5 días' },
+            international: { base_cost: 25.00, free_shipping_threshold: 500, delivery_time: '7-10 días' }
+        };
+
+        const zoneConfig = tierConfig?.zones?.[shippingZone] || tierConfig?.zones?.['peninsula'] || zoneDefaults[shippingZone] || zoneDefaults['peninsula'];
+
+        // Ensure we always have numbers
+        const base_cost = zoneConfig?.base_cost !== undefined ? Number(zoneConfig.base_cost) : zoneDefaults[shippingZone]?.base_cost || 5.95;
+        const free_shipping_threshold = zoneConfig?.free_shipping_threshold !== undefined ? Number(zoneConfig.free_shipping_threshold) : zoneDefaults[shippingZone]?.free_shipping_threshold || 150;
+        const delivery_time = zoneConfig?.delivery_time || zoneDefaults[shippingZone]?.delivery_time || '48-72h';
+
+        return { base_cost, free_shipping_threshold, delivery_time };
     };
 
     const currentShipping = getShippingDetails();
-    const shippingCost = subtotal >= currentShipping.free_shipping_threshold ? 0 : currentShipping.base_cost;
-    const totalPrice = subtotal + shippingCost;
+
+    // Calculate shipping cost
+    // It is FREE only if:
+    // 1. subtotal >= free_shipping_threshold (and threshold is > 0)
+    // 2. OR threshold is 0 AND subtotal > 0 (special case for Socio/Peninsula)
+    let finalShippingCost = currentShipping.base_cost;
+
+    if (subtotal > 0) {
+        if (currentShipping.free_shipping_threshold === 0) {
+            finalShippingCost = 0;
+        } else if (subtotal >= currentShipping.free_shipping_threshold) {
+            finalShippingCost = 0;
+        }
+    }
+
+    const totalPrice = subtotal + finalShippingCost;
 
     const totalOriginal = cart.reduce((acc, item) => acc + ((item.original_price || item.price) * item.quantity), 0);
     const totalSavings = totalOriginal - subtotal;
@@ -105,7 +130,7 @@ export function CartProvider({ children }) {
             totalItems,
             subtotal,
             totalPrice,
-            shippingCost,
+            shippingCost: finalShippingCost,
             shippingConfig,
             shippingZone,
             setShippingZone,

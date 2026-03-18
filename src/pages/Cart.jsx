@@ -38,6 +38,7 @@ export default function Cart() {
         address: '',
         city: '',
         zip: '',
+        country: 'España',
         notes: '',
         paymentMethod: ''
     });
@@ -90,6 +91,28 @@ export default function Cart() {
         }
         loadPaymentMethods();
     }, []);
+
+    const { shippingZone, setShippingZone, currentShipping } = useCart();
+
+    // Detección de Zona de Envío automática
+    useEffect(() => {
+        const detectZone = () => {
+            if (formData.country !== 'España') {
+                if (shippingZone !== 'international') setShippingZone('international');
+                return;
+            }
+
+            const zipPrefix = formData.zip.substring(0, 2);
+            const islandPrefixes = ['07', '35', '38', '51', '52'];
+
+            if (islandPrefixes.includes(zipPrefix)) {
+                if (shippingZone !== 'islands') setShippingZone('islands');
+            } else if (formData.zip.length >= 2) {
+                if (shippingZone !== 'peninsula') setShippingZone('peninsula');
+            }
+        };
+        detectZone();
+    }, [formData.zip, formData.country, setShippingZone, shippingZone]);
 
     const handleChange = (e) => {
         setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
@@ -355,6 +378,20 @@ export default function Cart() {
                                     <div><label className={LABEL_CLASS}>Nombre Completo *</label><input required name="name" value={formData.name} onChange={handleChange} type="text" placeholder="Nombre & Apellidos" className={INPUT_CLASS} /></div>
                                     <div><label className={LABEL_CLASS}>Email de Contacto *</label><input required name="email" value={formData.email} onChange={handleChange} type="email" placeholder="hola@milluces.com" className={INPUT_CLASS} /></div>
                                     <div><label className={LABEL_CLASS}>Teléfono *</label><input required name="phone" value={formData.phone} onChange={handleChange} type="tel" placeholder="+34 600 000 000" className={INPUT_CLASS} /></div>
+                                    <div><label className={LABEL_CLASS}>País *</label>
+                                        <select
+                                            name="country"
+                                            value={formData.country}
+                                            onChange={handleChange}
+                                            className={INPUT_CLASS}
+                                        >
+                                            <option value="España">España</option>
+                                            <option value="Portugal">Portugal</option>
+                                            <option value="Francia">Francia</option>
+                                            <option value="Alemania">Alemania</option>
+                                            <option value="Internacional">Otro (Internacional)</option>
+                                        </select>
+                                    </div>
                                     <div><label className={LABEL_CLASS}>Código Postal *</label><input required name="zip" value={formData.zip} onChange={handleChange} type="text" placeholder="28001" className={INPUT_CLASS} /></div>
                                     <div className="md:col-span-2"><label className={LABEL_CLASS}>Dirección de Entrega *</label><input required name="address" value={formData.address} onChange={handleChange} type="text" placeholder="Calle, número, piso, puerta..." className={INPUT_CLASS} /></div>
                                     <div><label className={LABEL_CLASS}>Ciudad *</label><input required name="city" value={formData.city} onChange={handleChange} type="text" placeholder="Madrid" className={INPUT_CLASS} /></div>
@@ -453,8 +490,8 @@ export default function Cart() {
                                     </div>
                                     {shippingCost > 0 && (
                                         <div className="bg-primary/5 px-3 py-2 rounded-xl mt-1">
-                                            <p className="text-[8px] font-black text-primary uppercase tracking-widest italic">
-                                                Envío GRATIS a partir de {shippingConfig.free_shipping_threshold} €
+                                            <p className="text-[8px] font-black text-primary uppercase tracking-widest italic text-center">
+                                                Envío GRATIS a partir de {currentShipping.free_shipping_threshold} €
                                             </p>
                                         </div>
                                     )}

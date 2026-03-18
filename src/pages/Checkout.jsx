@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
@@ -13,7 +13,12 @@ import {
 } from 'lucide-react';
 
 export default function Checkout() {
-    const { cart, totalPrice, clearCart } = useCart();
+    const {
+        cart, totalPrice, clearCart,
+        shippingCost, currentShipping,
+        shippingZone, setShippingZone,
+        subtotal: cartSubtotal
+    } = useCart();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [orderCompleted, setOrderCompleted] = useState(false);
@@ -24,13 +29,34 @@ export default function Checkout() {
         address: '',
         city: '',
         zip: '',
+        country: 'España',
         paymentMethod: 'stripe'
     });
 
     const IVA_RATE = 0.21;
-    const baseImponible = totalPrice / (1 + IVA_RATE);
-    const iva = totalPrice - baseImponible;
-    const subtotal = baseImponible;
+    const totalOrder = totalPrice;
+    const baseImponible = totalOrder / (1 + IVA_RATE);
+    const iva = totalOrder - baseImponible;
+
+    // Dynamic Zone Detection
+    useEffect(() => {
+        const detectZone = () => {
+            if (formData.country !== 'España') {
+                if (shippingZone !== 'international') setShippingZone('international');
+                return;
+            }
+
+            const zipPrefix = formData.zip.substring(0, 2);
+            const islandPrefixes = ['07', '35', '38', '51', '52'];
+
+            if (islandPrefixes.includes(zipPrefix)) {
+                if (shippingZone !== 'islands') setShippingZone('islands');
+            } else if (formData.zip.length >= 2) {
+                if (shippingZone !== 'peninsula') setShippingZone('peninsula');
+            }
+        };
+        detectZone();
+    }, [formData.zip, formData.country, setShippingZone, shippingZone]);
 
     if (cart.length === 0 && !orderCompleted) {
         return (
@@ -121,7 +147,7 @@ export default function Checkout() {
                         <CheckCircle2 className="w-10 h-10 text-green-600" />
                     </div>
                     <h2 className="text-3xl font-black text-gray-900 uppercase italic mb-2">¡Pedido Recibido!</h2>
-                    <p className="text-gray-500 font-bold mb-8">Gracias por confiar en Mil Luces. Hemos enviado los detalles a tu email.</p>
+                    <p className="text-gray-500 font-bold mb-8">Gracias por confiar en Mil Luces. Hemos enviado todos los detalles a tu email.</p>
                     <div className="space-y-3">
                         <button
                             onClick={() => navigate('/')}
@@ -144,8 +170,8 @@ export default function Checkout() {
                 </div>
 
                 <div className="mb-16">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Casi Tuyo</span>
-                    <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Confirmar <br /><span className="text-gray-300">Compra</span></h1>
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Estas a un paso de finalizar tu compra</span>
+                    <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Confirma tu <br /><span className="text-gray-300">Compra</span></h1>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
@@ -160,8 +186,8 @@ export default function Checkout() {
                                         <Truck className="w-6 h-6" />
                                     </div>
                                     <div>
-                                        <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-none mb-1">Manifiesto de Envío</h3>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">¿A dónde enviamos tu selección exclusiva?</p>
+                                        <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-none mb-1">Dirección de Envío</h3>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">¿Dónde te gustaria recibir tu pedido?</p>
                                     </div>
                                 </div>
 
@@ -174,7 +200,7 @@ export default function Checkout() {
                                             value={formData.name}
                                             onChange={handleChange}
                                             type="text"
-                                            placeholder="Nombre & Apellidos"
+                                            placeholder="Nombre y Apellidos"
                                             className="w-full bg-gray-50/50 border border-gray-100 rounded-2xl px-6 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all"
                                         />
                                     </div>
@@ -186,7 +212,7 @@ export default function Checkout() {
                                             value={formData.email}
                                             onChange={handleChange}
                                             type="email"
-                                            placeholder="ejemplo@mil-luces.com"
+                                            placeholder="ejemplo@millucesiluminacion.com"
                                             className="w-full bg-gray-50/50 border border-gray-100 rounded-2xl px-6 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all"
                                         />
                                     </div>
@@ -237,6 +263,23 @@ export default function Checkout() {
                                             placeholder="28001"
                                             className="w-full bg-gray-50/50 border border-gray-100 rounded-2xl px-6 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all"
                                         />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest ml-1">País</label>
+                                        <select
+                                            required
+                                            name="country"
+                                            value={formData.country}
+                                            onChange={handleChange}
+                                            className="w-full bg-gray-50/50 border border-gray-100 rounded-2xl px-6 py-4 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all appearance-none"
+                                        >
+                                            <option value="España">España</option>
+                                            <option value="Portugal">Portugal</option>
+                                            <option value="Francia">Francia</option>
+                                            <option value="Italia">Italia</option>
+                                            <option value="Alemania">Alemania</option>
+                                            <option value="Otros">Otros (Internacional)</option>
+                                        </select>
                                     </div>
                                 </div>
                             </section>
@@ -327,7 +370,7 @@ export default function Checkout() {
                     {/* Resumen lateral (4 Units) */}
                     <div className="lg:col-span-4 lg:sticky lg:top-40">
                         <div className="bg-white rounded-[3rem] p-10 shadow-luxury border border-gray-100/50">
-                            <h3 className="text-xl font-black text-brand-carbon uppercase italic tracking-tighter mb-8">Estado de la <br /><span className="text-gray-300">Selección</span></h3>
+                            <h3 className="text-xl font-black text-brand-carbon uppercase italic tracking-tighter mb-8">Resumen de tu<br /><span className="text-gray-300">Pedido</span></h3>
 
                             <div className="space-y-6 mb-10 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
                                 {cart.map(item => (
@@ -349,15 +392,24 @@ export default function Checkout() {
                             <div className="space-y-4 border-t border-dashed border-gray-100 pt-8 mb-10">
                                 <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-[.3em]">
                                     <span>Subtotal</span>
-                                    <span>{subtotal.toFixed(2)} €</span>
+                                    <span>{cartSubtotal.toFixed(2)} €</span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-[.3em]">
+                                        <span>Envío ({shippingZone === 'peninsula' ? 'Península' : shippingZone === 'islands' ? 'Islas/Ceuta/Melilla' : 'Internacional'})</span>
+                                        <span className={shippingCost === 0 ? 'text-green-600 italic' : 'text-brand-carbon'}>
+                                            {shippingCost === 0 ? 'GRATIS' : `${shippingCost.toFixed(2)} €`}
+                                        </span>
+                                    </div>
+                                    {shippingCost > 0 && currentShipping?.free_shipping_threshold > 0 && (
+                                        <p className="text-[8px] text-primary font-black uppercase tracking-tighter text-right italic">
+                                            Envío GRATIS a partir de {currentShipping.free_shipping_threshold}€
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-[.3em]">
-                                    <span>Envío</span>
-                                    <span className="text-primary italic">CONCEDIDO</span>
-                                </div>
-                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-[.3em]">
-                                    <span>IVA (21%)</span>
-                                    <span>{iva.toFixed(2)} €</span>
+                                    <span>IVA Incluido (21%)</span>
+                                    <span>{(totalPrice - (totalPrice / 1.21)).toFixed(2)} €</span>
                                 </div>
                                 <div className="flex justify-between items-baseline pt-4">
                                     <span className="text-[10px] font-black text-brand-carbon uppercase tracking-[.4em]">Precio Total</span>
