@@ -126,7 +126,7 @@ export function MiniCart() {
                                 Ver Carrito
                             </Link>
                             <Link
-                                to="/checkout"
+                                to="/cart"
                                 onClick={() => setIsSideCartOpen(false)}
                                 className="py-5 rounded-2xl bg-brand-carbon text-white text-[10px] font-black uppercase italic tracking-widest text-center hover:bg-primary transition-all shadow-xl shadow-black/10 flex items-center justify-center gap-2 group"
                             >
