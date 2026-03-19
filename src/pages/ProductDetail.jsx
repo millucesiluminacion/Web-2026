@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send } from 'lucide-react';
+import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
 import { calculateProductPrice } from '../lib/pricingUtils';
 import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
+import { generateProductPDF } from '../lib/pdfGenerator';
 
 const COLOR_MAP = {
     "Blanco": "#FFFFFF",
@@ -58,6 +59,7 @@ export default function ProductDetail() {
         user_name: user?.user_metadata?.full_name || ''
     });
     const [submittingReview, setSubmittingReview] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(false);
 
     // Selection state
     const [selectedAttributes, setSelectedAttributes] = useState({});
@@ -396,6 +398,18 @@ export default function ProductDetail() {
             selectedOptions: selectedAttributes,
             cartLabel: selectedLabel || null
         }, qty);
+    };
+
+    const handleDownloadPDF = async () => {
+        try {
+            setPdfLoading(true);
+            await generateProductPDF(parentProduct, currentVariant);
+        } catch (err) {
+            console.error("Error downloading PDF:", err);
+            alert("No se pudo generar la ficha técnica en este momento.");
+        } finally {
+            setPdfLoading(false);
+        }
     };
 
     // Derived values for display
@@ -768,10 +782,24 @@ export default function ProductDetail() {
                             {/* Ficha Técnica - Attributes as Specs */}
                             {hasStaticSpecs && (
                                 <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                                    <h3 className="text-[10px] font-black text-brand-carbon uppercase tracking-widest mb-3 flex items-center gap-2">
-                                        <Zap className="w-3.5 h-3.5 text-primary" />
-                                        Especificaciones
-                                    </h3>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h3 className="text-[10px] font-black text-brand-carbon uppercase tracking-widest flex items-center gap-2">
+                                            <Zap className="w-3.5 h-3.5 text-primary" />
+                                            Especificaciones
+                                        </h3>
+                                        <button
+                                            onClick={handleDownloadPDF}
+                                            disabled={pdfLoading}
+                                            className="flex items-center gap-2 text-[9px] font-black text-primary hover:text-brand-carbon uppercase italic tracking-widest transition-all disabled:opacity-50"
+                                        >
+                                            {pdfLoading ? (
+                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                            ) : (
+                                                <FileDown className="w-3.5 h-3.5" />
+                                            )}
+                                            {pdfLoading ? 'Generando...' : 'Descargar Ficha'}
+                                        </button>
+                                    </div>
                                     <div className="divide-y divide-gray-50">
                                         {staticSpecs.map(([key, values]) => (
                                             <div key={key} className="flex justify-between py-2">
