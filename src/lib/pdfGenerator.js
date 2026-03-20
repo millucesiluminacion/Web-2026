@@ -36,118 +36,124 @@ export const generateProductPDF = async (product, variant, logoUrl = '/logo.jpg'
     let currentY = 20;
 
     try {
-        // 1. ADD LOGO
+        // 1. HEADER & LOGO (Left: Logo, Right: Type)
         try {
             const logoBase64 = await getBase64ImageFromURL(logoUrl);
-            doc.addImage(logoBase64, 'JPEG', margin, currentY, 40, 15);
+            doc.addImage(logoBase64, 'JPEG', margin, currentY, 35, 12);
         } catch (e) {
-            console.warn("Could not load logo for PDF", e);
-            doc.setFontSize(20);
+            doc.setFontSize(18);
             doc.setFont('helvetica', 'bold');
-            doc.text('MIL LUCES', margin, currentY + 10);
+            doc.text('MIL LUCES', margin, currentY + 8);
         }
 
-        doc.setFontSize(10);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(180, 180, 180);
+        doc.text('DOCUMENTACIÓN TÉCNICA', 190, currentY + 5, { align: 'right' });
         doc.setFont('helvetica', 'normal');
-        const dateStr = new Date().toLocaleDateString('es-ES');
-        doc.text(`Fecha: ${dateStr}`, 190, currentY + 8, { align: 'right' });
+        doc.text(`Generado: ${new Date().toLocaleDateString('es-ES')}`, 190, currentY + 10, { align: 'right' });
 
-        currentY += 25;
-
-        // 2. PRODUCT TITLE & CATEGORY
-        doc.setDrawColor(200, 200, 200);
+        currentY += 20;
+        doc.setDrawColor(240, 240, 240);
         doc.line(margin, currentY, 190, currentY);
         currentY += 15;
 
-        doc.setFontSize(24);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(26, 26, 26); // Brand Carbon
-        const title = displayProduct.name.toUpperCase();
-        const splitTitle = doc.splitTextToSize(title, 170);
-        doc.text(splitTitle, margin, currentY);
-        currentY += (splitTitle.length * 10);
+        // 2. TWO-COLUMN LAYOUT (Left: Image, Right: Main Info)
+        const col1Width = 80;
+        const col2X = margin + col1Width + 10;
 
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(100, 100, 100);
-        doc.text(product.categories?.name || 'Colección Exclusive', margin, currentY);
-        currentY += 10;
-
-        // 3. MAIN IMAGE
+        // Image in Left Column
         if (displayProduct.image_url) {
             try {
                 const productImgBase64 = await getBase64ImageFromURL(displayProduct.image_url);
-                // Center image
-                const imgWidth = 80;
-                const imgHeight = 80;
-                doc.addImage(productImgBase64, 'JPEG', (210 - imgWidth) / 2, currentY, imgWidth, imgHeight);
-                currentY += imgHeight + 10;
+                const imgSize = 70;
+                doc.addImage(productImgBase64, 'JPEG', margin, currentY, imgSize, imgSize);
             } catch (e) {
-                console.warn("Could not load product image for PDF", e);
-                currentY += 20;
+                doc.setDrawColor(245, 245, 245);
+                doc.rect(margin, currentY, 70, 70, 'F');
+                doc.setFontSize(8);
+                doc.text('Imagen no disponible', margin + 20, currentY + 35);
             }
         }
 
-        // 4. DESCRIPTION
-        doc.setFontSize(11);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(60, 60, 60);
-        const description = displayProduct.description || product.description || '';
-        const splitDesc = doc.splitTextToSize(description, 170);
-        doc.text(splitDesc, margin, currentY);
-        currentY += (splitDesc.length * 6) + 10;
-
-        // 5. SPECIFICATIONS TABLE
-        doc.setFontSize(14);
+        // Info in Right Column
+        const infoY = currentY + 5;
+        doc.setFontSize(22);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(189, 151, 88); // Primary Gold-ish (Approx)
-        doc.text('ESPECIFICACIONES TÉCNICAS', margin, currentY);
-        currentY += 8;
+        doc.setTextColor(26, 26, 26);
+        const title = doc.splitTextToSize(displayProduct.name.toUpperCase(), 80);
+        doc.text(title, col2X, infoY);
+
+        let infoCurrentY = infoY + (title.length * 9);
+
+        // Category Badge
+        doc.setFontSize(7);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(189, 151, 88); // Primary Gold
+        doc.text((product.categories?.name || 'BOUTIQUE SELECTION').toUpperCase() + ' // REF: ' + (displayProduct.reference || 'N/A'), col2X, infoCurrentY);
+
+        infoCurrentY += 12;
+
+        // Description
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(80, 80, 80);
+        const description = displayProduct.description || product.description || '';
+        const splitDesc = doc.splitTextToSize(description, 80);
+        doc.text(splitDesc.slice(0, 8), col2X, infoCurrentY); // Limit lines to keep it one-page
+
+        // 3. SPECIFICATIONS TABLE (Full Width)
+        currentY += 80; // Move below columns
+
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(26, 26, 26);
+        doc.text('ESPECIFICACIONES', margin, currentY);
+        currentY += 5;
 
         const attributes = { ...product.attributes, ...variant?.attributes };
-        const tableRows = [
-            ['Referencia', displayProduct.reference || '---']
-        ];
-
+        const tableRows = [];
         Object.entries(attributes).forEach(([key, value]) => {
             const displayValue = Array.isArray(value) ? value.join(', ') : value;
-            tableRows.push([key, displayValue]);
+            tableRows.push([key.toUpperCase(), displayValue]);
         });
 
         autoTable(doc, {
             startY: currentY,
-            head: [['Característica', 'Detalle']],
+            head: [['PROPIEDAD', 'VALOR']],
             body: tableRows,
-            theme: 'striped',
+            theme: 'grid',
             headStyles: {
                 fillColor: [26, 26, 26],
                 textColor: [255, 255, 255],
-                fontStyle: 'bold'
+                fontSize: 8,
+                fontStyle: 'bold',
+                halign: 'center'
             },
             styles: {
-                fontSize: 10,
-                cellPadding: 4
+                fontSize: 9,
+                cellPadding: 3,
+                font: 'helvetica',
+                lineColor: [245, 245, 245]
+            },
+            columnStyles: {
+                0: { fontStyle: 'bold', width: 50, fillColor: [252, 252, 252] }
             },
             margin: { left: margin, right: margin }
         });
 
-        // 6. FOOTER
-        const pageCount = doc.internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            doc.setFontSize(9);
-            doc.setTextColor(150, 150, 150);
-            doc.text(
-                'Ficha técnica generada por Mil Luces Boutique - www.mil-luces.com',
-                105,
-                285,
-                { align: 'center' }
-            );
-        }
+        // 4. FOOTER (Fixed at help)
+        const footerY = 280;
+        doc.setFontSize(8);
+        doc.setTextColor(180, 180, 180);
+        doc.text('MIL LUCES BOUTIQUE // ILUMINACIÓN TÉCNICA Y DECORATIVA EXCLUSIVA', margin, footerY);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(189, 151, 88);
+        doc.text('WWW.MIL-LUCES.COM', 190, footerY, { align: 'right' });
 
-        // SAVE PDF
-        const filename = `Ficha_Tecnica_${displayProduct.name.replace(/\s+/g, '_')}.pdf`;
-        doc.save(filename);
+        // OPEN IN NEW TAB
+        const string = doc.output('bloburl');
+        window.open(string, '_blank');
 
     } catch (error) {
         console.error("Error generating PDF:", error);
