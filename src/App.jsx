@@ -16,6 +16,8 @@ import BlogPostDetail from './pages/BlogPostDetail';
 import ProyectosPage from './pages/ProyectosPage';
 import ProfessionalsPage from './pages/ProfessionalsPage';
 import ContactPage from './pages/ContactPage';
+import BrandsPage from './pages/BrandsPage';
+import RoomsPage from './pages/RoomsPage';
 import { CartProvider } from './context/CartContext';
 import CategoriesList from './pages/admin/CategoriesList';
 import OrdersList from './pages/admin/OrdersList';
@@ -73,6 +75,8 @@ function App() {
               <Route path="proyectos" element={<ProyectosPage />} />
               <Route path="profesionales" element={<ProfessionalsPage />} />
               <Route path="contacto" element={<ContactPage />} />
+              <Route path="marcas" element={<BrandsPage />} />
+              <Route path="estancias" element={<RoomsPage />} />
               <Route path="p/:slug" element={<CMSPage />} />
             </Route>
 

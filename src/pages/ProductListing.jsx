@@ -32,6 +32,7 @@ export default function ProductListing() {
     const categoryQuery = searchParams.get('category');
     const subcategoryQuery = searchParams.get('subcategory');
     const roomId = searchParams.get('room');
+    const brandQuery = searchParams.get('brand');
     const professionSlug = searchParams.get('profession');
     const searchQuery = searchParams.get('q');
 
@@ -40,6 +41,7 @@ export default function ProductListing() {
     const [filteredProducts, setFilteredProducts] = useState([]);
     const [categories, setCategories] = useState([]);
     const [rooms, setRooms] = useState([]);
+    const [brands, setBrands] = useState([]);
     const [professions, setProfessions] = useState([]);
     const [subcategories, setSubcategories] = useState([]);
     const [activeCategory, setActiveCategory] = useState(null);
@@ -63,7 +65,7 @@ export default function ProductListing() {
 
     useEffect(() => {
         fetchProducts();
-    }, [categoryQuery, subcategoryQuery, roomId, professionSlug, searchQuery]);
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery]);
 
     useEffect(() => {
         applyFilters();
@@ -76,15 +78,17 @@ export default function ProductListing() {
         try {
             setLoading(true);
 
-            const [catRes, roomsRes, profsRes] = await Promise.all([
+            const [catRes, roomsRes, brandsRes, profsRes] = await Promise.all([
                 supabase.from('categories').select('*').order('order_index', { ascending: true }),
                 supabase.from('rooms').select('*').order('name'),
+                supabase.from('brands').select('*').order('name'),
                 supabase.from('professions').select('*').order('order_index', { ascending: true })
             ]);
 
             const allCategories = catRes.data || [];
             setCategories(allCategories);
             setRooms(roomsRes.data || []);
+            setBrands(brandsRes.data || []);
             setProfessions(profsRes.data || []);
 
             if (categoryQuery && categoryQuery !== 'all') {
@@ -123,6 +127,18 @@ export default function ProductListing() {
             }
 
             if (roomId) productQuery = productQuery.eq('product_rooms.room_id', roomId);
+
+            if (brandQuery) {
+                // Try to find brand by ID or by name
+                const brand = brandsRes.data?.find(b =>
+                    b.id === brandQuery ||
+                    b.name.toLowerCase() === brandQuery.toLowerCase()
+                );
+                if (brand) {
+                    productQuery = productQuery.eq('brand_id', brand.id);
+                }
+            }
+
             if (professionSlug) {
                 const prof = profsRes.data?.find(p => p.slug === professionSlug.toLowerCase());
                 if (prof) productQuery = productQuery.eq('product_professions.profession_id', prof.id);

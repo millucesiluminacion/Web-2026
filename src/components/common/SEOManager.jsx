@@ -39,7 +39,14 @@ export default function SEOManager() {
                 '/decoracion': 'tienda',   // alias de decoración
                 '/proyectos': 'proyectos',
                 '/profesionales': 'profesionales',
-                '/blog': 'blog_index'
+                '/blog': 'blog_index',
+                '/cart': 'cart',
+                '/contacto': 'contacto',
+                '/login': 'login',
+                '/register': 'register',
+                '/register-pro': 'register',
+                '/marcas': 'marcas',
+                '/estancias': 'estancias'
             };
 
             const pageKey = routeMap[path];
@@ -47,68 +54,111 @@ export default function SEOManager() {
                 seoData = staticPages[pageKey];
             }
 
-            // 2. Si es una página dinámica (Producto, Categoría, Blog Post)
+            // 2. Si es una página dinámica (Producto, Categoría, Estancia, Blog Post, CMS)
             if (!seoData) {
+                const searchParams = new URLSearchParams(location.search);
+
                 if (path.startsWith('/product/')) {
                     const slugOrId = path.split('/').pop();
-                    let { data } = await supabase.from('products').select('meta_title, meta_description, name').eq('slug', slugOrId).maybeSingle();
+                    let { data } = await supabase.from('products').select('meta_title, meta_description, name, image_url').eq('slug', slugOrId).maybeSingle();
                     if (!data) {
-                        const { data: dataById } = await supabase.from('products').select('meta_title, meta_description, name').eq('id', slugOrId).maybeSingle();
+                        const { data: dataById } = await supabase.from('products').select('meta_title, meta_description, name, image_url').eq('id', slugOrId).maybeSingle();
                         data = dataById;
                     }
                     if (data) seoData = {
                         title: data.meta_title || `${data.name} | Mil Luces`,
-                        description: data.meta_description
+                        description: data.meta_description,
+                        image: data.image_url
                     };
                 } else if (path.startsWith('/blog/')) {
                     const slug = path.split('/').pop();
-                    const { data } = await supabase.from('blog_posts').select('meta_title, meta_description, title').eq('slug', slug).maybeSingle();
+                    const { data } = await supabase.from('blog_posts').select('meta_title, meta_description, title, image_url').eq('slug', slug).maybeSingle();
                     if (data) seoData = {
                         title: data.meta_title || `${data.title} | Blog Mil Luces`,
+                        description: data.meta_description,
+                        image: data.image_url
+                    };
+                } else if (path.startsWith('/p/')) {
+                    const slug = path.split('/').pop();
+                    const { data } = await supabase.from('cms_pages').select('meta_title, meta_description, title').eq('slug', slug).maybeSingle();
+                    if (data) seoData = {
+                        title: data.meta_title || `${data.title} | Mil Luces`,
                         description: data.meta_description
                     };
+                } else if (path === '/search' || path === '/decoracion') {
+                    const catSlug = searchParams.get('category');
+                    const roomSlug = searchParams.get('room');
+
+                    if (catSlug) {
+                        const { data } = await supabase.from('categories').select('meta_title, meta_description, name').eq('slug', catSlug).maybeSingle();
+                        if (data) seoData = {
+                            title: data.meta_title || `${data.name} | Iluminación Mil Luces`,
+                            description: data.meta_description
+                        };
+                    } else if (roomSlug) {
+                        const { data } = await supabase.from('rooms').select('meta_title, meta_description, name').eq('slug', roomSlug).maybeSingle();
+                        if (data) seoData = {
+                            title: data.meta_title || `${data.name} | Iluminación Mil Luces`,
+                            description: data.meta_description
+                        };
+                    }
                 }
             }
 
             // 3. Fallback: Ajustes Globales de la Home si nada coincide
+            const { data: globalRes } = await supabase
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'seo_global')
+                .maybeSingle();
+
+            const globalVal = globalRes?.value || {};
+            const siteName = globalVal.site_name || 'Mil Luces';
+            const globalDesc = globalVal.home_description || '';
+
+            // REGLA ESPECIAL PARA HOME: Priorizar ajustes globales
+            if (path === '/') {
+                const homeStatic = staticPages['home'] || {};
+                seoData = {
+                    title: globalVal.home_title || homeStatic.meta_title || homeStatic.title || siteName,
+                    description: globalVal.home_description || homeStatic.meta_description || homeStatic.description || globalDesc
+                };
+            }
+
+            // Normalizar seoData si viene de staticPages o BD (asegurar que tenga title y description)
+            if (seoData) {
+                seoData.title = seoData.meta_title || seoData.title || siteName;
+                seoData.description = seoData.meta_description || seoData.description || globalDesc;
+            }
+
             if (!seoData) {
-                const { data: globalRes } = await supabase
-                    .from('app_settings')
-                    .select('value')
-                    .eq('key', 'seo_global')
-                    .maybeSingle();
-
-                const globalVal = globalRes?.value || {};
-
-                // Si estamos en la home, usamos los específicos de la home
-                if (path === '/') {
-                    seoData = {
-                        title: globalVal.home_title || globalVal.site_name || 'Mil Luces',
-                        description: globalVal.home_description
-                    };
-                } else {
-                    // Fallback genérico manteniendo el nombre del sitio
-                    const siteName = globalVal.site_name || 'Mil Luces';
-                    const pageTitle = path.split('/').pop()?.replace(/-/g, ' ');
-                    seoData = {
-                        title: pageTitle ? `${pageTitle.toUpperCase()} | ${siteName}` : siteName,
-                        description: globalVal.home_description
-                    };
-                }
+                // Fallback genérico manteniendo el nombre del sitio
+                const pageTitle = path.split('/').pop()?.replace(/-/g, ' ');
+                seoData = {
+                    title: pageTitle ? `${pageTitle.toUpperCase()} | ${siteName}` : siteName,
+                    description: globalDesc
+                };
             }
 
             // 4. Aplicar cambios al DOM
             if (seoData) {
-                document.title = seoData.title || 'Mil Luces';
+                const finalTitle = seoData.title || siteName;
+                const finalDesc = seoData.description || globalDesc;
+                const finalImage = seoData.image || globalVal.og_image || '';
+
+                console.log(`[SEOManager] Updating for ${path}:`, finalTitle);
+                document.title = finalTitle;
 
                 // Actualizar meta descripción
-                updateOrCreateMeta('description', seoData.description);
+                updateOrCreateMeta('description', finalDesc);
 
                 // Open Graph
-                updateOrCreateMeta('og:title', seoData.title);
-                updateOrCreateMeta('og:description', seoData.description);
+                updateOrCreateMeta('og:title', finalTitle);
+                updateOrCreateMeta('og:description', finalDesc);
+                updateOrCreateMeta('og:image', finalImage);
+                updateOrCreateMeta('og:site_name', siteName);
 
-                // Canonical (Opcional pero recomendado)
+                // Canonical
                 const canonical = document.querySelector('link[rel="canonical"]') || document.createElement('link');
                 canonical.setAttribute('rel', 'canonical');
                 canonical.setAttribute('href', window.location.origin + path);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const STATIC_BRANDS = [
     { name: 'Philips', img: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/52/Philips_logo_new.svg/200px-Philips_logo_new.svg.png', bg: 'https://images.unsplash.com/photo-1550684376-efcbd6e3f031?w=400&h=200&fit=crop' },
@@ -50,9 +51,9 @@ export function BrandsSection() {
         <section className="mb-12 max-w-[1440px] mx-auto px-4" style={{ width: 'calc(100% - 60px)' }}>
             <div className="flex justify-between mb-6 items-center">
                 <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Compra por marcas</h2>
-                <a href="/marcas" className="text-base font-medium text-blue-600 hover:underline">
+                <Link to="/marcas" className="text-base font-medium text-blue-600 hover:underline">
                     Ver marcas
-                </a>
+                </Link>
             </div>
             <p className="mb-6">Luminarias de calidad y eficiencia de marcas líderes en iluminación profesional y decorativa.</p>
 
@@ -79,9 +80,9 @@ export function BrandsSection() {
                                         <img src={brand.img} alt={brand.name} className="max-w-full max-h-full object-contain" />
                                     </div>
                                 </div>
-                                <a href={`/brand/${brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-medium mt-4">
+                                <Link to={`/search?brand=${brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-medium mt-4">
                                     {brand.name}
-                                </a>
+                                </Link>
                             </div>
                         </li>
                     ))}

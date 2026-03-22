@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
 const STATIC_ROOMS = [
     { name: 'Salón / Comedor', img: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=500&fit=crop' },
@@ -51,9 +52,9 @@ export function RoomsSection() {
         <section className="mb-12 max-w-[1440px] mx-auto px-4" style={{ width: 'calc(100% - 60px)' }}>
             <div className="flex justify-between mb-6 items-center">
                 <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Iluminación por estancias</h2>
-                <a href="/estancias" className="text-base font-medium text-blue-600 hover:underline">
+                <Link to="/estancias" className="text-base font-medium text-blue-600 hover:underline">
                     Ver estancias
-                </a>
+                </Link>
             </div>
             <p className="mb-6">Ilumina cada espacio con soluciones funcionales y elegantes para espacios industriales, comerciales y del hogar.</p>
 
@@ -67,14 +68,14 @@ export function RoomsSection() {
                         <li key={i}>
                             <div className="rounded-lg overflow-hidden relative group h-80">
                                 <div className="h-full">
-                                    <a href={`/search?room=${room.id || room.slug}`} className="block h-full">
+                                    <Link to={`/search?room=${room.id || room.slug}`} className="block h-full">
                                         <img
                                             src={room.img}
                                             alt={room.name}
                                             className="w-full object-cover xl:group-hover:scale-110 duration-300 h-full"
                                             loading="lazy"
                                         />
-                                    </a>
+                                    </Link>
                                 </div>
                                 <div className="duration-500 xl:group-hover:-translate-y-[15px] w-full absolute bottom-7 text-center pb-5 px-3 text-white">
                                     <p className="font-medium text-lg xl:text-xl">{room.name}</p>

@@ -14,6 +14,7 @@ const TABS = [
     { id: 'categories', label: 'Categorías', icon: Menu },
     { id: 'rooms', label: 'Estancias', icon: Sofa },
     { id: 'blog', label: 'Blog (Posts)', icon: BookOpen },
+    { id: 'cms_pages', label: 'Páginas CMS', icon: FileText },
 ];
 
 export default function SEOAdmin() {
@@ -56,6 +57,12 @@ export default function SEOAdmin() {
                 { id: 'proyectos', name: 'Proyectos Luz & Arte', slug: 'proyectos', },
                 { id: 'blog_index', name: 'Blog Boutique (Index)', slug: 'blog', },
                 { id: 'profesionales', name: 'Área Profesionales', slug: 'profesionales', },
+                { id: 'cart', name: 'Carrito de Compra', slug: 'cart', },
+                { id: 'contacto', name: 'Página de Contacto', slug: 'contacto', },
+                { id: 'marcas', name: 'Nuestras Marcas', slug: 'marcas', },
+                { id: 'estancias', name: 'Iluminación por Estancias', slug: 'estancias', },
+                { id: 'login', name: 'Acceso Clientes', slug: 'login', },
+                { id: 'register', name: 'Registro Clientes', slug: 'register', },
             ].map(p => ({ ...p, meta_title: '', meta_description: '' }));
 
             const stored = data?.value || {};
@@ -89,9 +96,11 @@ export default function SEOAdmin() {
         try {
             setLoading(true);
             let table = tab === 'blog' ? 'blog_posts' : tab;
-            let select = tab === 'blog'
+            let select = (tab === 'blog' || tab === 'cms_pages')
                 ? 'id, title, slug, meta_title, meta_description'
                 : 'id, name, slug, meta_title, meta_description';
+
+            if (tab === 'cms_pages') table = 'cms_pages';
 
             const { data, error } = await supabase
                 .from(table)
@@ -124,7 +133,7 @@ export default function SEOAdmin() {
                 const { error } = await supabase.from('app_settings').upsert({ key: 'seo_pages', value: currentPages, updated_at: new Date().toISOString() });
                 if (error) throw error;
             } else {
-                const table = activeTab === 'blog' ? 'blog_posts' : activeTab;
+                const table = (activeTab === 'blog') ? 'blog_posts' : (activeTab === 'cms_pages' ? 'cms_pages' : activeTab);
                 const { error } = await supabase.from(table).update(updates).eq('id', item.id);
                 if (error) throw error;
             }
@@ -188,6 +197,7 @@ export default function SEOAdmin() {
             case 'rooms': return <Sofa className="w-4 h-4" />;
             case 'blog': return <BookOpen className="w-4 h-4" />;
             case 'pages': return <FileText className="w-4 h-4" />;
+            case 'cms_pages': return <Layout className="w-4 h-4" />;
             default: return <Globe className="w-4 h-4" />;
         }
     };
