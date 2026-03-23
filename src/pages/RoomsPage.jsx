@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Loader2, Search, ArrowRight, Zap, Headphones } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -75,7 +75,7 @@ export default function RoomsPage() {
     }, []);
 
     const filteredRooms = rooms.filter(room =>
-        room.name.toLowerCase().includes(searchTerm.toLowerCase())
+        (room.name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (

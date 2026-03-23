@@ -105,7 +105,7 @@ export default function SEOAdmin() {
             const { data, error } = await supabase
                 .from(table)
                 .select(select)
-                .order(tab === 'blog' ? 'created_at' : 'name', { ascending: tab !== 'blog' });
+                .order(tab === 'blog' ? 'created_at' : (tab === 'cms_pages' ? 'title' : 'name'), { ascending: tab !== 'blog' });
 
             if (error) throw error;
             setItems(data || []);

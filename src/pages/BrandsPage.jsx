@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Loader2, Search, ArrowRight, MessageSquare, Headphones, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -75,7 +76,7 @@ export default function BrandsPage() {
     }, []);
 
     const filteredBrands = brands.filter(brand =>
-        brand.name.toLowerCase().includes(searchTerm.toLowerCase())
+        (brand.name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (

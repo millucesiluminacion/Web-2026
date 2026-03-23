@@ -9,6 +9,9 @@ import {
     ChevronDown, ChevronUp, ArrowRight, Sparkles,
     AlertCircle
 } from 'lucide-react';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements } from '@stripe/react-stripe-js';
+import StripePaymentForm from '../components/commerce/StripePaymentForm';
 
 const INPUT_CLASS = "w-full bg-gray-50/80 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all placeholder:font-normal placeholder:text-gray-300";
 const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1.5 block ml-1";
@@ -30,6 +33,7 @@ export default function Cart() {
     const [paymentMethods, setPaymentMethods] = useState({ stripe: null, paypal: null, transfer: null });
     const [payError, setPayError] = useState('');
     const [transferInfo, setTransferInfo] = useState(null);
+    const [stripePromise, setStripePromise] = useState(null);
 
     const [formData, setFormData] = useState({
         name: profile?.full_name || '',
@@ -70,8 +74,11 @@ export default function Cart() {
             const methods = { stripe: null, paypal: null, transfer: null };
             if (data) {
                 data.forEach(row => {
-                    if (row.key === 'payment_stripe' && row.value?.enabled && row.value?.secretKey) {
+                    if (row.key === 'payment_stripe' && row.value?.enabled) {
                         methods.stripe = row.value;
+                        if (row.value.publicKey) {
+                            setStripePromise(loadStripe(row.value.publicKey));
+                        }
                     }
                     if (row.key === 'payment_paypal' && row.value?.enabled && row.value?.clientId) {
                         methods.paypal = row.value;
@@ -172,33 +179,31 @@ export default function Cart() {
         return order;
     }
 
+    const handlePaymentSucceeded = (paymentIntent) => {
+        setOrderRef(paymentIntent.id.slice(-8).toUpperCase());
+        setOrderCompleted(true);
+        clearCart();
+        setLoading(false);
+    };
+
+    const handlePaymentFailed = (error) => {
+        setPayError(error);
+        setLoading(false);
+    };
+
     const handleSubmit = async (e) => {
-        e.preventDefault();
+        if (e) e.preventDefault();
         if (cart.length === 0) return;
+
+        if (formData.paymentMethod === 'stripe') return;
+
         setLoading(true);
         setPayError('');
 
         try {
             const order = await saveOrder();
 
-            if (formData.paymentMethod === 'stripe') {
-                // Llamar a la función serverless de Stripe
-                const res = await fetch('/api/create-stripe-session', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        items: cart.map(i => ({ name: i.name, price: i.price, quantity: i.quantity, image_url: i.image_url })),
-                        orderId: order.id,
-                    }),
-                });
-                const { url, error } = await res.json();
-                if (error) throw new Error(error);
-                window.location.href = url; // Redirigir a Stripe Checkout
-                return;
-            }
-
             if (formData.paymentMethod === 'paypal') {
-                // Llamar a la función serverless de PayPal
                 const res = await fetch('/api/create-paypal-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -206,7 +211,7 @@ export default function Cart() {
                 });
                 const { approveUrl, error } = await res.json();
                 if (error) throw new Error(error);
-                window.location.href = approveUrl; // Redirigir a PayPal
+                window.location.href = approveUrl;
                 return;
             }
 
@@ -423,20 +428,43 @@ export default function Cart() {
                                         <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest">No hay métodos de pago activos. Configúralos en el panel de administración.</p>
                                     </div>
                                 ) : (
-                                    <div className="space-y-3 relative z-10">
-                                        {activeMethodsList.map(opt => (
-                                            <label key={opt.value} className={`flex items-center gap-5 p-5 rounded-2xl cursor-pointer transition-all border-2 ${formData.paymentMethod === opt.value ? 'border-primary bg-primary/5' : 'border-gray-50 hover:border-gray-200 bg-gray-50/30'}`}>
-                                                <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${formData.paymentMethod === opt.value ? 'border-primary' : 'border-gray-300'}`}>
-                                                    {formData.paymentMethod === opt.value && <div className="w-2.5 h-2.5 bg-primary rounded-full"></div>}
-                                                </div>
-                                                <input type="radio" name="paymentMethod" value={opt.value} checked={formData.paymentMethod === opt.value} onChange={handleChange} className="hidden" />
-                                                <span className="text-xl">{opt.icon}</span>
-                                                <div className="flex-1">
-                                                    <p className="font-black text-xs text-brand-carbon uppercase italic leading-none mb-1">{opt.label}</p>
-                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{opt.sub}</p>
-                                                </div>
-                                            </label>
-                                        ))}
+                                    <div className="space-y-6 relative z-10">
+                                        <div className="space-y-3">
+                                            {activeMethodsList.map(opt => (
+                                                <label key={opt.value} className={`flex items-center gap-5 p-5 rounded-2xl cursor-pointer transition-all border-2 ${formData.paymentMethod === opt.value ? 'border-primary bg-primary/5' : 'border-gray-50 hover:border-gray-200 bg-gray-50/30'}`}>
+                                                    <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${formData.paymentMethod === opt.value ? 'border-primary' : 'border-gray-300'}`}>
+                                                        {formData.paymentMethod === opt.value && <div className="w-2.5 h-2.5 bg-primary rounded-full"></div>}
+                                                    </div>
+                                                    <input type="radio" name="paymentMethod" value={opt.value} checked={formData.paymentMethod === opt.value} onChange={handleChange} className="hidden" />
+                                                    <span className="text-xl">{opt.icon}</span>
+                                                    <div className="flex-1">
+                                                        <p className="font-black text-xs text-brand-carbon uppercase italic leading-none mb-1">{opt.label}</p>
+                                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">{opt.sub}</p>
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+
+                                        {/* Formulario Stripe Embebido */}
+                                        {formData.paymentMethod === 'stripe' && stripePromise && (
+                                            <div className="pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                <Elements stripe={stripePromise}>
+                                                    <StripePaymentForm
+                                                        amount={totalPrice}
+                                                        prePaymentHook={async () => {
+                                                            try {
+                                                                const order = await saveOrder();
+                                                                return { orderId: order.id };
+                                                            } catch (err) {
+                                                                return { error: err.message || 'Error al crear el pedido' };
+                                                            }
+                                                        }}
+                                                        onSucceeded={handlePaymentSucceeded}
+                                                        onFailed={handlePaymentFailed}
+                                                    />
+                                                </Elements>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -488,11 +516,19 @@ export default function Cart() {
                                             {shippingCost === 0 ? 'GRATIS' : `${shippingCost.toFixed(2)} €`}
                                         </span>
                                     </div>
-                                    {shippingCost > 0 && (
-                                        <div className="bg-primary/5 px-3 py-2 rounded-xl mt-1">
-                                            <p className="text-[8px] font-black text-primary uppercase tracking-widest italic text-center">
-                                                Envío GRATIS a partir de {currentShipping.free_shipping_threshold} €
-                                            </p>
+                                    {shippingCost > 0 && currentShipping.free_shipping_threshold > 0 && (
+                                        <div className="bg-white/[0.03] border border-white/10 px-5 py-4 rounded-[1.5rem] mt-6 group hover:bg-white/[0.05] transition-all duration-500">
+                                            <div className="flex items-start gap-4">
+                                                <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0 group-hover:scale-110 transition-transform duration-500">
+                                                    <Truck className="w-4 h-4 text-white/40" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[9px] font-bold text-white/40 uppercase tracking-[.2em] mb-1">Ahorrate los gastos de envío!</p>
+                                                    <p className="text-[10px] font-black text-white uppercase italic leading-tight tracking-tight">
+                                                        Añade <span className="text-white decoration-primary/50 underline underline-offset-4">{(currentShipping.free_shipping_threshold - subtotal).toFixed(2)} €</span> y te lo enviamos gratis <br />
+                                                    </p>
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
                                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
@@ -508,23 +544,24 @@ export default function Cart() {
                                         </div>
                                     </div>
                                 </div>
-                                <button
-                                    form="aio-form"
-                                    type="submit"
-                                    disabled={loading || paymentloading || activeMethodsList.length === 0 || !formData.paymentMethod}
-                                    className="w-full bg-white text-brand-carbon py-4 rounded-2xl font-black uppercase italic text-[11px] hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group relative z-10 mb-4"
-                                >
-                                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
-                                        <>
-                                            <ShieldCheck className="w-4 h-4 group-hover:scale-110 transition-transform" />
-                                            {formData.paymentMethod === 'stripe' ? 'Pagar con Stripe' :
-                                                formData.paymentMethod === 'paypal' ? 'Pagar con PayPal' :
+                                {formData.paymentMethod !== 'stripe' && (
+                                    <button
+                                        form="aio-form"
+                                        type="submit"
+                                        disabled={loading || paymentloading || activeMethodsList.length === 0 || !formData.paymentMethod}
+                                        className="w-full bg-white text-brand-carbon py-4 rounded-2xl font-black uppercase italic text-[11px] hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group relative z-10 mb-4"
+                                    >
+                                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (
+                                            <>
+                                                <ShieldCheck className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                                                {formData.paymentMethod === 'paypal' ? 'Pagar con PayPal' :
                                                     formData.paymentMethod === 'transfer' ? 'Confirmar Pedido' :
                                                         'Confirmar Pedido'}
-                                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                                        </>
-                                    )}
-                                </button>
+                                                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                            </>
+                                        )}
+                                    </button>
+                                )}
                                 <div className="flex items-center justify-center gap-2 opacity-30 relative z-10">
                                     <Lock className="w-3 h-3" />
                                     <span className="text-[8px] font-black uppercase tracking-[.3em]">Encripción SSL 256-bit</span>

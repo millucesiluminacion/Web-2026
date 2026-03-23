@@ -211,7 +211,7 @@ export default function Dashboard() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-12 pb-8 border-b border-gray-100">
                 <div>
                     <div className="flex items-center gap-3 mb-3">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] font-outfit">Core Intelligence v2.6</span>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] font-outfit">Core Intelligence v2.0</span>
                         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border font-outfit ${(stats.totalSales >= 5000) ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                             (stats.totalSales >= 3000) ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-red-50 text-red-600 border-red-100'
                             }`}>
@@ -220,7 +220,7 @@ export default function Dashboard() {
                         </div>
                     </div>
                     <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
-                        la<span className="text-primary/40">Boutique</span> dashboard
+                        MIL<span className="text-primary/40">LUCES</span> dashboard
                     </h1>
                 </div>
 
