@@ -22,7 +22,7 @@ export function CartProvider({ children }) {
 
     const [isSideCartOpen, setIsSideCartOpen] = useState(false);
 
-    const addToCart = (product, quantity = 1) => {
+    const addToCart = async (product, quantity = 1) => {
         setCart(prev => {
             const existing = prev.find(item => item.id === product.id);
             if (existing) {
@@ -32,11 +32,50 @@ export function CartProvider({ children }) {
             }
             return [...prev, { ...product, quantity }];
         });
+
+        // HANDLE MANDATORY ACCESSORIES
+        if (product.mandatory_accessory_ids?.length > 0) {
+            try {
+                const { data: accessories, error } = await supabaseClient
+                    .from('products')
+                    .select('*')
+                    .in('id', product.mandatory_accessory_ids);
+
+                if (!error && accessories) {
+                    accessories.forEach(acc => {
+                        // We add them as separate items but marked as mandatory for this parent
+                        setCart(prev => {
+                            const existingAcc = prev.find(item => item.id === acc.id);
+                            if (existingAcc) {
+                                // If already there, we might not need to add more, or we increment
+                                // For simplicity/insurance, we just ensure it exists with at least 1
+                                return prev;
+                            }
+                            return [...prev, { ...acc, quantity: 1, isMandatory: true, parentId: product.id }];
+                        });
+                    });
+                }
+            } catch (err) {
+                console.error("Error adding mandatory accessories:", err);
+            }
+        }
+
         setIsSideCartOpen(true);
     };
 
     const removeFromCart = (id) => {
-        setCart(prev => prev.filter(item => item.id !== id));
+        setCart(prev => {
+            const newCart = prev.filter(item => item.id !== id);
+            // Also remove mandatory accessories that were linked to this parent
+            // and are not linked to any OTHER product still in the cart
+            return newCart.filter(item => {
+                if (item.isMandatory && item.parentId === id) {
+                    // Check if another instance of the same parent product exists (unlikely in this simple impl)
+                    return false;
+                }
+                return true;
+            });
+        });
     };
 
     const updateQuantity = (id, quantity) => {

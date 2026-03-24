@@ -7,7 +7,7 @@ import {
     Trash, CreditCard, Truck, ShieldCheck,
     CheckCircle2, Loader2, Lock, Package,
     ChevronDown, ChevronUp, ArrowRight, Sparkles,
-    AlertCircle
+    AlertCircle, Minus, Plus
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -20,7 +20,7 @@ const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-wide
 const API_BASE = import.meta.env.DEV ? '' : '';
 
 export default function Cart() {
-    const { cart, removeFromCart, updateQuantity, totalOriginal, totalSavings, totalPrice, subtotal, shippingCost, shippingConfig, clearCart } = useCart();
+    const { cart, removeFromCart, updateQuantity, totalOriginal, totalSavings, totalPrice, subtotal, shippingCost, shippingConfig, shippingZone, setShippingZone, currentShipping, clearCart } = useCart();
     const { profile, user } = useAuth();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -99,7 +99,6 @@ export default function Cart() {
         loadPaymentMethods();
     }, []);
 
-    const { shippingZone, setShippingZone, currentShipping } = useCart();
 
     // Detección de Zona de Envío automática
     useEffect(() => {
@@ -338,22 +337,48 @@ export default function Cart() {
                                                 </Link>
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-[8px] font-black text-primary uppercase tracking-[.2em] mb-0.5">{item.category}</p>
-                                                    <Link to={`/product/${item.slug || item.id}`}>
-                                                        <h3 className="text-xs font-black text-brand-carbon uppercase italic leading-tight group-hover:text-primary transition-colors line-clamp-2">{item.name}</h3>
+                                                    <Link to={`/product/${item.slug || item.id}`} className="group/title">
+                                                        <h3 className="text-[10px] font-black text-brand-carbon uppercase italic leading-none mb-1 group-hover/title:text-primary transition-colors truncate">{item.name}</h3>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest leading-none">REF: {item.reference || 'N/A'}</p>
+                                                            {item.isMandatory && (
+                                                                <span className="text-[7px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter italic">Obligatorio</span>
+                                                            )}
+                                                        </div>
                                                     </Link>
                                                 </div>
-                                                <div className="flex items-center gap-3 flex-shrink-0">
-                                                    <div className="flex items-center bg-gray-100 rounded-xl px-3 py-1.5 gap-2">
-                                                        <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-5 h-5 text-gray-400 hover:text-brand-carbon font-black text-lg leading-none flex items-center justify-center">−</button>
-                                                        <span className="w-6 text-center text-xs font-black italic">{item.quantity}</span>
-                                                        <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-5 h-5 text-gray-400 hover:text-brand-carbon font-black text-lg leading-none flex items-center justify-center">+</button>
+                                                <div className="flex items-center gap-6">
+                                                    <div className="flex items-center bg-gray-50 rounded-xl px-3 py-1.5 border border-gray-100 shadow-sm">
+                                                        {item.isMandatory ? (
+                                                            <span className="text-[10px] font-black text-brand-carbon px-2 italic">{item.quantity}</span>
+                                                        ) : (
+                                                            <>
+                                                                <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
+                                                                    <Minus className="w-3 h-3" />
+                                                                </button>
+                                                                <span className="text-[10px] font-black text-brand-carbon w-8 text-center italic">{item.quantity}</span>
+                                                                <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
+                                                                    <Plus className="w-3 h-3" />
+                                                                </button>
+                                                            </>
+                                                        )}
                                                     </div>
-                                                    <div className="text-right min-w-[80px]">
+                                                    <div className="text-right min-w-[70px]">
                                                         <p className="text-sm font-black text-brand-carbon italic tracking-tighter">{(item.price * item.quantity).toFixed(2)} €</p>
                                                     </div>
-                                                    <button type="button" onClick={() => removeFromCart(item.id)} className="w-8 h-8 flex items-center justify-center text-gray-200 hover:text-red-400 transition-colors rounded-xl hover:bg-red-50">
-                                                        <Trash className="w-4 h-4" />
-                                                    </button>
+                                                    {item.isMandatory ? (
+                                                        <div className="w-8 h-8 flex items-center justify-center text-amber-200 cursor-not-allowed" title="Accesorio obligatorio">
+                                                            <Lock className="w-4 h-4" />
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => removeFromCart(item.id)}
+                                                            className="w-8 h-8 flex items-center justify-center text-gray-200 hover:text-red-400 hover:bg-red-50 transition-all rounded-xl shadow-sm hover:shadow-red-100"
+                                                        >
+                                                            <Trash className="w-4 h-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </div>
                                         ))}
@@ -576,7 +601,7 @@ export default function Cart() {
 
                     </div>
                 </form>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 }

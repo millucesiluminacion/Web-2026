@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown } from 'lucide-react';
+import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, AlertTriangle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -661,41 +661,106 @@ export default function ProductDetail() {
                         )}
 
                         {/* Luxury Action Section - Repositioned UP */}
-                        <div className="bg-white p-6 rounded-[2rem] shadow-luxury border border-gray-100 flex flex-col gap-4 mb-10">
-                            <div className="flex items-center gap-4">
-                                <div className="w-32 flex items-center justify-between bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100">
-                                    <button
-                                        onClick={() => setQty(Math.max(1, qty - 1))}
-                                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black text-xl transition-colors"
-                                    >
-                                        -
-                                    </button>
-                                    <span className="text-sm font-black italic text-brand-carbon">{qty}</span>
-                                    <button
-                                        onClick={() => setQty(qty + 1)}
-                                        className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black text-xl transition-colors"
-                                    >
-                                        +
-                                    </button>
+                        <div className="bg-white p-8 rounded-[2.5rem] shadow-luxury border border-gray-100 flex flex-col gap-6 mb-10 overflow-hidden relative group/action">
+                            <div className="absolute top-0 left-0 w-2 h-full bg-primary opacity-0 group-hover/action:opacity-100 transition-opacity"></div>
+
+                            {displayProduct?.is_by_meter ? (
+                                <div className="space-y-6">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                                <Zap className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-black uppercase text-brand-carbon italic">Cantidad Personalizada</p>
+                                                <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Desliza para elegir metros</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-2xl font-black italic text-brand-carbon tracking-tighter">{qty}</span>
+                                            <span className="ml-1 text-[10px] font-black text-gray-400 uppercase">Metros</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="relative pt-6 pb-2">
+                                        {/* Custom Range Slider */}
+                                        <input
+                                            type="range"
+                                            min={displayProduct.min_meters || 1}
+                                            max={displayProduct.max_meters || 100}
+                                            step={displayProduct.meter_step || 1}
+                                            value={qty}
+                                            onChange={(e) => setQty(parseFloat(e.target.value))}
+                                            className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary"
+                                        />
+                                        <div className="flex justify-between mt-2 px-1">
+                                            {[...Array(6)].map((_, i) => {
+                                                const min = displayProduct.min_meters || 1;
+                                                const max = displayProduct.max_meters || 100;
+                                                const val = Math.round(min + (max - min) * (i / 5));
+                                                return <span key={i} className="text-[8px] font-black text-gray-300 uppercase italic">{val}m</span>
+                                            })}
+                                        </div>
+                                    </div>
                                 </div>
-                                <button
-                                    onClick={handleAdd}
-                                    disabled={!displayProduct || parseInt(displayProduct.stock) <= 0}
-                                    className={`
-                                            flex-1 rounded-2xl py-4 px-6 font-black uppercase italic text-[11px] transition-all shadow-xl flex items-center justify-center gap-3 group
-                                            ${(!displayProduct || parseInt(displayProduct.stock) <= 0)
-                                            ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                                            : 'bg-brand-carbon text-white hover:bg-primary shadow-black/20'
-                                        }
-                                        `}
-                                >
-                                    <ShoppingCart className="w-4 h-4 transition-transform group-hover:scale-110" />
+                            ) : (
+                                <div className="flex items-center gap-4">
+                                    <div className="w-32 flex items-center justify-between bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 group-hover/action:border-primary/30 transition-colors">
+                                        <button
+                                            onClick={() => setQty(Math.max(1, qty - 1))}
+                                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black text-xl transition-colors"
+                                        >
+                                            -
+                                        </button>
+                                        <span className="text-sm font-black italic text-brand-carbon">{qty}</span>
+                                        <button
+                                            onClick={() => setQty(qty + 1)}
+                                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black text-xl transition-colors"
+                                        >
+                                            +
+                                        </button>
+                                    </div>
+                                    <div className="hidden sm:block">
+                                        <p className="text-[9px] font-black uppercase text-brand-carbon italic leading-none mb-1">Unidades</p>
+                                        <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest leading-none">Añadir al pedido</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Mandatory Accessories Notice */}
+                            {displayProduct?.mandatory_accessory_ids?.length > 0 && (
+                                <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100 flex items-start gap-3">
+                                    <div className="mt-0.5">
+                                        <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                    </div>
+                                    <div>
+                                        <p className="text-[9px] font-black text-amber-900 uppercase italic mb-1">Equipamiento Obligatorio</p>
+                                        <p className="text-[8px] text-amber-700/70 font-bold leading-relaxed">
+                                            Este producto requiere componentes específicos para garantizar su funcionamiento y garantía. Los añadiremos automáticamente a tu carrito.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={handleAdd}
+                                disabled={!displayProduct || parseInt(displayProduct.stock) <= 0}
+                                className={`
+                                        w-full rounded-2xl py-4 px-6 font-black uppercase italic text-[11px] transition-all shadow-xl flex items-center justify-center gap-3 group/btn relative overflow-hidden
+                                        ${(!displayProduct || parseInt(displayProduct.stock) <= 0)
+                                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                                        : 'bg-brand-carbon text-white hover:bg-primary shadow-black/20'
+                                    }
+                                    `}
+                            >
+                                <ShoppingCart className="w-4 h-4 transition-transform group-hover/btn:scale-110" />
+                                <span className="relative z-10">
                                     {parseInt(displayProduct?.stock) > 0
-                                        ? `Añadir al carrito por (${(finalPrice * qty).toFixed(2)}€)`
+                                        ? `Añadir al carrito · Total: ${(finalPrice * qty).toFixed(2)}€`
                                         : 'Pieza Agotada'
                                     }
-                                </button>
-                            </div>
+                                </span>
+                            </button>
                         </div>
 
                         {/* --- OPTIONS SELECTOR (multi-valor) --- */}

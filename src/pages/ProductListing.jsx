@@ -26,6 +26,120 @@ const SORT_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
 
+function ProductCard({ product, profile, addToCart }) {
+    const pricing = calculateProductPrice(product, profile);
+    const [currentImgIndex, setCurrentImgIndex] = useState(0);
+
+    // Get all unique images (parent + variants)
+    const images = useMemo(() => {
+        const imgs = [product.image_url];
+        if (product.variants && Array.isArray(product.variants)) {
+            product.variants.forEach(v => {
+                if (v.image_url && v.image_url !== product.image_url && !imgs.includes(v.image_url)) {
+                    imgs.push(v.image_url);
+                }
+            });
+        }
+        return imgs.filter(img => img); // Remove nulls
+    }, [product]);
+
+    // Extract unique variant attributes (like Color, Light Tone, etc.)
+    const variantOptions = useMemo(() => {
+        const options = new Set();
+        if (product.variants && Array.isArray(product.variants)) {
+            product.variants.forEach(v => {
+                const attrs = v.attributes || {};
+                // Look for common tone/color keys
+                const tone = attrs['Tono'] || attrs['Luz'] || attrs['Color'] || attrs['Temperatura'];
+                if (tone) options.add(String(tone).trim());
+            });
+        }
+        return Array.from(options).sort();
+    }, [product.variants]);
+
+    useEffect(() => {
+        if (images.length <= 1) return;
+
+        const interval = setInterval(() => {
+            setCurrentImgIndex(prev => (prev + 1) % images.length);
+        }, 2000); // Rotate every 2s (Faster as requested)
+
+        return () => clearInterval(interval);
+    }, [images]);
+
+    return (
+        <div key={product.id}
+            className="group relative bg-white rounded-[2.5rem] overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100/50 flex flex-col">
+            <Link to={`/product/${product.slug || product.id}`}
+                className="block relative aspect-square p-8 overflow-hidden group/img">
+                <div className="absolute inset-0 bg-gray-50/20 opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                <BadgeRenderer product={product} />
+
+                {/* Rotating Images Layer */}
+                <div className="w-full h-full relative">
+                    {images.map((img, idx) => (
+                        <img
+                            key={img}
+                            src={img}
+                            alt={product.name}
+                            className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ease-in-out
+                                ${idx === currentImgIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
+                        />
+                    ))}
+                    {images.length === 0 && (
+                        <img src="/placeholder.jpg" alt={product.name} className="w-full h-full object-contain" />
+                    )}
+                </div>
+            </Link>
+            <div className="p-8 pt-0 flex-1 flex flex-col">
+                <div className="mb-4">
+                    <StarRating rating={product.rating_avg} count={product.reviews_count} />
+                    <Link to={`/product/${product.slug || product.id}`}>
+                        <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                            {product.name}
+                        </h3>
+                    </Link>
+                </div>
+
+                {/* Variant Options Indicators */}
+                {variantOptions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mb-4">
+                        {variantOptions.map(opt => (
+                            <span key={opt} className="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-md text-[7px] font-black uppercase tracking-tighter text-gray-500 whitespace-nowrap">
+                                {opt}
+                            </span>
+                        ))}
+                    </div>
+                )}
+
+                {/* Optional: Indicator Dots if multiple images */}
+                {images.length > 1 && (
+                    <div className="flex gap-1 mb-4">
+                        {images.map((_, i) => (
+                            <div key={i} className={`h-0.5 rounded-full transition-all duration-500 ${i === currentImgIndex ? 'w-4 bg-primary' : 'w-1 bg-gray-200'}`} />
+                        ))}
+                    </div>
+                )}
+
+                <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-6">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">
+                            {pricing.isPartnerPrice ? 'Socio VIP' : 'Precio'}
+                        </span>
+                        <span className="text-xl font-black italic text-brand-carbon">
+                            {pricing.finalPrice.toFixed(2)}€
+                        </span>
+                    </div>
+                    <button onClick={() => addToCart({ ...product, price: pricing.finalPrice })}
+                        className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all">
+                        <ShoppingCart className="w-5 h-5" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ProductListing() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -102,9 +216,9 @@ export default function ProductListing() {
                 setSubcategories([]);
             }
 
-            let querySelect = '*, product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))';
-            if (roomId) querySelect = '*, product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
-            if (professionSlug) querySelect = '*, product_rooms(room_id), product_professions!inner(profession_id), product_badges(badges(*))';
+            let querySelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))';
+            if (roomId) querySelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
+            if (professionSlug) querySelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions!inner(profession_id), product_badges(badges(*))';
 
             let productQuery = supabase.from('products').select(querySelect).is('parent_id', null).neq('is_active', false);
 
@@ -519,45 +633,14 @@ export default function ProductListing() {
                     ) : (
                         <>
                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-                                {paginatedProducts.map(product => {
-                                    const pricing = calculateProductPrice(product, profile);
-                                    return (
-                                        <div key={product.id}
-                                            className="group relative bg-white rounded-[2.5rem] overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100/50 flex flex-col">
-                                            <Link to={`/product/${product.slug || product.id}`}
-                                                className="block relative aspect-square p-8 overflow-hidden group/img">
-                                                <div className="absolute inset-0 bg-gray-50/20 opacity-0 group-hover/img:opacity-100 transition-opacity" />
-                                                <BadgeRenderer product={product} />
-                                                <img src={product.image_url || '/placeholder.jpg'} alt={product.name}
-                                                    className="w-full h-full object-contain transition-transform duration-700 group-hover/img:scale-110" />
-                                            </Link>
-                                            <div className="p-8 pt-0 flex-1 flex flex-col">
-                                                <div className="mb-4">
-                                                    <StarRating rating={product.rating_avg} count={product.reviews_count} />
-                                                    <Link to={`/product/${product.slug || product.id}`}>
-                                                        <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight group-hover:text-primary transition-colors line-clamp-2">
-                                                            {product.name}
-                                                        </h3>
-                                                    </Link>
-                                                </div>
-                                                <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-6">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">
-                                                            {pricing.isPartnerPrice ? 'Socio VIP' : 'Precio'}
-                                                        </span>
-                                                        <span className="text-xl font-black italic text-brand-carbon">
-                                                            {pricing.finalPrice.toFixed(2)}€
-                                                        </span>
-                                                    </div>
-                                                    <button onClick={() => addToCart({ ...product, price: pricing.finalPrice })}
-                                                        className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all">
-                                                        <ShoppingCart className="w-5 h-5" />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                {paginatedProducts.map(product => (
+                                    <ProductCard
+                                        key={product.id}
+                                        product={product}
+                                        profile={profile}
+                                        addToCart={addToCart}
+                                    />
+                                ))}
 
                                 {!loading && sortedProducts.length === 0 && (
                                     <div className="col-span-full py-20 text-center space-y-6">

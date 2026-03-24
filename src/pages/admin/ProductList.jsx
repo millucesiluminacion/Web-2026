@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
@@ -58,6 +58,11 @@ export default function ProductList() {
         discount_price: '',
         partner_price: '',
         parent_id: null,
+        is_by_meter: false,
+        min_meters: 1,
+        max_meters: 100,
+        meter_step: 1,
+        mandatory_accessory_ids: [],
         attributes: {},
         extra_images: [], // gallery images
         related_product_ids: [], // IDs of related products
@@ -361,6 +366,26 @@ export default function ProductList() {
         return attrs;
     }
 
+    // --- ATTR REORDERING LOGIC ---
+    const reorderAttribute = (key, direction) => {
+        setFormData(prev => {
+            const entries = Object.entries(prev.attributes || {});
+            const index = entries.findIndex(([k]) => k === key);
+            if (index === -1) return prev;
+
+            const newIndex = direction === 'up' ? index - 1 : index + 1;
+            if (newIndex < 0 || newIndex >= entries.length) return prev;
+
+            const newEntries = [...entries];
+            [newEntries[index], newEntries[newIndex]] = [newEntries[newIndex], newEntries[index]];
+
+            return {
+                ...prev,
+                attributes: Object.fromEntries(newEntries)
+            };
+        });
+    };
+
     // --- CSV EXPORT LOGIC ---
     const handleExport = () => {
         // Convert products to CSV format
@@ -431,6 +456,12 @@ export default function ProductList() {
             discount_price: product.discount_price || '',
             partner_price: product.partner_price || '',
             professional_price: product.professional_price || '',
+            is_active: product.is_active !== false,
+            is_by_meter: product.is_by_meter || false,
+            min_meters: product.min_meters || 1,
+            max_meters: product.max_meters || 100,
+            meter_step: product.meter_step || 1,
+            mandatory_accessory_ids: product.mandatory_accessory_ids || [],
             volume_pricing: product.volume_pricing || { individual: [], profesional: [], partner: [] },
             parent_id: product.parent_id,
             attributes: product.attributes || {},
@@ -535,7 +566,12 @@ export default function ProductList() {
             parent_id: null, attributes: {}, extra_images: [],
             related_product_ids: [], long_description: '', original_price: '',
             badge_tags: [], badge_ids: [],
-            is_active: true
+            is_active: true,
+            is_by_meter: false,
+            min_meters: 1,
+            max_meters: 100,
+            meter_step: 1,
+            mandatory_accessory_ids: []
         });
 
         setVariants([]);
@@ -567,7 +603,12 @@ export default function ProductList() {
                 long_description: formData.long_description,
                 original_price: formData.original_price ? parseFloat(formData.original_price) : null,
                 badge_tags: formData.badge_tags || [],
-                is_active: formData.is_active
+                is_active: formData.is_active,
+                is_by_meter: formData.is_by_meter,
+                min_meters: formData.min_meters,
+                max_meters: formData.max_meters,
+                meter_step: formData.meter_step,
+                mandatory_accessory_ids: formData.mandatory_accessory_ids || []
             };
 
 
@@ -1638,6 +1679,89 @@ export default function ProductList() {
                                                         </div>
                                                     </div>
                                                 </div>
+                                                {/* SECCION ESPECIAL: METROS Y ACCESORIOS */}
+                                                <div className="bg-brand-carbon/[0.02] rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                                                    <div className="flex items-center gap-3 mb-8">
+                                                        <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+                                                            <Package className="w-5 h-5" />
+                                                        </div>
+                                                        <h3 className="text-sm font-black uppercase italic tracking-tighter text-brand-carbon">Venta Especial & Metraje</h3>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                        <div className="space-y-6">
+                                                            <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${formData.is_by_meter ? 'bg-primary/10 text-primary' : 'bg-gray-50 text-gray-300'}`}>
+                                                                        <Activity className="w-5 h-5" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-black uppercase text-brand-carbon italic">Venta por Metros</p>
+                                                                        <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Activa el slider en la web</p>
+                                                                    </div>
+                                                                </div>
+                                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" className="sr-only peer" checked={formData.is_by_meter} onChange={e => setFormData({ ...formData, is_by_meter: e.target.checked })} />
+                                                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                                                                </label>
+                                                            </div>
+
+                                                            {formData.is_by_meter && (
+                                                                <div className="grid grid-cols-3 gap-3 animate-in fade-in slide-in-from-top-4 duration-300">
+                                                                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                                                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Mínimo</label>
+                                                                        <input type="number" step="0.1" className="w-full text-center text-sm font-black text-brand-carbon focus:outline-none" value={formData.min_meters} onChange={e => setFormData({ ...formData, min_meters: parseFloat(e.target.value) })} />
+                                                                    </div>
+                                                                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                                                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Máximo</label>
+                                                                        <input type="number" step="0.1" className="w-full text-center text-sm font-black text-brand-carbon focus:outline-none" value={formData.max_meters} onChange={e => setFormData({ ...formData, max_meters: parseFloat(e.target.value) })} />
+                                                                    </div>
+                                                                    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                                                                        <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Salto</label>
+                                                                        <input type="number" step="0.1" className="w-full text-center text-sm font-black text-brand-carbon focus:outline-none" value={formData.meter_step} onChange={e => setFormData({ ...formData, meter_step: parseFloat(e.target.value) })} />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="bg-white rounded-[2rem] border border-gray-100 p-6 shadow-sm">
+                                                            <div className="flex items-center gap-3 mb-4">
+                                                                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                                                                <h3 className="text-[10px] font-black uppercase text-brand-carbon">Accesorios Obligatorios</h3>
+                                                            </div>
+                                                            <div className="flex flex-wrap gap-2 mb-4 min-h-[40px]">
+                                                                {(formData.mandatory_accessory_ids || []).map(id => {
+                                                                    const p = products.find(prod => prod.id === id);
+                                                                    if (!p) return null;
+                                                                    return (
+                                                                        <div key={id} className="flex items-center gap-2 bg-amber-50 border border-amber-100 px-3 py-1.5 rounded-xl">
+                                                                            <img src={p.image_url} className="w-6 h-6 rounded-lg object-cover" />
+                                                                            <span className="text-[9px] font-black text-amber-900 truncate max-w-[100px] uppercase italic">{p.name}</span>
+                                                                            <button type="button" onClick={() => setFormData(prev => ({ ...prev, mandatory_accessory_ids: prev.mandatory_accessory_ids.filter(rid => rid !== id) }))} className="text-amber-300 hover:text-red-500"><X className="w-3 h-3" /></button>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                            <select
+                                                                className="w-full h-11 border border-amber-50 rounded-2xl text-[10px] font-black uppercase outline-none bg-amber-50/20 px-4"
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value;
+                                                                    if (val && !formData.mandatory_accessory_ids?.includes(val)) {
+                                                                        setFormData(prev => ({ ...prev, mandatory_accessory_ids: [...(prev.mandatory_accessory_ids || []), val] }));
+                                                                    }
+                                                                    e.target.value = '';
+                                                                }}
+                                                            >
+                                                                <option value="">+ Añadir Accesorio Obligatorio...</option>
+                                                                {products.filter(p => !p.parent_id && p.id !== editingId && !formData.mandatory_accessory_ids?.includes(p.id)).map(p => (
+                                                                    <option key={p.id} value={p.id}>{p.name} ({p.reference})</option>
+                                                                ))}
+                                                            </select>
+                                                            <p className="text-[8px] text-gray-400 mt-3 italic">* Se añadirán automáticamente al carrito junto con este producto.</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                                     <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
                                                         <h3 className="text-[11px] font-black uppercase italic text-brand-carbon mb-6 flex items-center gap-2">
@@ -1666,11 +1790,31 @@ export default function ProductList() {
                                                             <Square className="w-4 h-4 text-indigo-500" /> Atributos Avanzados
                                                         </h3>
                                                         <div className="space-y-4">
-                                                            <div className="flex flex-wrap gap-2 mb-2 min-h-[50px]">
-                                                                {Object.entries(formData.attributes || {}).map(([key, values]) => (
-                                                                    <div key={key} className="bg-indigo-50 rounded-2xl p-3 border border-indigo-100 w-full">
-                                                                        <div className="flex items-center justify-between mb-2">
-                                                                            <span className="text-[10px] font-black text-indigo-900 uppercase italic">/ {key}</span>
+                                                            <div className="flex flex-col gap-3 mb-2 min-h-[50px]">
+                                                                {Object.entries(formData.attributes || {}).map(([key, values], idx, arr) => (
+                                                                    <div key={key} className="bg-indigo-50 rounded-2xl p-4 border border-indigo-100 w-full group/attr">
+                                                                        <div className="flex items-center justify-between mb-3">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <span className="text-[10px] font-black text-indigo-900 uppercase italic">/ {key}</span>
+                                                                                <div className="flex items-center gap-1 opacity-0 group-hover/attr:opacity-100 transition-opacity">
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        disabled={idx === 0}
+                                                                                        onClick={() => reorderAttribute(key, 'up')}
+                                                                                        className="p-1 hover:bg-white rounded text-indigo-400 disabled:opacity-30"
+                                                                                    >
+                                                                                        <ChevronUp className="w-3 h-3" />
+                                                                                    </button>
+                                                                                    <button
+                                                                                        type="button"
+                                                                                        disabled={idx === arr.length - 1}
+                                                                                        onClick={() => reorderAttribute(key, 'down')}
+                                                                                        className="p-1 hover:bg-white rounded text-indigo-400 disabled:opacity-30"
+                                                                                    >
+                                                                                        <ChevronDown className="w-3 h-3" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
                                                                             <button type="button" onClick={() => removeAttributeGroup(key)} className="text-[9px] text-red-400 font-bold uppercase hover:text-red-600">Limpiar</button>
                                                                         </div>
                                                                         <div className="flex flex-wrap gap-1.5">

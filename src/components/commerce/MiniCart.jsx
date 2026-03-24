@@ -1,4 +1,4 @@
-import { X, ShoppingBag, Trash2, ArrowRight, Truck } from 'lucide-react';
+import { X, ShoppingBag, Trash2, ArrowRight, Truck, Lock } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -60,34 +60,51 @@ export function MiniCart() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                     <h4 className="text-[11px] font-black text-brand-carbon uppercase italic leading-tight mb-1 truncate">{item.name}</h4>
-                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter mb-3 truncate">
-                                        {item.cartLabel || item.reference || 'Personalizado'}
-                                    </p>
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter truncate">
+                                            {item.cartLabel || item.reference || 'Personalizado'}
+                                        </p>
+                                        {item.isMandatory && (
+                                            <span className="text-[7px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter italic">Obligatorio</span>
+                                        )}
+                                    </div>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4 bg-gray-50 rounded-xl px-3 py-1.5 border border-gray-100">
-                                            <button
-                                                onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                                                className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"
-                                            >
-                                                -
-                                            </button>
-                                            <span className="text-[10px] font-black italic text-brand-carbon w-4 text-center">{item.quantity}</span>
-                                            <button
-                                                onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                                                className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"
-                                            >
-                                                +
-                                            </button>
+                                            {item.isMandatory ? (
+                                                <span className="text-[10px] font-black italic text-brand-carbon px-2 leading-none">{item.quantity}</span>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                        className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"
+                                                    >
+                                                        -
+                                                    </button>
+                                                    <span className="text-[10px] font-black italic text-brand-carbon w-4 text-center">{item.quantity}</span>
+                                                    <button
+                                                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                        className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"
+                                                    >
+                                                        +
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                         <p className="text-sm font-black italic text-brand-carbon">{(item.price * item.quantity).toFixed(2)}€</p>
                                     </div>
                                 </div>
-                                <button
-                                    onClick={() => removeFromCart(item.id)}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-300 hover:text-red-500"
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </button>
+                                {item.isMandatory ? (
+                                    <div className="p-2 text-amber-200 cursor-not-allowed" title="Accesorio obligatorio">
+                                        <Lock className="w-4 h-4" />
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => removeFromCart(item.id)}
+                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-300 hover:text-red-500"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                )}
                             </div>
                         ))
                     )}
