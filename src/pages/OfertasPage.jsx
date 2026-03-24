@@ -52,7 +52,7 @@ const OfertasPage = () => {
                 <header className="mb-16 text-center relative">
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Mil Luces Outlet</span>
                     <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
-                        Oportunidades <span className="text-primary/40">Exclusivas</span> <br /> <span className="text-brand-carbon">Boutique</span>
+                        Oportunidades <span className="text-primary/40">Exclusivas</span> <br />
                     </h1>
                     <div className="w-20 h-1 bg-primary/20 mx-auto mt-8 rounded-full"></div>
                 </header>

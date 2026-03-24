@@ -3,7 +3,8 @@ import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
     Filter, Star, ShoppingCart, ChevronDown, Loader2, Package,
     BoxSelect, Square, Grid, Zap, Lightbulb, Tag, X, Settings,
-    ChevronLeft, ChevronRight, ArrowUpDown, SlidersHorizontal
+    ChevronLeft, ChevronRight, ArrowUpDown, SlidersHorizontal,
+    Droplets, Sun
 } from 'lucide-react';
 import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
 import { useAuth } from '../context/AuthContext';
@@ -57,6 +58,28 @@ function ProductCard({ product, profile, addToCart }) {
         return Array.from(options).sort();
     }, [product.variants]);
 
+    // Extract technical specs (Power, IP, Dimmable)
+    const techSpecs = useMemo(() => {
+        const attrs = product.attributes || {};
+        const specs = [];
+
+        // 1. Power (W)
+        const power = attrs['Potencia'] || attrs['power'] || attrs['Watios'] || attrs['Potencia (W)'];
+        if (power) specs.push({ icon: Zap, label: String(power).includes('W') ? power : `${power}W` });
+
+        // 2. IP Rating
+        const ip = attrs['IP'] || attrs['Protección IP'] || attrs['Proteccion IP'];
+        if (ip) specs.push({ icon: Droplets, label: String(ip).startsWith('IP') ? ip : `IP${ip}` });
+
+        // 3. Dimmable
+        const dimmable = attrs['Regulable'] || attrs['Dimmable'];
+        if (dimmable && String(dimmable).toLowerCase() !== 'no') {
+            specs.push({ icon: Sun, label: 'Regulable' });
+        }
+
+        return specs;
+    }, [product.attributes]);
+
     useEffect(() => {
         if (images.length <= 1) return;
 
@@ -100,6 +123,18 @@ function ProductCard({ product, profile, addToCart }) {
                         </h3>
                     </Link>
                 </div>
+
+                {/* Technical Specs Indicators */}
+                {techSpecs.length > 0 && (
+                    <div className="flex flex-wrap gap-3 mb-3">
+                        {techSpecs.map((spec, i) => (
+                            <div key={i} className="flex items-center gap-1.5 text-gray-400 group/spec">
+                                <spec.icon className="w-3 h-3 text-primary/60 group-hover/spec:text-primary transition-colors" />
+                                <span className="text-[9px] font-bold uppercase tracking-tight">{spec.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Variant Options Indicators */}
                 {variantOptions.length > 0 && (
