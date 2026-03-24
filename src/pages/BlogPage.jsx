@@ -31,9 +31,9 @@ export default function BlogPage() {
         <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12">
             <div className="container mx-auto px-6 max-w-[1200px]">
                 <header className="mb-12 text-center relative">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Magazzino Mil Luces</span>
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Inspirate con Mil Luces</span>
                     <h1 className="text-4xl lg:text-6xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
-                        Nuestro <span className="text-primary/40">Blog de</span> <br /> <span className="text-brand-carbon">Diseño</span>
+                        Nuestro <span className="text-primary/40">Blog</span> <br /> <span className="text-brand-carbon">Iluminación</span>
                     </h1>
                     <div className="w-20 h-1 bg-primary/10 mx-auto mt-8 rounded-full"></div>
                 </header>

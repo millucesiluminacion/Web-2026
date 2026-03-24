@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-import { Loader2, AlertCircle, ChevronLeft } from 'lucide-react';
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import SEOManager from '../components/common/SEOManager';
 
 export default function CMSPage() {
@@ -72,46 +73,80 @@ export default function CMSPage() {
     }
 
     return (
-        <div className="bg-white min-h-screen">
+        <div className="bg-white min-h-screen font-outfit">
             <SEOManager
                 title={page.meta_title || page.title}
                 description={page.meta_description}
             />
 
-            {/* Header Hero */}
-            <header className="relative py-24 md:py-32 bg-brand-carbon overflow-hidden">
-                <div className="absolute inset-0 opacity-10">
-                    <div className="absolute inset-0 bg-gradient-to-b from-primary/20 to-transparent"></div>
-                    <div className="grid grid-cols-10 h-full w-full">
-                        {Array(50).fill(0).map((_, i) => (
-                            <div key={i} className="border-r border-b border-white/5 h-20 w-full"></div>
-                        ))}
+            {/* Premium Boutique Header */}
+            <header className="relative pt-24 pb-32 md:pt-32 md:pb-40 bg-brand-carbon overflow-hidden">
+                {/* 1. Backdrop Layers */}
+                <div className="absolute inset-0">
+                    {/* Spotlight effect */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(234,179,8,0.15),transparent_50%)] animate-pulse-slow"></div>
+
+                    {/* Noise/Texture filter overlay (SVG-based for premium feel) */}
+                    <div className="absolute inset-0 opacity-[0.03] contrast-150 brightness-100 mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
+
+                    {/* Architectural Grid */}
+                    <div className="absolute inset-0 opacity-[0.07]">
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+                        <div className="grid grid-cols-12 h-full w-full">
+                            {Array(12).fill(0).map((_, i) => (
+                                <div key={i} className="border-r border-white/5 h-full w-full"></div>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
+                {/* 2. Floating Outline Text (Background Depth) */}
+                <div className="absolute right-[-5%] top-1/2 -translate-y-1/2 select-none pointer-events-none opacity-[0.04] hidden lg:block">
+                    <span className="text-[18rem] font-black uppercase italic leading-none text-white tracking-tighter" style={{ WebkitTextStroke: '1px rgba(255,255,255,1)', color: 'transparent' }}>
+                        {page.title.split(' ')[0]}
+                    </span>
+                </div>
+
+                {/* 3. Foreground Content */}
                 <div className="container mx-auto px-6 relative z-10">
                     <div className="max-w-4xl">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block font-outfit italic">
-                            Boutique Information System
-                        </span>
-                        <h1 className="text-4xl md:text-6xl font-black text-white uppercase italic leading-none tracking-tighter mb-8 font-outfit">
-                            {page.title}
-                        </h1>
-                        <div className="flex items-center gap-4 text-white/40">
-                            <div className="h-px w-12 bg-primary"></div>
-                            <span className="text-[10px] font-bold uppercase tracking-widest">Última actualización: {new Date(page.updated_at).toLocaleDateString('es-ES')}</span>
+                        {/* Glass Breadcrumbs */}
+                        <nav className="flex items-center gap-3 mb-8 animate-fade-in">
+                            <button onClick={() => navigate('/')} className="px-3 py-1.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] font-black text-white/40 uppercase tracking-widest hover:text-primary hover:border-primary/30 transition-all">Inicio</button>
+                            <ChevronRight className="w-3 h-3 text-white/10" />
+                            <span className="px-3 py-1.5 bg-primary/10 backdrop-blur-md border border-primary/20 rounded-full text-[9px] font-black text-primary uppercase tracking-widest">Información</span>
+                        </nav>
+
+                        <div className="flex items-start gap-8">
+                            {/* Vertical Signature Line */}
+                            <div className="w-1.5 self-stretch bg-gradient-to-b from-primary via-primary to-transparent hidden md:block rounded-full shadow-[0_0_20px_rgba(234,179,8,0.4)]"></div>
+
+                            <div className="flex-1">
+                                <span className="text-[10px] font-black text-primary uppercase tracking-[.5em] mb-4 block italic opacity-80 animate-slide-right">
+                                    Boutique Information System
+                                </span>
+                                <h1 className="text-4xl md:text-7xl font-black text-white uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-2xl">
+                                    {page.title}
+                                </h1>
+                                <div className="flex items-center gap-4 text-white/30 font-bold text-[9px] uppercase tracking-[.2em] fade-in delay-500">
+                                    <span className="w-8 h-px bg-white/10"></span>
+                                    Última sincronización: {new Date(page.updated_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </header>
 
-            {/* Content Area */}
-            <main className="container mx-auto px-6 py-20 md:py-32">
-                <div className="max-w-4xl mx-auto">
-                    <div
-                        className="cms-content prose prose-lg prose-gray max-w-none text-brand-carbon font-outfit"
-                        dangerouslySetInnerHTML={{ __html: page.content.body }}
-                    />
+            {/* 4. Overlapping Content Card */}
+            <main className="container mx-auto px-6 relative z-20">
+                <div className="-mt-16 md:-mt-24 bg-white rounded-[3.5rem] p-12 md:p-20 shadow-2xl shadow-brand-carbon/20 border border-gray-100 animate-slide-up">
+                    <div className="max-w-3xl mx-auto">
+                        <div
+                            className="cms-content prose prose-lg prose-gray max-w-none text-brand-carbon"
+                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(page.content.body) }}
+                        />
+                    </div>
                 </div>
             </main>
 

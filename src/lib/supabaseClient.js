@@ -11,7 +11,8 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Initialize client
-export const supabase = createClient(
-    supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder'
-);
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('❌ CRITICAL: Supabase credentials are missing! Check your .env file.');
+}
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);

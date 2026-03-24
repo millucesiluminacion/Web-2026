@@ -195,7 +195,7 @@ export default function PagesAdmin() {
                             <h3 className="text-xl font-black text-brand-carbon uppercase italic leading-tight mb-2 truncate group-hover:text-primary transition-colors">{page.title}</h3>
                             <div className="flex items-center gap-2 mb-6">
                                 <Globe className="w-3 h-3 text-gray-300" />
-                                <span className="text-[10px] font-mono font-bold text-gray-400">/p/{page.slug}</span>
+                                <span className="text-[10px] font-mono font-bold text-gray-400">/{page.slug}</span>
                             </div>
                         </div>
 
@@ -258,13 +258,13 @@ export default function PagesAdmin() {
                                         <button type="button" onClick={suggestSlug} className="text-[8px] text-primary hover:underline">Sugerir</button>
                                     </label>
                                     <div className="relative">
-                                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-mono font-bold text-xs">/p/</span>
+                                        <span className="absolute left-6 top-1/2 -translate-y-1/2 text-gray-300 font-mono font-bold text-xs">/</span>
                                         <input
                                             type="text"
                                             required
                                             value={formData.slug}
                                             onChange={e => setFormData({ ...formData, slug: e.target.value })}
-                                            className="w-full h-14 bg-gray-50 border border-gray-100 rounded-2xl pl-12 pr-6 text-sm font-mono font-bold text-gray-600 focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+                                            className="w-full h-14 bg-gray-50 border border-gray-100 rounded-2xl pl-10 pr-6 text-sm font-mono font-bold text-gray-600 focus:ring-4 focus:ring-primary/10 transition-all outline-none"
                                             placeholder="politica-privacidad"
                                         />
                                     </div>

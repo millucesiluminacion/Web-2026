@@ -36,14 +36,31 @@ export function FooterBottom() {
 
             <div className="flex flex-col gap-4">
                 <div className="flex flex-wrap gap-2 mb-2 xl:mb-0 justify-center">
-                    {['Condiciones generales', 'Política de Privacidad', 'Política de Cookies', 'Preferencias de cookies', 'Servicio Postventa', 'Aviso Legal'].map((item) => (
-                        <a
-                            key={item}
-                            href="#"
-                            className="px-3 border-r border-gray-600 text-xs text-gray-500 hover:text-white last:border-r-0"
-                        >
-                            {item}
-                        </a>
+                    {[
+                        { label: 'Condiciones generales', slug: 'condiciones-generales' },
+                        { label: 'Política de Privacidad', slug: 'politica-privacidad' },
+                        { label: 'Política de Cookies', slug: 'politica-cookies' },
+                        { label: 'Preferencias de cookies', action: () => window.dispatchEvent(new CustomEvent('open-cookie-settings')) },
+                        { label: 'Servicio Postventa', slug: 'contacto' },
+                        { label: 'Aviso Legal', slug: 'aviso-legal' }
+                    ].map((item) => (
+                        item.action ? (
+                            <button
+                                key={item.label}
+                                onClick={item.action}
+                                className="px-3 border-r border-gray-600 text-xs text-gray-500 hover:text-white last:border-r-0"
+                            >
+                                {item.label}
+                            </button>
+                        ) : (
+                            <Link
+                                key={item.label}
+                                to={`/${item.slug}`}
+                                className="px-3 border-r border-gray-600 text-xs text-gray-500 hover:text-white last:border-r-0"
+                            >
+                                {item.label}
+                            </Link>
+                        )
                     ))}
                 </div>
                 <div className="text-xs text-gray-600">

@@ -131,9 +131,9 @@ export default function CookieBanner() {
                     )}
 
                     <div className="flex items-center justify-center gap-6 pt-4 border-t border-white/5">
-                        <Link to="/p/politica-cookies" className="text-[8px] font-bold uppercase tracking-widest text-white/20 hover:text-primary transition-colors">Política de Cookies</Link>
+                        <Link to="/politica-cookies" className="text-[8px] font-bold uppercase tracking-widest text-white/20 hover:text-primary transition-colors">Política de Cookies</Link>
                         <div className="w-1 h-1 rounded-full bg-white/5"></div>
-                        <Link to="/p/aviso-legal" className="text-[8px] font-bold uppercase tracking-widest text-white/20 hover:text-primary transition-colors">Aviso Legal</Link>
+                        <Link to="/aviso-legal" className="text-[8px] font-bold uppercase tracking-widest text-white/20 hover:text-primary transition-colors">Aviso Legal</Link>
                     </div>
                 </div>
 

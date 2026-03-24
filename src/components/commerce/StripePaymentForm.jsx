@@ -45,12 +45,12 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                 orderId = result.orderId;
             }
 
-            // 1. Crear el PaymentIntent en nuestro servidor
+            // 1. Crear el PaymentIntent en nuestro servidor (con verificación de precio)
             const response = await fetch('/api/create-payment-intent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    amount,
+                    orderId: orderId,
                     metadata: { orderId: orderId || '' }
                 }),
             });

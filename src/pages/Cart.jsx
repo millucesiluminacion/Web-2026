@@ -206,7 +206,7 @@ export default function Cart() {
                 const res = await fetch('/api/create-paypal-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ totalPrice, orderId: order.id }),
+                    body: JSON.stringify({ orderId: order.id }),
                 });
                 const { approveUrl, error } = await res.json();
                 if (error) throw new Error(error);

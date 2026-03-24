@@ -71,7 +71,7 @@ export default async function handler(req, res) {
             greetingTimeout: 10000,
             socketTimeout: 10000,
             tls: {
-                rejectUnauthorized: false
+                rejectUnauthorized: true
             }
         });
 

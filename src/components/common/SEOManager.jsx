@@ -78,13 +78,6 @@ export default function SEOManager() {
                         description: data.meta_description,
                         image: data.image_url
                     };
-                } else if (path.startsWith('/p/')) {
-                    const slug = path.split('/').pop();
-                    const { data } = await supabase.from('cms_pages').select('meta_title, meta_description, title').eq('slug', slug).maybeSingle();
-                    if (data) seoData = {
-                        title: data.meta_title || `${data.title} | Mil Luces`,
-                        description: data.meta_description
-                    };
                 } else if (path === '/search' || path === '/decoracion') {
                     const catSlug = searchParams.get('category');
                     const roomSlug = searchParams.get('room');
@@ -99,6 +92,16 @@ export default function SEOManager() {
                         const { data } = await supabase.from('rooms').select('meta_title, meta_description, name').eq('slug', roomSlug).maybeSingle();
                         if (data) seoData = {
                             title: data.meta_title || `${data.name} | Iluminación Mil Luces`,
+                            description: data.meta_description
+                        };
+                    }
+                } else {
+                    // Fallback para páginas CMS u otras rutas dinámicas sin prefijo
+                    const slug = path.split('/').filter(Boolean).pop();
+                    if (slug && !path.includes('/', 1)) {
+                        const { data } = await supabase.from('cms_pages').select('meta_title, meta_description, title').eq('slug', slug).maybeSingle();
+                        if (data) seoData = {
+                            title: data.meta_title || `${data.title} | Mil Luces`,
                             description: data.meta_description
                         };
                     }

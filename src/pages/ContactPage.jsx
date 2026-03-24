@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, Send, Loader2, CheckCircle2, MessageSquare, Clock, Globe } from 'lucide-react';
+import { Mail, Phone, MapPin, Send, Loader2, CheckCircle2, MessageSquare, Clock, Globe, ChevronRight } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import SEOManager from '../components/common/SEOManager';
 
@@ -46,31 +46,63 @@ export default function ContactPage() {
                 description={cmsContent?.meta_description || "Contacta con los expertos en iluminación de Mil Luces Boutique."}
             />
 
-            {/* Hero Section */}
-            <section className="relative py-24 md:py-32 bg-brand-carbon overflow-hidden">
-                <div className="absolute inset-0 opacity-10">
-                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
-                    <div className="grid grid-cols-12 h-full w-full">
-                        {Array(60).fill(0).map((_, i) => (
-                            <div key={i} className="border-r border-b border-white/5 h-16 w-full"></div>
-                        ))}
+            {/* Premium Boutique Header */}
+            <header className="relative pt-24 pb-32 md:pt-32 md:pb-40 bg-brand-carbon overflow-hidden font-outfit">
+                {/* 1. Backdrop Layers */}
+                <div className="absolute inset-0">
+                    {/* Spotlight effect */}
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(234,179,8,0.15),transparent_50%)] animate-pulse-slow"></div>
+
+                    {/* Noise/Texture filter overlay */}
+                    <div className="absolute inset-0 opacity-[0.03] contrast-150 brightness-100 mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
+
+                    {/* Architectural Grid */}
+                    <div className="absolute inset-0 opacity-[0.07]">
+                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
+                        <div className="grid grid-cols-12 h-full w-full">
+                            {Array(12).fill(0).map((_, i) => (
+                                <div key={i} className="border-r border-white/5 h-full w-full"></div>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
+                {/* 2. Floating Outline Text (Background Depth) */}
+                <div className="absolute right-[-5%] top-1/2 -translate-y-1/2 select-none pointer-events-none opacity-[0.04] hidden lg:block">
+                    <span className="text-[18rem] font-black uppercase italic leading-none text-white tracking-tighter" style={{ WebkitTextStroke: '1px rgba(255,255,255,1)', color: 'transparent' }}>
+                        CONTACTO
+                    </span>
+                </div>
+
+                {/* 3. Foreground Content */}
                 <div className="container mx-auto px-6 relative z-10">
                     <div className="max-w-4xl">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block font-outfit italic">
-                            Concierge & Client Relations
-                        </span>
-                        <h1 className="text-4xl md:text-6xl font-black text-white uppercase italic leading-none tracking-tighter mb-8 font-outfit">
-                            Contacto <span className="text-primary/40">Exclusivo</span>
-                        </h1>
-                        <p className="text-white/60 text-lg font-medium leading-relaxed max-w-2xl font-outfit">
-                            Estamos aquí para iluminar tus proyectos. Nuestro equipo de expertos te brindará asesoramiento técnico y estético de alta gama.
-                        </p>
+                        {/* Glass Breadcrumbs */}
+                        <nav className="flex items-center gap-3 mb-8 animate-fade-in">
+                            <button onClick={() => window.location.href = '/'} className="px-3 py-1.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] font-black text-white/40 uppercase tracking-widest hover:text-primary hover:border-primary/30 transition-all">Inicio</button>
+                            <ChevronRight className="w-3 h-3 text-white/10" />
+                            <span className="px-3 py-1.5 bg-primary/10 backdrop-blur-md border border-primary/20 rounded-full text-[9px] font-black text-primary uppercase tracking-widest">Atención al Cliente</span>
+                        </nav>
+
+                        <div className="flex items-start gap-8">
+                            {/* Vertical Signature Line */}
+                            <div className="w-1.5 self-stretch bg-gradient-to-b from-primary via-primary to-transparent hidden md:block rounded-full shadow-[0_0_20px_rgba(234,179,8,0.4)]"></div>
+
+                            <div className="flex-1">
+                                <span className="text-[10px] font-black text-primary uppercase tracking-[.5em] mb-4 block italic opacity-80 animate-slide-right">
+                                    Concierge & Client Relations
+                                </span>
+                                <h1 className="text-4xl md:text-7xl font-black text-white uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-2xl">
+                                    Contacto <span className="text-primary drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]">Exclusivo</span>
+                                </h1>
+                                <p className="text-white/60 text-lg font-medium leading-relaxed max-w-2xl font-outfit animate-fade-in delay-300">
+                                    Estamos aquí para iluminar tus proyectos. Nuestro equipo de expertos te brindará asesoramiento técnico y estético de alta gama.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </section>
+            </header>
 
             <section className="py-24 md:py-32">
                 <div className="container mx-auto px-6">
@@ -220,7 +252,7 @@ export default function ContactPage() {
                                             <div className="flex items-center gap-4 bg-gray-50 p-4 rounded-xl border border-gray-100">
                                                 <input type="checkbox" required className="w-5 h-5 rounded border-gray-300 text-primary focus:ring-primary" />
                                                 <p className="text-[9px] text-gray-400 font-bold uppercase leading-tight tracking-wider">
-                                                    He leído y acepto la <a href="/p/politica-privacidad" className="text-primary hover:underline">Política de Privacidad</a> y el aviso legal.
+                                                    He leído y acepto la <a href="/politica-privacidad" className="text-primary hover:underline">Política de Privacidad</a> y el aviso legal.
                                                 </p>
                                             </div>
 

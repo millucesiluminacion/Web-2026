@@ -77,7 +77,7 @@ function App() {
               <Route path="contacto" element={<ContactPage />} />
               <Route path="marcas" element={<BrandsPage />} />
               <Route path="estancias" element={<RoomsPage />} />
-              <Route path="p/:slug" element={<CMSPage />} />
+              <Route path=":slug" element={<CMSPage />} />
             </Route>
 
             <Route path="/admin" element={<AdminLayout />}>

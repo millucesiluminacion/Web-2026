@@ -5,9 +5,11 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    const allowedOrigin = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -27,15 +29,77 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'PayPal no está configurado en el admin.' });
         }
 
-        const { clientId, secretKey } = data.value;
-        const { totalPrice, orderId } = req.body;
+        const { clientId, secretKey, sandbox } = data.value;
+        const { orderId } = req.body;
 
-        if (!totalPrice || totalPrice <= 0) {
+        if (!orderId) {
+            return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
+        }
+
+        // SERVER-SIDE PRICE VERIFICATION
+        const { data: orderItems, error: itemsError } = await supabase
+            .from('order_items')
+            .select('product_id, quantity')
+            .eq('order_id', orderId);
+
+        if (itemsError || !orderItems?.length) {
+            return res.status(400).json({ error: 'Pedido no encontrado o sin productos.' });
+        }
+
+        const productIds = orderItems.map(item => item.product_id);
+        const { data: products, error: productsError } = await supabase
+            .from('products')
+            .select('id, price, discount_price')
+            .in('id', productIds);
+
+        if (productsError || !products?.length) {
+            return res.status(400).json({ error: 'Error al verificar los precios.' });
+        }
+
+        const productMap = {};
+        products.forEach(p => {
+            productMap[p.id] = (p.discount_price && p.discount_price > 0 && p.discount_price < p.price)
+                ? p.discount_price
+                : p.price;
+        });
+
+        let verifiedSubtotal = 0;
+        for (const item of orderItems) {
+            const unitPrice = productMap[item.product_id];
+            if (unitPrice === undefined) {
+                return res.status(400).json({ error: `Producto no encontrado en el catálogo.` });
+            }
+            verifiedSubtotal += unitPrice * item.quantity;
+        }
+
+        // Get order total (includes shipping) and verify
+        const { data: orderData } = await supabase
+            .from('orders')
+            .select('total')
+            .eq('id', orderId)
+            .single();
+
+        const clientTotal = orderData?.total || 0;
+        const maxAllowedDifference = 30;
+
+        if (Math.abs(clientTotal - verifiedSubtotal) > maxAllowedDifference) {
+            console.error(`[PayPal] Price mismatch! Client: ${clientTotal}, Server: ${verifiedSubtotal}`);
+            return res.status(400).json({ error: 'Error de verificación de precio. Los precios han cambiado.' });
+        }
+
+        const verifiedTotal = clientTotal;
+
+        if (!verifiedTotal || verifiedTotal <= 0) {
             return res.status(400).json({ error: 'Importe no válido.' });
         }
 
+        // PayPal API: support sandbox mode
+        const paypalBaseUrl = sandbox
+            ? 'https://api-m.sandbox.paypal.com'
+            : 'https://api-m.paypal.com';
+
         // Autenticación con PayPal
-        const authRes = await fetch('https://api-m.paypal.com/v1/oauth2/token', {
+        const authRes = await fetch(`${paypalBaseUrl}/v1/oauth2/token`, {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${Buffer.from(`${clientId}:${secretKey}`).toString('base64')}`,
@@ -52,8 +116,8 @@ export default async function handler(req, res) {
 
         const baseUrl = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
 
-        // Crear orden PayPal
-        const orderRes = await fetch('https://api-m.paypal.com/v2/checkout/orders', {
+        // Crear orden PayPal con precio verificado
+        const orderRes = await fetch(`${paypalBaseUrl}/v2/checkout/orders`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authData.access_token}`,
@@ -65,7 +129,7 @@ export default async function handler(req, res) {
                     reference_id: orderId || 'MIL-LUCES',
                     amount: {
                         currency_code: 'EUR',
-                        value: parseFloat(totalPrice).toFixed(2),
+                        value: parseFloat(verifiedTotal).toFixed(2),
                     },
                     description: 'Pedido Mil Luces',
                 }],
@@ -88,10 +152,10 @@ export default async function handler(req, res) {
         }
 
         console.error('[PayPal] Order creation failed:', paypalOrder);
-        return res.status(500).json({ error: 'Error creando la orden en PayPal.', detail: paypalOrder });
+        return res.status(500).json({ error: 'Error creando la orden en PayPal.' });
 
     } catch (err) {
         console.error('[PayPal] Error:', err.message);
-        return res.status(500).json({ error: err.message });
+        return res.status(500).json({ error: 'Error al procesar el pago con PayPal.' });
     }
 }

@@ -34,8 +34,7 @@ export default async function handler(req, res) {
             environment: {
                 platform: process.env.VERCEL ? 'Vercel' : 'Node.js (Local/Custom)',
                 supabase_url: !!process.env.VITE_SUPABASE_URL || !!process.env.SUPABASE_URL,
-                supabase_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY || !!process.env.VITE_SUPABASE_SERVICE_KEY || !!process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || !!process.env.SUPABASE_SERVICE_KEY,
-                detected_keys: Object.keys(process.env).filter(key => key.includes('SUPABASE'))
+                supabase_service_key: !!process.env.SUPABASE_SERVICE_ROLE_KEY || !!process.env.VITE_SUPABASE_SERVICE_KEY || !!process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || !!process.env.SUPABASE_SERVICE_KEY
             },
             database: {
                 reachable: false,

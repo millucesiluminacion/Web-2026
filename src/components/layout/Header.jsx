@@ -109,7 +109,7 @@ export function Header({ onOpenAuthModal }) {
         <>
             <header
                 ref={megaRef}
-                className={`relative z-40 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-lg shadow-luxury py-2' : 'bg-white/80 py-4'} ${isPartner || isPro ? 'border-b-2 border-accent-glow' : ''}`}
+                className={`relative z-40 transition-all duration-300 ${scrolled ? 'bg-white/95 backdrop-blur-lg shadow-luxury py-2' : 'bg-white/80 py-4'} ${isPartner || isPro ? 'border-b border-accent-glow/30' : ''}`}
                 onMouseLeave={handleMegaLeave}
             >
                 {/* Top bar */}

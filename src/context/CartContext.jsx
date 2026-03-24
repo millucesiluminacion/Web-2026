@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase as supabaseClient } from '../lib/supabaseClient';
+import { calculateProductPrice } from '../lib/pricingUtils';
 
 const CartContext = createContext();
 
@@ -113,7 +114,10 @@ export function CartProvider({ children }) {
     }, []);
 
     const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
-    const subtotal = cart.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    const subtotal = cart.reduce((acc, item) => {
+        const pricing = calculateProductPrice(item, profile, item.quantity);
+        return acc + (pricing.finalPrice * item.quantity);
+    }, 0);
 
     // Dynamic Shipping Logic
     const getShippingDetails = () => {
