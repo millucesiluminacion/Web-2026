@@ -50,7 +50,7 @@ export function Header({ onOpenAuthModal }) {
 
     const handleSearch = (e) => {
         e.preventDefault();
-        if (searchTerm.trim()) navigate(`/search?q=${encodeURIComponent(searchTerm)}`);
+        if (searchTerm.trim()) navigate(`/catalogo?q=${encodeURIComponent(searchTerm)}`);
     };
 
     useEffect(() => {
@@ -125,7 +125,7 @@ export function Header({ onOpenAuthModal }) {
                         <nav className="hidden xl:flex items-center gap-10">
                             {/* Catálogo trigger */}
                             <Link
-                                to="/search"
+                                to="/catalogo"
                                 onMouseEnter={handleMegaEnter}
                                 onClick={() => setShowMegaMenu(false)}
                                 className={`relative group flex items-center gap-1.5 text-[11px] font-black uppercase tracking-[.2em] italic transition-colors ${showMegaMenu ? 'text-brand-carbon' : 'text-brand-carbon/60 hover:text-brand-carbon'}`}
@@ -276,7 +276,7 @@ export function Header({ onOpenAuthModal }) {
                                         {categories.map((cat) => (
                                             <Link
                                                 key={cat.slug}
-                                                to={`/search?category=${cat.slug}`}
+                                                to={`/catalogo?category=${cat.slug}`}
                                                 onClick={() => setShowMegaMenu(false)}
                                                 className="flex items-center gap-2 group"
                                             >
@@ -288,7 +288,7 @@ export function Header({ onOpenAuthModal }) {
                                         ))}
                                     </div>
                                     <Link
-                                        to="/search"
+                                        to="/catalogo"
                                         onClick={() => setShowMegaMenu(false)}
                                         className="inline-flex items-center gap-2 mt-8 text-[9px] font-black text-primary/70 hover:text-primary uppercase tracking-widest italic transition-all group"
                                     >
@@ -304,7 +304,7 @@ export function Header({ onOpenAuthModal }) {
                                         {rooms.map((room) => (
                                             <li key={room.slug}>
                                                 <Link
-                                                    to={`/search?room=${room.slug}`}
+                                                    to={`/catalogo?room=${room.slug}`}
                                                     onClick={() => setShowMegaMenu(false)}
                                                     className="flex items-center gap-2 group"
                                                 >
@@ -325,7 +325,7 @@ export function Header({ onOpenAuthModal }) {
                                         {professions.map((prof) => (
                                             <li key={prof.slug}>
                                                 <Link
-                                                    to={`/search?profession=${prof.slug}`}
+                                                    to={`/catalogo?profession=${prof.slug}`}
                                                     onClick={() => setShowMegaMenu(false)}
                                                     className="flex items-center gap-2 group"
                                                 >
@@ -383,7 +383,7 @@ export function Header({ onOpenAuthModal }) {
                             <p className="text-[9px] font-black text-primary uppercase tracking-[.4em] mb-5">Categorías</p>
                             <div className="grid grid-cols-2 gap-y-3 gap-x-6 mb-8">
                                 {categories.map((cat) => (
-                                    <Link key={cat.slug} to={`/search?category=${cat.slug}`} onClick={() => setIsMenuOpen(false)}
+                                    <Link key={cat.slug} to={`/catalogo?category=${cat.slug}`} onClick={() => setIsMenuOpen(false)}
                                         className="text-[11px] font-bold text-gray-500 hover:text-brand-carbon uppercase italic tracking-wide transition-colors flex items-center gap-2">
                                         <span className="w-1 h-1 rounded-full bg-gray-200 group-hover:bg-primary flex-shrink-0"></span>
                                         {cat.name}

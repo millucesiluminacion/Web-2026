@@ -35,7 +35,7 @@ export default function SEOManager() {
             const routeMap = {
                 '/': 'home',
                 '/ofertas': 'ofertas',
-                '/search': 'tienda',       // ruta real del catálogo
+                '/catalogo': 'tienda',       // ruta real del catálogo
                 '/decoracion': 'tienda',   // alias de decoración
                 '/proyectos': 'proyectos',
                 '/profesionales': 'profesionales',
@@ -78,7 +78,7 @@ export default function SEOManager() {
                         description: data.meta_description,
                         image: data.image_url
                     };
-                } else if (path === '/search' || path === '/decoracion') {
+                } else if (path === '/catalogo' || path === '/decoracion') {
                     const catSlug = searchParams.get('category');
                     const roomSlug = searchParams.get('room');
 

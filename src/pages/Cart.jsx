@@ -261,7 +261,7 @@ export default function Cart() {
                         <button onClick={() => navigate('/')} className="px-10 py-4 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] hover:bg-primary transition-all shadow-xl shadow-black/20">
                             Seguir Explorando
                         </button>
-                        <Link to="/search" className="px-10 py-4 bg-white text-brand-carbon rounded-2xl font-black uppercase italic text-[10px] hover:border-primary border border-gray-100 transition-all shadow-luxury">
+                        <Link to="/catalogo" className="px-10 py-4 bg-white text-brand-carbon rounded-2xl font-black uppercase italic text-[10px] hover:border-primary border border-gray-100 transition-all shadow-luxury">
                             Ver Catálogo
                         </Link>
                     </div>
@@ -282,7 +282,7 @@ export default function Cart() {
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[.4em] mb-12 text-center max-w-xs">
                     Parece que aún no has seleccionado ninguna de nuestras piezas exclusivas.
                 </p>
-                <Link to="/search" className="px-12 py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] hover:bg-primary transition-all shadow-xl shadow-black/20">
+                <Link to="/catalogo" className="px-12 py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] hover:bg-primary transition-all shadow-xl shadow-black/20">
                     Explorar Galería
                 </Link>
             </div>
@@ -593,7 +593,7 @@ export default function Cart() {
                                 </div>
                             </div>
                             <div className="mt-4 text-center">
-                                <Link to="/search" className="text-[9px] font-black text-gray-400 uppercase tracking-widest hover:text-primary transition-colors">
+                                <Link to="/catalogo" className="text-[9px] font-black text-gray-400 uppercase tracking-widest hover:text-primary transition-colors">
                                     ← Seguir Explorando
                                 </Link>
                             </div>

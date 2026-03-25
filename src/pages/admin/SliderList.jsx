@@ -315,7 +315,7 @@ export default function SliderList() {
                                         <input
                                             type="text"
                                             className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-mono"
-                                            placeholder="/search"
+                                            placeholder="/catalogo"
                                             value={formData.link_url}
                                             onChange={e => setFormData({ ...formData, link_url: e.target.value })}
                                         />
@@ -347,7 +347,7 @@ export default function SliderList() {
                                     <input
                                         type="text"
                                         className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-mono"
-                                        placeholder="/search?category=bombillas"
+                                        placeholder="/catalogo?category=bombillas"
                                         value={formData.link_url}
                                         onChange={e => setFormData({ ...formData, link_url: e.target.value })}
                                     />

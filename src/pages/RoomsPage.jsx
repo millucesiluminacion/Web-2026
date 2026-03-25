@@ -119,7 +119,7 @@ export default function RoomsPage() {
                                         </span>
                                     </div>
                                     <div className="h-full">
-                                        <Link to={`/search?room=${room.id || room.slug}`} className="block h-full">
+                                        <Link to={`/catalogo?room=${room.id || room.slug}`} className="block h-full">
                                             <img
                                                 src={room.img}
                                                 alt={room.name}

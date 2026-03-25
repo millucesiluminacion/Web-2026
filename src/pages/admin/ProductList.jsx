@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { useCart } from '../../context/CartContext';
 import ImageUpload from '../../components/admin/ImageUpload';
 import Papa from 'papaparse';
 import ReactQuill from 'react-quill';
@@ -18,6 +19,9 @@ export default function ProductList() {
         "Material": ["Aluminio", "Acero", "Madera", "Cristal", "Acrílico", "PVC", "Policarbonato"],
         "CRI": ["CRI >80", "CRI >90", "CRI >95"]
     };
+
+    const { shippingConfig } = useCart();
+    const freeShippingThreshold = shippingConfig?.tiers?.b2c?.zones?.peninsula?.free_shipping_threshold ?? 100;
 
     const [products, setProducts] = useState([]);
     const [categories, setCategories] = useState([]);
@@ -1245,7 +1249,9 @@ export default function ProductList() {
                                                         else if (product.stock <= 5) autoBadges.push({ label: 'ÚLTIMAS UNDS', color: 'bg-orange-500' });
 
                                                         // Free Shipping
-                                                        if (product.price >= 100) autoBadges.push({ label: 'ENVÍO GRATIS', color: 'bg-emerald-500' });
+                                                        if (freeShippingThreshold > 0 && product.price >= freeShippingThreshold) {
+                                                            autoBadges.push({ label: 'ENVÍO GRATIS', color: 'bg-emerald-500' });
+                                                        }
 
                                                         return autoBadges.map(ab => (
                                                             <span key={ab.label} className={`px-1.5 py-0.5 text-[7px] font-black uppercase rounded text-white shadow-sm ${ab.color}`}>

@@ -462,11 +462,11 @@ export default function ProductDetail() {
                 <nav className="flex items-center gap-2 mb-8 text-[10px] font-bold uppercase tracking-[.3em]">
                     <Link to="/" className="text-brand-carbon/30 hover:text-primary transition-colors">Inicio</Link>
                     <ChevronRight className="w-3 h-3 text-brand-carbon/20" />
-                    <Link to="/search" className="text-brand-carbon/30 hover:text-primary transition-colors">Catálogo</Link>
+                    <Link to="/catalogo" className="text-brand-carbon/30 hover:text-primary transition-colors">Catálogo</Link>
                     {categoryName && (
                         <>
                             <ChevronRight className="w-3 h-3 text-brand-carbon/20" />
-                            <Link to={`/search?category=${categorySlug}`} className="text-brand-carbon/30 hover:text-primary transition-colors">{categoryName}</Link>
+                            <Link to={`/catalogo?category=${categorySlug}`} className="text-brand-carbon/30 hover:text-primary transition-colors">{categoryName}</Link>
                         </>
                     )}
                     <ChevronRight className="w-3 h-3 text-brand-carbon/20" />

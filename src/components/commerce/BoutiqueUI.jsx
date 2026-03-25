@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShoppingCart, Star, Heart, Clock, Zap, Shield, Sparkles, Award, Info } from 'lucide-react';
+import { useCart } from '../../context/CartContext';
 
 /**
  * BadgeRenderer - Componente centralizado para la taxonomía de badges
@@ -7,6 +8,10 @@ import { ShoppingCart, Star, Heart, Clock, Zap, Shield, Sparkles, Award, Info } 
  */
 export const BadgeRenderer = ({ product }) => {
     const badges = [];
+    const { shippingConfig } = useCart();
+
+    // Configuración dinámica del umbral de envío gratis
+    const freeShippingThreshold = shippingConfig?.tiers?.b2c?.zones?.peninsula?.free_shipping_threshold ?? 100;
 
     // 1. AUTOMATIC BADGES (System Driven)
     const stock = parseInt(product.stock || 0);
@@ -50,7 +55,7 @@ export const BadgeRenderer = ({ product }) => {
         });
     }
 
-    if (price >= 100) {
+    if (freeShippingThreshold > 0 && price >= freeShippingThreshold) {
         badges.push({
             label: 'ENVÍO GRATIS',
             icon: Zap,
@@ -77,7 +82,7 @@ export const BadgeRenderer = ({ product }) => {
     if (product.badge_tags && Array.isArray(product.badge_tags)) {
         product.badge_tags.forEach(tag => {
             const lowerTag = tag.toLowerCase();
-            if (lowerTag === 'envío gratis' && product.price >= 100) return;
+            if (lowerTag === 'envío gratis' && freeShippingThreshold > 0 && product.price >= freeShippingThreshold) return;
             if (lowerTag === 'agotado' && product.stock === 0) return;
 
             // Deduplicate if already added via dynamic

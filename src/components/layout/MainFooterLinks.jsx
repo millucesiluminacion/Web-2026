@@ -73,7 +73,7 @@ export function MainFooterLinks() {
                     {categories.length > 0 ? (
                         categories.map(cat => (
                             <li key={cat.slug}>
-                                <Link to={`/search?category=${cat.slug}`} className="hover:text-blue-400 transition-colors flex items-center gap-1">
+                                <Link to={`/catalogo?category=${cat.slug}`} className="hover:text-blue-400 transition-colors flex items-center gap-1">
                                     <span className="text-blue-800">›</span> {cat.name}
                                 </Link>
                             </li>

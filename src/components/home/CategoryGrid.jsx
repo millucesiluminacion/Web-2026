@@ -4,18 +4,18 @@ import { supabase } from '../../lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
 
 const STATIC_CATEGORIES = [
-    { name: 'Bombillas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png', link: '/search?category=bombillas' },
-    { name: 'Tubos', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-7_desktop.png', link: '/search?category=tubos' },
-    { name: 'Downlights', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-11_desktop.png', link: '/search?category=downlights' },
-    { name: 'Paneles', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-8_desktop.png', link: '/search?category=paneles' },
-    { name: 'Tiras', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-10_desktop.png', link: '/search?category=tiras' },
-    { name: 'Solar', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-126_desktop.png', link: '/search?category=solar' },
-    { name: 'Proyectores', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-9_desktop.png', link: '/search?category=proyectores' },
-    { name: 'Ventiladores', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-888_desktop.png', link: '/search?category=ventiladores' },
-    { name: 'Farolas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-47_desktop.png', link: '/search?category=farolas' },
-    { name: 'Comercial', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-93_desktop.png', link: '/search?category=comercial' },
-    { name: 'Industrial', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-55_desktop.png', link: '/search?category=industrial' },
-    { name: 'Lámparas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-111_desktop.png', link: '/search?category=lamparas' },
+    { name: 'Bombillas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png', link: '/catalogo?category=bombillas' },
+    { name: 'Tubos', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-7_desktop.png', link: '/catalogo?category=tubos' },
+    { name: 'Downlights', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-11_desktop.png', link: '/catalogo?category=downlights' },
+    { name: 'Paneles', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-8_desktop.png', link: '/catalogo?category=paneles' },
+    { name: 'Tiras', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-10_desktop.png', link: '/catalogo?category=tiras' },
+    { name: 'Solar', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-126_desktop.png', link: '/catalogo?category=solar' },
+    { name: 'Proyectores', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-9_desktop.png', link: '/catalogo?category=proyectores' },
+    { name: 'Ventiladores', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-888_desktop.png', link: '/catalogo?category=ventiladores' },
+    { name: 'Farolas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-47_desktop.png', link: '/catalogo?category=farolas' },
+    { name: 'Comercial', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-93_desktop.png', link: '/catalogo?category=comercial' },
+    { name: 'Industrial', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-55_desktop.png', link: '/catalogo?category=industrial' },
+    { name: 'Lámparas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-111_desktop.png', link: '/catalogo?category=lamparas' },
 ];
 
 export function CategoryGrid() {
@@ -38,7 +38,7 @@ export function CategoryGrid() {
                     const formatted = data.map(cat => ({
                         name: cat.name,
                         img: cat.image_url || 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png',
-                        link: `/search?category=${cat.slug || cat.name.toLowerCase()}`
+                        link: `/catalogo?category=${cat.slug || cat.name.toLowerCase()}`
                     }));
                     setCategories(formatted);
                 } else {

@@ -143,7 +143,7 @@ export default function HomePage() {
                                     </h1>
                                     <div className="flex flex-wrap gap-4">
                                         <Link
-                                            to={activeSliders[currentSlider]?.link_url || '/search'}
+                                            to={activeSliders[currentSlider]?.link_url || '/catalogo'}
                                             className="px-6 lg:px-12 py-3 lg:py-6 bg-white text-brand-carbon rounded-xl lg:rounded-2xl font-black uppercase italic text-[10px] lg:text-xs hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30"
                                         >
                                             {activeSliders[currentSlider]?.button_text || 'Ver Boutique'}
@@ -166,7 +166,7 @@ export default function HomePage() {
                         {/* Side Narrative Feature - Mini Slider PRO */}
                         <div className="lg:col-span-3 lg:flex flex-col gap-6 hidden lg:h-[500px]">
                             <Link
-                                to={professions.length > 0 ? `/search?profession=${professions[proSlider]?.slug}` : "/profesionales"}
+                                to={professions.length > 0 ? `/catalogo?profession=${professions[proSlider]?.slug}` : "/profesionales"}
                                 className="flex-1 bg-brand-carbon rounded-[2.5rem] shadow-luxury border border-white/5 flex flex-col justify-between group cursor-pointer hover:border-primary/40 transition-all relative overflow-hidden"
                             >
                                 <div className="absolute inset-0 z-0">
@@ -243,7 +243,7 @@ export default function HomePage() {
                         <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Premium Selection</span>
                         <h2 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Novedades <span className="text-primary/60">Destacadas</span></h2>
                     </div>
-                    <Link to="/search" className="text-[10px] font-black text-brand-carbon uppercase italic tracking-widest hover:text-primary transition-all flex items-center gap-2 border-b-2 border-brand-carbon pb-1 group">
+                    <Link to="/catalogo" className="text-[10px] font-black text-brand-carbon uppercase italic tracking-widest hover:text-primary transition-all flex items-center gap-2 border-b-2 border-brand-carbon pb-1 group">
                         Ver Colección Completa <div className="w-6 h-[1px] bg-brand-carbon group-hover:w-10 transition-all"></div>
                     </Link>
                 </div>

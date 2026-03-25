@@ -46,7 +46,7 @@ export function MiniCart() {
                                 </p>
                             </div>
                             <button
-                                onClick={() => { setIsSideCartOpen(false); navigate('/search'); }}
+                                onClick={() => { setIsSideCartOpen(false); navigate('/catalogo'); }}
                                 className="px-8 py-4 bg-brand-carbon text-white rounded-2xl text-[10px] font-black uppercase italic tracking-widest hover:bg-primary transition-all shadow-lg shadow-black/10"
                             >
                                 Explorar Colecciones

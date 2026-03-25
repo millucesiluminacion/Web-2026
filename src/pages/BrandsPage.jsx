@@ -133,7 +133,7 @@ export default function BrandsPage() {
                                             <img src={brand.img} alt={brand.name} className="max-w-full max-h-full object-contain" />
                                         </div>
                                     </div>
-                                    <Link to={`/search?brand=${brand.id || brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-black italic text-brand-carbon uppercase tracking-tighter mt-4 hover:text-primary transition-colors">
+                                    <Link to={`/catalogo?brand=${brand.id || brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-black italic text-brand-carbon uppercase tracking-tighter mt-4 hover:text-primary transition-colors">
                                         {brand.name}
                                     </Link>
                                 </div>

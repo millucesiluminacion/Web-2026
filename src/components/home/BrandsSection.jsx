@@ -80,7 +80,7 @@ export function BrandsSection() {
                                         <img src={brand.img} alt={brand.name} className="max-w-full max-h-full object-contain" />
                                     </div>
                                 </div>
-                                <Link to={`/search?brand=${brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-medium mt-4">
+                                <Link to={`/catalogo?brand=${brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-medium mt-4">
                                     {brand.name}
                                 </Link>
                             </div>

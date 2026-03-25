@@ -54,7 +54,7 @@ export async function seedCMS() {
         {
             title: 'Mapa del Sitio',
             slug: 'mapa-del-sitio',
-            content: { body: '<h2>Mapa del Sitio</h2><ul><li><a href="/">Inicio</a></li><li><a href="/search">Catálogo</a></li><li><a href="/blog">Blog</a></li></ul>' },
+            content: { body: '<h2>Mapa del Sitio</h2><ul><li><a href="/">Inicio</a></li><li><a href="/catalogo">Catálogo</a></li><li><a href="/blog">Blog</a></li></ul>' },
             meta_title: 'Mapa del Sitio | Mil Luces Boutique',
             meta_description: 'Guía de navegación de Mil Luces.'
         },
