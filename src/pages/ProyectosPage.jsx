@@ -4,35 +4,41 @@ import { supabase } from '../lib/supabaseClient';
 
 export default function ProyectosPage() {
     const [projects, setProjects] = useState([]);
+    const [cmsData, setCmsData] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        async function fetchProjects() {
+        async function fetchData() {
             try {
-                const { data, error } = await supabase
-                    .from('projects')
-                    .select('*')
-                    .order('order_index', { ascending: true });
+                const [projectsRes, cmsRes] = await Promise.all([
+                    supabase.from('projects').select('*').order('order_index', { ascending: true }),
+                    supabase.from('cms_pages').select('*').eq('slug', 'proyectos').maybeSingle()
+                ]);
 
-                if (error) throw error;
-                setProjects(data || []);
+                if (projectsRes.error) throw projectsRes.error;
+                setProjects(projectsRes.data || []);
+                if (cmsRes.data) setCmsData(cmsRes.data);
             } catch (err) {
-                console.error('Error fetching projects:', err);
+                console.error('Error fetching projects data:', err);
             } finally {
                 setLoading(false);
             }
         }
 
-        fetchProjects();
+        fetchData();
     }, []);
 
     return (
         <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12">
             <div className="container mx-auto px-6 max-w-[1400px]">
-                <header className="mb-12 text-center relative">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Archive Mil Luces</span>
-                    <h1 className="text-4xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
-                        Obras <span className="text-primary/40 italic">de</span> <br /> <span className="text-brand-carbon">Luz Pura</span>
+                <header className="mb-12 text-center relative group">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
+                        {cmsData?.content?.header_subtitle || 'Archive Mil Luces'}
+                    </span>
+                    <h1 className="text-4xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter animate-reveal-up drop-shadow-sm">
+                        {cmsData?.content?.header_title || (
+                            <>Obras <span className="text-primary/40 italic">de</span> <br /> <span className="text-brand-carbon">Luz Pura</span></>
+                        )}
                     </h1>
                     <div className="w-20 h-1 bg-primary/10 mx-auto mt-8 rounded-full"></div>
                 </header>

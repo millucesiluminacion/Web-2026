@@ -13,6 +13,7 @@ const STATIC_ROOMS = [
 
 export default function RoomsPage() {
     const [rooms, setRooms] = useState([]);
+    const [cmsData, setCmsData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [counts, setCounts] = useState({});
@@ -21,39 +22,27 @@ export default function RoomsPage() {
         async function fetchData() {
             try {
                 setLoading(true);
-                // Fetch Rooms
-                const { data: roomsData, error: roomsError } = await supabase
-                    .from('rooms')
-                    .select('*')
-                    .order('order_index', { ascending: true })
-                    .order('name', { ascending: true });
+                // Fetch Rooms, CMS and Product Counts simultaneously
+                const [roomsRes, cmsRes, productsRes] = await Promise.all([
+                    supabase.from('rooms').select('*').order('order_index', { ascending: true }).order('name', { ascending: true }),
+                    supabase.from('cms_pages').select('*').eq('slug', 'estancias').maybeSingle(),
+                    supabase.from('products').select('room_id').is('parent_id', null).neq('is_active', false)
+                ]);
 
-                if (roomsError) throw roomsError;
+                if (roomsRes.error) throw roomsRes.error;
 
-                // Fetch Product Counts per Room
-                const { data: productsData, error: productsError } = await supabase
-                    .from('products')
-                    .select('room_id')
-                    .is('parent_id', null)
-                    .neq('is_active', false);
+                // Process Product Counts
+                const dataForCounts = productsRes.data || [];
+                const roomCounts = dataForCounts.reduce((acc, p) => {
+                    if (p.room_id) acc[p.room_id] = (acc[p.room_id] || 0) + 1;
+                    return acc;
+                }, {});
+                setCounts(roomCounts);
 
-                if (productsError) {
-                    const { data: fallbackData } = await supabase.from('products').select('room_id').is('parent_id', null);
-                    const roomCounts = (fallbackData || []).reduce((acc, p) => {
-                        if (p.room_id) acc[p.room_id] = (acc[p.room_id] || 0) + 1;
-                        return acc;
-                    }, {});
-                    setCounts(roomCounts);
-                } else {
-                    const roomCounts = (productsData || []).reduce((acc, p) => {
-                        if (p.room_id) acc[p.room_id] = (acc[p.room_id] || 0) + 1;
-                        return acc;
-                    }, {});
-                    setCounts(roomCounts);
-                }
+                if (cmsRes.data) setCmsData(cmsRes.data);
 
-                if (roomsData && roomsData.length > 0) {
-                    const formatted = roomsData.map(room => ({
+                if (roomsRes.data && roomsRes.data.length > 0) {
+                    const formatted = roomsRes.data.map(room => ({
                         id: room.id,
                         name: room.name,
                         img: room.image_url || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?q=80&w=2000',
@@ -79,12 +68,16 @@ export default function RoomsPage() {
     );
 
     return (
-        <div className="bg-brand-porcelain min-h-screen pt-32 pb-20">
+        <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12">
             <div className="container mx-auto px-6 max-w-[1400px]">
-                <header className="mb-12 text-center relative">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Mil Luces Boutique</span>
-                    <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
-                        Iluminación por <span className="text-primary/40">Estancias</span> <br /> <span className="text-brand-carbon">Exclusivas</span>
+                <header className="mb-12 text-center relative group">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
+                        {cmsData?.content?.header_subtitle || 'Mil Luces Boutique'}
+                    </span>
+                    <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter animate-reveal-up drop-shadow-sm">
+                        {cmsData?.content?.header_title || (
+                            <>Iluminación por <span className="text-primary/40">Estancias</span> <br /> <span className="text-brand-carbon">Exclusivas</span></>
+                        )}
                     </h1>
                     <div className="w-20 h-1 bg-primary/20 mx-auto mt-8 rounded-full"></div>
                 </header>

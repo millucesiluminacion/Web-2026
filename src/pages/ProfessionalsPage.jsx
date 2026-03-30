@@ -20,15 +20,15 @@ const DEFAULT_BENEFITS = [
 
 export default function ProfessionalsPage() {
     const [benefits, setBenefits] = useState([]);
-    const [content, setContent] = useState({});
+    const [cmsData, setCmsData] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function loadProData() {
             try {
-                const [benefitsRes, contentRes] = await Promise.all([
+                const [benefitsRes, cmsRes] = await Promise.all([
                     supabase.from('pro_benefits').select('*').eq('is_active', true).order('order_index', { ascending: true }),
-                    supabase.from('pro_content').select('*')
+                    supabase.from('cms_pages').select('*').eq('slug', 'profesionales').maybeSingle()
                 ]);
 
                 if (benefitsRes.data && benefitsRes.data.length > 0) {
@@ -37,12 +37,8 @@ export default function ProfessionalsPage() {
                     setBenefits(DEFAULT_BENEFITS);
                 }
 
-                if (contentRes.data) {
-                    const contentMap = {};
-                    contentRes.data.forEach(item => {
-                        contentMap[item.key] = item.value;
-                    });
-                    setContent(contentMap);
+                if (cmsRes.data) {
+                    setCmsData(cmsRes.data);
                 }
             } catch (err) {
                 console.error("Error loading Pro data:", err);
@@ -64,22 +60,20 @@ export default function ProfessionalsPage() {
     }
 
     return (
-        <div className="bg-[#FDFDFD] min-h-screen py-20 font-outfit">
+        <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12 font-outfit">
             <div className="container mx-auto px-6 max-w-[1200px]">
                 {/* Hero Section */}
                 <header className="mb-24 text-center">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.5em] mb-6 block animate-in fade-in slide-in-from-bottom-2 duration-700">
-                        {content.subtitle || 'Service for Architects & Contractors'}
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-6 block animate-in fade-in slide-in-from-bottom-2 duration-700">
+                        {cmsData?.content?.header_subtitle || 'Service for Architects & Contractors'}
                     </span>
                     <h1 className="text-5xl md:text-7xl lg:text-8xl font-black text-brand-carbon uppercase italic leading-[0.85] tracking-tighter mb-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                        {content.title ? content.title.split('\n').map((t, i) => (
-                            <span key={i}>{i > 0 && <br />}{t}</span>
-                        )) : (
+                        {cmsData?.content?.header_title || (
                             <>La Alianza <br /><span className="text-primary italic">Perfecta</span> para <br /><span className="text-gray-300">Tus Proyectos</span></>
                         )}
                     </h1>
                     <p className="max-w-xl mx-auto text-gray-400 font-bold uppercase tracking-widest text-xs leading-relaxed mb-12 animate-in fade-in slide-in-from-bottom-6 duration-1000">
-                        {content.description || 'Impulsamos tu negocio con tecnología lumínica de vanguardia, precios directos de fábrica y un soporte técnico que habla tu mismo idioma.'}
+                        {cmsData?.content?.body?.replace(/<[^>]*>?/gm, '') || 'Impulsamos tu negocio con tecnología lumínica de vanguardia, precios directos de fábrica y un soporte técnico que habla tu mismo idioma.'}
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
                         <Link
@@ -130,7 +124,7 @@ export default function ProfessionalsPage() {
 
                     <div className="relative z-10 max-w-2xl mx-auto">
                         <h2 className="text-3xl md:text-5xl font-black text-white uppercase italic tracking-tighter mb-8 leading-none">
-                            {(content.cta_title || 'Únete al ProClub\nde Mil Luces').split('\n').map((t, i) => (
+                            {(cmsData?.content?.cta_title || 'Únete al ProClub\nde Mil Luces').split('\n').map((t, i) => (
                                 <span key={i}>{i > 0 && <br />}{t}</span>
                             ))}
                         </h2>

@@ -40,69 +40,29 @@ export default function ContactPage() {
     };
 
     return (
-        <div className="bg-white min-h-screen">
+        <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12 font-outfit">
             <SEOManager
                 title={cmsContent?.meta_title || "Contacto | Mil Luces Boutique"}
                 description={cmsContent?.meta_description || "Contacta con los expertos en iluminación de Mil Luces Boutique."}
             />
 
-            {/* Premium Boutique Header */}
-            <header className="relative pt-24 pb-32 md:pt-32 md:pb-40 bg-brand-carbon overflow-hidden font-outfit">
-                {/* 1. Backdrop Layers */}
-                <div className="absolute inset-0">
-                    {/* Spotlight effect */}
-                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(234,179,8,0.15),transparent_50%)] animate-pulse-slow"></div>
-
-                    {/* Noise/Texture filter overlay */}
-                    <div className="absolute inset-0 opacity-[0.03] contrast-150 brightness-100 mix-blend-overlay" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")` }}></div>
-
-                    {/* Architectural Grid */}
-                    <div className="absolute inset-0 opacity-[0.07]">
-                        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary to-transparent"></div>
-                        <div className="grid grid-cols-12 h-full w-full">
-                            {Array(12).fill(0).map((_, i) => (
-                                <div key={i} className="border-r border-white/5 h-full w-full"></div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 2. Floating Outline Text (Background Depth) */}
-                <div className="absolute right-[-5%] top-1/2 -translate-y-1/2 select-none pointer-events-none opacity-[0.04] hidden lg:block">
-                    <span className="text-[18rem] font-black uppercase italic leading-none text-white tracking-tighter" style={{ WebkitTextStroke: '1px rgba(255,255,255,1)', color: 'transparent' }}>
-                        CONTACTO
+            <div className="container mx-auto px-6 max-w-[1400px]">
+                {/* Simplified Header */}
+                <header className="mb-16 text-center relative group">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
+                        {cmsContent?.content?.header_subtitle || 'Concierge & Client Relations'}
                     </span>
-                </div>
-
-                {/* 3. Foreground Content */}
-                <div className="container mx-auto px-6 relative z-10">
-                    <div className="max-w-4xl">
-                        {/* Glass Breadcrumbs */}
-                        <nav className="flex items-center gap-3 mb-8 animate-fade-in">
-                            <button onClick={() => window.location.href = '/'} className="px-3 py-1.5 bg-white/5 backdrop-blur-md border border-white/10 rounded-full text-[9px] font-black text-white/40 uppercase tracking-widest hover:text-primary hover:border-primary/30 transition-all">Inicio</button>
-                            <ChevronRight className="w-3 h-3 text-white/10" />
-                            <span className="px-3 py-1.5 bg-primary/10 backdrop-blur-md border border-primary/20 rounded-full text-[9px] font-black text-primary uppercase tracking-widest">Atención al Cliente</span>
-                        </nav>
-
-                        <div className="flex items-start gap-8">
-                            {/* Vertical Signature Line */}
-                            <div className="w-1.5 self-stretch bg-gradient-to-b from-primary via-primary to-transparent hidden md:block rounded-full shadow-[0_0_20px_rgba(234,179,8,0.4)]"></div>
-
-                            <div className="flex-1">
-                                <span className="text-[10px] font-black text-primary uppercase tracking-[.5em] mb-4 block italic opacity-80 animate-slide-right">
-                                    Concierge & Client Relations
-                                </span>
-                                <h1 className="text-4xl md:text-7xl font-black text-white uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-2xl">
-                                    Contacto <span className="text-primary drop-shadow-[0_0_15px_rgba(234,179,8,0.5)]">Exclusivo</span>
-                                </h1>
-                                <p className="text-white/60 text-lg font-medium leading-relaxed max-w-2xl font-outfit animate-fade-in delay-300">
-                                    Estamos aquí para iluminar tus proyectos. Nuestro equipo de expertos te brindará asesoramiento técnico y estético de alta gama.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </header>
+                    <h1 className="text-4xl md:text-7xl font-black text-brand-carbon uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-sm">
+                        {cmsContent?.content?.header_title || (
+                            <>Contacto <span className="text-primary/40">Exclusivo</span></>
+                        )}
+                    </h1>
+                    <p className="text-gray-500 text-lg font-medium leading-relaxed max-w-2xl mx-auto font-outfit animate-fade-in delay-300">
+                        {cmsContent?.meta_description || 'Estamos aquí para iluminar tus proyectos. Nuestro equipo de expertos te brindará asesoramiento técnico y estético de alta gama.'}
+                    </p>
+                    <div className="w-20 h-1 bg-primary/20 mx-auto mt-10 rounded-full"></div>
+                </header>
+            </div>
 
             <section className="py-24 md:py-32">
                 <div className="container mx-auto px-6">
@@ -118,7 +78,11 @@ export default function ContactPage() {
                                         </div>
                                         <div>
                                             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Sede Central & Showroom</h4>
-                                            <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">Calle de la Luz, 12, Planta Noble<br />28001 Madrid, España</p>
+                                            <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">
+                                                {cmsContent?.content?.address || (
+                                                    <>{'Calle de la Luz, 12, Planta Noble'}<br />{'28001 Madrid, España'}</>
+                                                )}
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -130,7 +94,9 @@ export default function ContactPage() {
                                         </div>
                                         <div>
                                             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Gestión de Proyectos</h4>
-                                            <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">boutique@milluces.com</p>
+                                            <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">
+                                                {cmsContent?.content?.email || 'boutique@milluces.com'}
+                                            </p>
                                             <p className="text-[10px] text-primary font-bold uppercase mt-1 tracking-widest">Respuesta en menos de 2h (L-V)</p>
                                         </div>
                                     </div>
@@ -143,7 +109,9 @@ export default function ContactPage() {
                                         </div>
                                         <div>
                                             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Línea Directa Boutique</h4>
-                                            <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">+34 900 123 456</p>
+                                            <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">
+                                                {cmsContent?.content?.phone || '+34 900 123 456'}
+                                            </p>
                                             <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-widest leading-none">Lunes a Viernes: 10:00 - 19:00</p>
                                         </div>
                                     </div>

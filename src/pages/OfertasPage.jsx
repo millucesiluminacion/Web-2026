@@ -8,51 +8,49 @@ import { calculateProductPrice } from '../lib/pricingUtils';
 
 const OfertasPage = () => {
     const [products, setProducts] = useState([]);
+    const [cmsData, setCmsData] = useState(null);
     const [loading, setLoading] = useState(true);
     const { addToCart } = useCart();
     const { profile } = useAuth();
 
     useEffect(() => {
-        async function fetchOffers() {
+        async function fetchData() {
             try {
-                // Fetch products that have a discount price or specific tag
-                let { data, error } = await supabase
-                    .from('products')
-                    .select('*')
-                    .is('parent_id', null)
-                    .neq('is_active', false)
-                    .order('created_at', { ascending: false });
+                const [offersRes, cmsRes] = await Promise.all([
+                    supabase.from('products').select('*').is('parent_id', null).neq('is_active', false).order('created_at', { ascending: false }),
+                    supabase.from('cms_pages').select('*').eq('slug', 'ofertas').maybeSingle()
+                ]);
 
-                if (error && error.message.includes('is_active')) {
-                    console.warn('OfertasPage: is_active column missing, retrying without filter...');
-                    const retry = await supabase
-                        .from('products')
-                        .select('*')
-                        .is('parent_id', null)
-                        .order('created_at', { ascending: false });
-                    data = retry.data;
-                    error = retry.error;
+                if (offersRes.error) {
+                    console.warn('OfertasPage: Retrying fetch without is_active filter...');
+                    const retry = await supabase.from('products').select('*').is('parent_id', null).order('created_at', { ascending: false });
+                    setProducts(retry.data || []);
+                } else {
+                    setProducts(offersRes.data || []);
                 }
 
-                if (error) throw error;
-                setProducts(data || []);
+                if (cmsRes.data) setCmsData(cmsRes.data);
             } catch (err) {
-                console.error('Error fetching offers:', err);
+                console.error('Error fetching offers data:', err);
             } finally {
                 setLoading(false);
             }
         }
 
-        fetchOffers();
+        fetchData();
     }, []);
 
     return (
-        <div className="bg-brand-porcelain min-h-screen pt-32 pb-20">
+        <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-12">
             <div className="container mx-auto px-6 max-w-[1400px]">
-                <header className="mb-16 text-center relative">
-                    <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-4 block">Mil Luces Outlet</span>
-                    <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter">
-                        Oportunidades <span className="text-primary/40">Exclusivas</span> <br />
+                <header className="mb-12 text-center relative group">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
+                        {cmsData?.content?.header_subtitle || 'Mil Luces Outlet'}
+                    </span>
+                    <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter animate-reveal-up drop-shadow-sm">
+                        {cmsData?.content?.header_title || (
+                            <>Oportunidades <span className="text-primary/40">Exclusivas</span></>
+                        )}
                     </h1>
                     <div className="w-20 h-1 bg-primary/20 mx-auto mt-8 rounded-full"></div>
                 </header>

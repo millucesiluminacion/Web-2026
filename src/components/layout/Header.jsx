@@ -186,22 +186,6 @@ export function Header({ onOpenAuthModal }) {
                         <div className="h-8 w-[1px] bg-gray-100 hidden md:block"></div>
 
                         <div className="flex items-center gap-3">
-                            {(isPro || isPartner) && (
-                                <div className="hidden sm:flex flex-col items-end mr-4">
-                                    <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full border shadow-sm transition-all ${isPartner
-                                        ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-600 shadow-yellow-500/5'
-                                        : 'bg-primary/10 border-primary/20 text-primary shadow-primary/5'
-                                        }`}>
-                                        {isPartner ? <Star className="w-3 h-3 fill-current animate-pulse" /> : <Zap className="w-3 h-3 fill-current" />}
-                                        <span className="text-[10px] font-black uppercase tracking-[.2em] italic">
-                                            {isPartner ? 'Socio VIP' : 'Profesional'}
-                                        </span>
-                                    </div>
-                                    <span className="text-[11px] font-black uppercase italic tracking-tighter text-brand-carbon mt-1.5 opacity-80">
-                                        {profile?.company_name || profile?.full_name?.split(' ')[0]}
-                                    </span>
-                                </div>
-                            )}
 
                             {isAdmin && (
                                 <Link to="/admin" className="hidden md:flex items-center gap-2 h-10 px-4 bg-brand-carbon text-white rounded-2xl text-[9px] font-black uppercase italic tracking-widest hover:bg-primary transition-all shadow-lg">
@@ -213,16 +197,13 @@ export function Header({ onOpenAuthModal }) {
                             {user ? (
                                 <div className="relative group">
                                     <button onClick={signOut} title="Cerrar sesión"
-                                        className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all relative group/user ${isPartner
-                                            ? 'bg-brand-carbon text-yellow-500 ring-2 ring-yellow-500/30 shadow-xl'
-                                            : 'text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg'
+                                        className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all bg-brand-carbon shadow-xl relative group/user ${isPartner
+                                            ? 'text-yellow-500 ring-2 ring-yellow-500/30'
+                                            : isPro ? 'text-primary ring-2 ring-primary/30'
+                                                : 'text-white ring-2 ring-white/10'
                                             }`}>
-                                        <LogOut className="w-5 h-5 group-hover/user:text-primary transition-colors" />
-                                        {isPartner ? (
-                                            <span className="absolute -top-1 -right-1 bg-yellow-500 text-black text-[9px] font-black px-2 py-0.5 rounded-lg border-2 border-white shadow-xl animate-bounce">VIP</span>
-                                        ) : isPro ? (
-                                            <span className="absolute -top-1 -right-1 bg-brand-carbon text-primary text-[9px] font-black px-2 py-0.5 rounded-lg border-2 border-white shadow-lg">PRO</span>
-                                        ) : null}
+                                        <LogOut className={`w-5 h-5 transition-colors ${isPartner ? 'group-hover/user:text-yellow-400' : isPro ? 'group-hover/user:text-white' : 'group-hover/user:text-primary'
+                                            }`} />
                                     </button>
                                     <div className="absolute top-full right-0 mt-2 bg-white shadow-luxury rounded-xl p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity text-[10px] font-bold text-gray-500 whitespace-nowrap">
                                         Cerrar Sesión

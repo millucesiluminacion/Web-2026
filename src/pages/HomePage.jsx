@@ -121,10 +121,10 @@ export default function HomePage() {
                                     <img
                                         src={activeSliders[currentSlider].image_url}
                                         alt="Luxury Lighting"
-                                        className="w-full h-full object-cover opacity-60"
+                                        className="w-full h-full object-cover opacity-90"
                                     />
                                 )}
-                                <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon via-brand-carbon/20 to-transparent"></div>
+                                <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon/40 via-transparent to-transparent"></div>
                             </div>
 
                             <div className="absolute inset-0 p-6 sm:p-10 lg:p-20 flex flex-col justify-end">
@@ -174,12 +174,12 @@ export default function HomePage() {
                                         <img
                                             src={professions[proSlider].image_url}
                                             alt={professions[proSlider].name}
-                                            className="w-full h-full object-cover opacity-40 transition-transform duration-700 group-hover:scale-110"
+                                            className="w-full h-full object-cover opacity-100 transition-transform duration-700 group-hover:scale-110"
                                         />
                                     ) : (
                                         <div className="w-full h-full bg-brand-carbon/20"></div>
                                     )}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon via-brand-carbon/20 to-transparent"></div>
+                                    <div className="absolute inset-0 bg-gradient-to-t from-brand-carbon/50 via-transparent to-transparent"></div>
                                 </div>
 
                                 <div className="relative z-10 p-10 h-full flex flex-col justify-between">
@@ -223,11 +223,6 @@ export default function HomePage() {
                                     />
                                 )}
                                 <div className="absolute inset-0 bg-primary/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                <div className="absolute top-8 left-8">
-                                    <span className="px-3 py-1 bg-white/20 backdrop-blur-md text-white text-[9px] font-black uppercase tracking-widest rounded-lg border border-white/10">
-                                        {activeSideBanner.title || 'New Arrival'}
-                                    </span>
-                                </div>
                             </a>
                         </div>
                     </div>

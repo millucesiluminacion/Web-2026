@@ -289,6 +289,98 @@ export default function PagesAdmin() {
                                 />
                             </div>
 
+
+                            {/* Header Configuration */}
+                            <div className="p-8 bg-brand-carbon/[0.02] rounded-[2.5rem] border border-gray-100 space-y-8">
+                                <div className="flex items-center gap-3 text-brand-carbon">
+                                    <Layout className="w-5 h-5 text-primary" />
+                                    <h3 className="text-xs font-black uppercase tracking-[.2em] italic">Configuración de Cabecera</h3>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Subtítulo (Superior)</label>
+                                        <input
+                                            type="text"
+                                            value={formData.content.header_subtitle || ''}
+                                            onChange={e => setFormData({
+                                                ...formData,
+                                                content: { ...formData.content, header_subtitle: e.target.value }
+                                            })}
+                                            className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 text-xs font-bold focus:ring-2 focus:ring-primary/10 transition-all outline-none"
+                                            placeholder="Ej: Archive Mil Luces"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Título Principal</label>
+                                        <input
+                                            type="text"
+                                            value={formData.content.header_title || ''}
+                                            onChange={e => setFormData({
+                                                ...formData,
+                                                content: { ...formData.content, header_title: e.target.value }
+                                            })}
+                                            className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 text-xs font-bold focus:ring-2 focus:ring-primary/10 transition-all outline-none"
+                                            placeholder="Ej: Obras de Luz Pura"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Contact Specific Info */}
+                            {formData.slug === 'contacto' && (
+                                <div className="p-8 bg-primary/5 rounded-[2.5rem] border border-primary/10 animate-in fade-in slide-in-from-top-4 duration-500 space-y-8">
+                                    <div className="flex items-center gap-3 text-brand-carbon">
+                                        <Settings className="w-5 h-5 text-primary" />
+                                        <h3 className="text-xs font-black uppercase tracking-[.2em] italic">Atributos de Contacto Exclusivo</h3>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-2">
+                                            <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Dirección Completa</label>
+                                            <textarea
+                                                rows="2"
+                                                value={formData.content.address || ''}
+                                                onChange={e => setFormData({
+                                                    ...formData,
+                                                    content: { ...formData.content, address: e.target.value }
+                                                })}
+                                                className="w-full bg-white border border-gray-100 rounded-xl p-4 text-[11px] font-bold text-brand-carbon focus:ring-2 focus:ring-primary/10 transition-all outline-none resize-none"
+                                                placeholder="Ej: Calle de la Luz, 12..."
+                                            />
+                                        </div>
+                                        <div className="space-y-4">
+                                            <div className="space-y-2">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Email de Contacto</label>
+                                                <input
+                                                    type="email"
+                                                    value={formData.content.email || ''}
+                                                    onChange={e => setFormData({
+                                                        ...formData,
+                                                        content: { ...formData.content, email: e.target.value }
+                                                    })}
+                                                    className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 text-xs font-bold focus:ring-2 focus:ring-primary/10 transition-all outline-none"
+                                                    placeholder="Ej: boutique@milluces.com"
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Teléfono</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.content.phone || ''}
+                                                    onChange={e => setFormData({
+                                                        ...formData,
+                                                        content: { ...formData.content, phone: e.target.value }
+                                                    })}
+                                                    className="w-full h-12 bg-white border border-gray-100 rounded-xl px-4 text-xs font-bold focus:ring-2 focus:ring-primary/10 transition-all outline-none"
+                                                    placeholder="Ej: +34 900 123 456"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* SEO Panel */}
                             <div className="p-8 bg-brand-carbon/[0.02] rounded-[2.5rem] border border-gray-100 space-y-8">
                                 <div className="flex items-center gap-3 text-brand-carbon">
@@ -326,7 +418,6 @@ export default function PagesAdmin() {
                                     </div>
                                 </div>
                             </div>
-
                             {/* Visibility Toggle */}
                             <div className="flex items-center gap-4 p-6 bg-gray-50 rounded-2xl border border-gray-100">
                                 <div className="flex-1">

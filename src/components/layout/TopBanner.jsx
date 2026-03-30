@@ -7,6 +7,7 @@ export function TopBanner({ onOpenAuthModal }) {
 
     // Style and content based on role
     const bannerConfig = isPartner ? {
+        // VIP
         bgClass: 'bg-brand-carbon border-b border-white/5',
         textColor: 'text-yellow-400',
         accentColor: 'text-yellow-400/80',
@@ -15,18 +16,24 @@ export function TopBanner({ onOpenAuthModal }) {
             { icon: <Zap className="w-3.5 h-3.5" />, text: "Tarifa Socio Mil Luces Activada" },
             { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Gestor de Cuenta Prioritario" }
         ],
-        cta: `Bienvenido, ${profile?.full_name?.split(' ')[0] || 'Socio'}`
-    } : isPro ? {
-        bgClass: 'bg-slate-900 border-b border-white/5',
-        textColor: 'text-blue-400',
-        accentColor: 'text-blue-400/80',
-        messages: [
+        cta: `Bienvenido, ${profile?.full_name || 'Boutique Client'} - Descuento por Volumen`
+    } : user ? {
+        // Logged-in (Pro or Standard)
+        bgClass: 'bg-brand-carbon border-b border-white/5',
+        textColor: isPro ? 'text-primary' : 'text-gray-300',
+        accentColor: isPro ? 'text-primary/70' : 'text-gray-400',
+        messages: isPro ? [
             { icon: <Zap className="w-3.5 h-3.5" />, text: "Sesión Profesional Activa" },
             { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Precios B2B Aplicados" },
             { icon: <Zap className="w-3.5 h-3.5" />, text: "Soporte Técnico Directo" }
+        ] : [
+            { icon: <Star className="w-3.5 h-3.5" />, text: "Boutique Experience" },
+            { icon: <Zap className="w-3.5 h-3.5" />, text: "Envío Prioritario" },
+            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Garantía Extendida" }
         ],
-        cta: profile?.company_name || 'Área Profesional'
+        cta: `Bienvenido, ${profile?.full_name || 'Boutique Client'} - Área Profesional`
     } : {
+        // Default (Anonymous)
         bgClass: 'bg-primary hover:bg-primary-light transition-colors',
         textColor: 'text-white/90',
         accentColor: 'text-white/60',
