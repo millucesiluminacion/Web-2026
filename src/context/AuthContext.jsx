@@ -55,17 +55,30 @@ export function AuthProvider({ children }) {
         }
     }
 
+    const refreshProfile = async () => {
+        if (user) {
+            await fetchProfile(user.id);
+        }
+    };
+
     const signOut = async () => {
         await supabase.auth.signOut();
     };
+
+    // Standardized Tier Detection
+    const isPartner = !!profile?.is_partner;
+    const isPro = profile?.user_type === 'profesional';
+    const userTier = isPartner ? 'vip' : isPro ? 'pro' : 'normal';
 
     const value = {
         user,
         profile,
         loading,
         signOut,
-        isPro: profile?.user_type === 'profesional',
-        isPartner: !!profile?.is_partner,
+        refreshProfile,
+        userTier,
+        isPro,
+        isPartner,
         discountPercent: profile?.discount_percent || 0
     };
 

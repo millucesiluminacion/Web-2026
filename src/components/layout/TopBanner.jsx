@@ -3,46 +3,53 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 
 export function TopBanner({ onOpenAuthModal }) {
-    const { isPro, isPartner, user, profile } = useAuth();
+    const { userTier, user, profile, isPartner } = useAuth();
 
     // Style and content based on role
-    const bannerConfig = isPartner ? {
-        // VIP
-        bgClass: 'bg-brand-carbon border-b border-white/5',
+    const bannerConfig = userTier === 'vip' ? {
+        // VIP (Socio)
+        bgClass: 'bg-brand-carbon border-b border-yellow-500/30 shadow-[0_0_15px_rgba(234,179,8,0.1)]',
         textColor: 'text-yellow-400',
-        accentColor: 'text-yellow-400/80',
+        accentColor: 'text-yellow-400',
         messages: [
-            { icon: <Star className="w-3.5 h-3.5" />, text: "Estatus Socio VIP" },
-            { icon: <Zap className="w-3.5 h-3.5" />, text: "Tarifa Socio Mil Luces Activada" },
-            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Gestor de Cuenta Prioritario" }
+            { icon: <Star className="w-3.5 h-3.5 animate-pulse" />, text: "ESTATUS VIP MIL LUCES" },
+            { icon: <Zap className="w-3.5 h-3.5" />, text: "Tarifa Socio Activada" },
+            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Gestor Prioritario" }
         ],
-        cta: `Bienvenido, ${profile?.full_name || 'Boutique Client'} - Descuento por Volumen`
+        cta: `Bienvenido, VIP - ${profile?.full_name?.split(' ')[0] || 'Socio'}`
+    } : userTier === 'pro' ? {
+        // Logged-in (Pro) - Dark Navy (between blue and black)
+        bgClass: 'bg-[#0f172a] border-b border-primary/20 shadow-lg',
+        textColor: 'text-primary-light',
+        accentColor: 'text-primary-light/80',
+        messages: [
+            { icon: <Zap className="w-3.5 h-3.5" />, text: "SESIÓN PROFESIONAL ACTIVA" },
+            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Precios B2B de Fábrica" },
+            { icon: <Zap className="w-3.5 h-3.5" />, text: "Soporte Técnico VIP" }
+        ],
+        cta: `Panel Pro - ${profile?.full_name?.split(' ')[0] || 'Profesional'}`
     } : user ? {
-        // Logged-in (Pro or Standard)
-        bgClass: 'bg-brand-carbon border-b border-white/5',
-        textColor: isPro ? 'text-primary' : 'text-gray-300',
-        accentColor: isPro ? 'text-primary/70' : 'text-gray-400',
-        messages: isPro ? [
-            { icon: <Zap className="w-3.5 h-3.5" />, text: "Sesión Profesional Activa" },
-            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Precios B2B Aplicados" },
-            { icon: <Zap className="w-3.5 h-3.5" />, text: "Soporte Técnico Directo" }
-        ] : [
-            { icon: <Star className="w-3.5 h-3.5" />, text: "Boutique Experience" },
+        // Logged-in (Standard) - BLUE
+        bgClass: 'bg-primary border-b border-white/10 shadow-lg',
+        textColor: 'text-white',
+        accentColor: 'text-white/80',
+        messages: [
+            { icon: <Star className="w-3.5 h-3.5" />, text: "BOUTIQUE EXPERIENCE" },
             { icon: <Zap className="w-3.5 h-3.5" />, text: "Envío Prioritario" },
             { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Garantía Extendida" }
         ],
-        cta: `Bienvenido, ${profile?.full_name || 'Boutique Client'} - Área Profesional`
+        cta: `Bienvenido, ${profile?.full_name?.split(' ')[0] || 'Cliente'}`
     } : {
-        // Default (Anonymous)
-        bgClass: 'bg-primary hover:bg-primary-light transition-colors',
+        // Default (Anonymous) - BLUE
+        bgClass: 'bg-primary border-b border-white/10 transition-colors',
         textColor: 'text-white/90',
         accentColor: 'text-white/60',
         messages: [
-            { text: "Envío Gratuito en pedidos de +100€" },
-            { text: "Asesoramiento Experto" },
-            { text: "2 Años de Garantía" }
+            { text: "Iluminación Boutique y Proyectos" },
+            { text: "Asesoramiento Luminotécnico" },
+            { text: "Envío 24/48h" }
         ],
-        cta: "Área Profesional"
+        cta: "Acceso Profesionales"
     };
 
     return (
@@ -65,7 +72,7 @@ export function TopBanner({ onOpenAuthModal }) {
                             <div className="flex items-center gap-4">
                                 <div className="h-4 w-[1px] bg-white/10"></div>
                                 <span className={`flex items-center gap-2.5 ${bannerConfig.textColor}`}>
-                                    <Zap className={`w-3 h-3 ${isPartner ? 'animate-pulse' : ''}`} />
+                                    <Zap className={`w-3 h-3 ${userTier === 'vip' ? 'animate-pulse' : ''}`} />
                                     <span className="text-white normal-case font-black tracking-wider">{bannerConfig.cta}</span>
                                 </span>
                             </div>

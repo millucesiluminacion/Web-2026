@@ -159,8 +159,8 @@ function ProductCard({ product, profile, addToCart }) {
 
                 <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-6">
                     <div className="flex flex-col">
-                        <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest mb-1">
-                            {pricing.isPartnerPrice ? 'Socio VIP' : 'Precio'}
+                        <span className={`text-[10px] font-black uppercase tracking-widest mb-1 ${pricing.isPartnerPrice ? 'text-yellow-500' : pricing.isProPrice ? 'text-primary' : 'text-gray-300'}`}>
+                            {pricing.isPartnerPrice ? '★ Socio VIP' : pricing.isProPrice ? '✦ Precio Pro' : 'Precio'}
                         </span>
                         <span className="text-xl font-black italic text-brand-carbon">
                             {pricing.finalPrice.toFixed(2)}€

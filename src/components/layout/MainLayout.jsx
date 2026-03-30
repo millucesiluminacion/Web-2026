@@ -7,7 +7,7 @@ import { AuthModal } from '../auth/AuthModal';
 import { useAuth } from '../../context/AuthContext';
 
 export function MainLayout() {
-    const { isPro, isPartner } = useAuth();
+    const { userTier } = useAuth();
     const [authModal, setAuthModal] = useState({ open: false, tab: 'login', type: 'persona' });
 
     const openAuthModal = (tab = 'login', type = 'persona') => {
@@ -16,7 +16,7 @@ export function MainLayout() {
     const closeAuthModal = () => setAuthModal({ open: false, tab: 'login', type: 'persona' });
 
     // Dynamic theme class
-    const themeClass = isPartner ? 'theme-socio' : isPro ? 'theme-pro' : '';
+    const themeClass = userTier === 'vip' ? 'theme-socio' : userTier === 'pro' ? 'theme-pro' : '';
 
     return (
         <div className={`flex flex-col min-h-screen bg-gray-50 text-gray-900 font-sans ${themeClass}`}>

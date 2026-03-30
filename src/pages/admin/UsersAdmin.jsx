@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText } from 'lucide-react';
+import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import Papa from 'papaparse';
 
@@ -458,18 +458,18 @@ export default function UsersAdmin() {
                                                 <p className="font-mono text-[10px] text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 w-fit">
                                                     {user.id.slice(0, 12).toUpperCase()}
                                                 </p>
-                                                {user.user_type === 'profesional' && (
-                                                    <div className="flex flex-wrap gap-1">
+                                                <div className="flex flex-wrap gap-1">
+                                                    {user.user_type === 'profesional' && (
                                                         <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 w-fit">
                                                             PRO {user.discount_percent}% DESC
                                                         </span>
-                                                        {user.is_partner && (
-                                                            <span className="text-[8px] font-black text-emerald-600 uppercase bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 w-fit">
-                                                                Socio (Partner)
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
+                                                    )}
+                                                    {user.is_partner && (
+                                                        <span className="text-[8px] font-black text-yellow-600 uppercase bg-yellow-50 px-2 py-0.5 rounded border border-yellow-200 w-fit flex items-center gap-1">
+                                                            <Star className="w-2 h-2 fill-yellow-600" /> SOCIO VIP
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </td>
                                         <td className="p-8">

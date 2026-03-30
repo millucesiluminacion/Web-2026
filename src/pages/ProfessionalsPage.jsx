@@ -76,12 +76,21 @@ export default function ProfessionalsPage() {
                         {cmsData?.content?.body?.replace(/<[^>]*>?/gm, '') || 'Impulsamos tu negocio con tecnología lumínica de vanguardia, precios directos de fábrica y un soporte técnico que habla tu mismo idioma.'}
                     </p>
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
-                        <Link
-                            to="/register-pro"
-                            className="w-full sm:w-auto px-12 py-6 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-xs hover:bg-primary transition-all shadow-2xl shadow-brand-carbon/30 group"
-                        >
-                            Alta Gratuita Profesional <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </Link>
+                        {userTier !== 'normal' ? (
+                            <Link
+                                to="/catalogo"
+                                className="w-full sm:w-auto px-12 py-6 bg-primary text-white rounded-2xl font-black uppercase italic text-xs hover:bg-brand-carbon transition-all shadow-2xl shadow-primary/30 group"
+                            >
+                                Explorar Catálogo Pro <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                            </Link>
+                        ) : (
+                            <Link
+                                to="/register-pro"
+                                className="w-full sm:w-auto px-12 py-6 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-xs hover:bg-primary transition-all shadow-2xl shadow-brand-carbon/30 group"
+                            >
+                                Alta Gratuita Profesional <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                            </Link>
+                        )}
                         <a
                             href="mailto:pro@milluces.com"
                             className="w-full sm:w-auto px-12 py-6 border-2 border-brand-carbon/10 text-brand-carbon rounded-2xl font-black uppercase italic text-xs hover:bg-gray-50 transition-all font-black"

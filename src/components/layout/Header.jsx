@@ -41,7 +41,7 @@ export function Header({ onOpenAuthModal }) {
     const [megaBanner, setMegaBanner] = useState(null);
 
     const { totalItems, setIsSideCartOpen } = useCart();
-    const { profile, isPro, isPartner, user, signOut } = useAuth();
+    const { profile, userTier, isPro, isPartner, user, signOut } = useAuth();
     const navigate = useNavigate();
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const menuRef = useRef(null);
@@ -197,16 +197,29 @@ export function Header({ onOpenAuthModal }) {
                             {user ? (
                                 <div className="relative group">
                                     <button onClick={signOut} title="Cerrar sesión"
-                                        className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all bg-brand-carbon shadow-xl relative group/user ${isPartner
-                                            ? 'text-yellow-500 ring-2 ring-yellow-500/30'
-                                            : isPro ? 'text-primary ring-2 ring-primary/30'
-                                                : 'text-white ring-2 ring-white/10'
+                                        className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all shadow-xl relative group/user ${userTier === 'vip'
+                                            ? 'bg-brand-carbon text-yellow-500 ring-2 ring-yellow-500/30'
+                                            : userTier === 'pro'
+                                                ? 'bg-[#0f172a] text-primary-light ring-2 ring-primary/20'
+                                                : 'bg-primary text-white ring-2 ring-white/10'
                                             }`}>
-                                        <LogOut className={`w-5 h-5 transition-colors ${isPartner ? 'group-hover/user:text-yellow-400' : isPro ? 'group-hover/user:text-white' : 'group-hover/user:text-primary'
+                                        <LogOut className={`w-5 h-5 transition-colors ${userTier === 'vip' ? 'group-hover/user:text-yellow-400' : userTier === 'pro' ? 'group-hover/user:text-white' : 'group-hover/user:text-primary'
                                             }`} />
                                     </button>
-                                    <div className="absolute top-full right-0 mt-2 bg-white shadow-luxury rounded-xl p-3 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity text-[10px] font-bold text-gray-500 whitespace-nowrap">
-                                        Cerrar Sesión
+                                    <div className="absolute top-full right-0 mt-3 bg-white shadow-luxury rounded-[1.5rem] p-4 opacity-0 group-hover:opacity-100 pointer-events-none transition-all transform translate-y-2 group-hover:translate-y-0 border border-gray-100 min-w-[180px] z-[60]">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center justify-between gap-3 border-b border-gray-50 pb-2 mb-1">
+                                                <span className="text-[10px] font-black italic text-brand-carbon truncate max-w-[100px]">
+                                                    {profile?.full_name?.split(' ')[0] || 'Usuario'}
+                                                </span>
+                                                <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-tighter ${userTier === 'vip' ? 'bg-yellow-400 text-brand-carbon animate-pulse' : userTier === 'pro' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>
+                                                    {userTier === 'vip' ? 'SOCIO VIP' : userTier === 'pro' ? 'PROFESIONAL' : 'Boutique'}
+                                                </span>
+                                            </div>
+                                            <div className="text-[8px] font-bold text-gray-400 uppercase tracking-widest text-center">
+                                                Click para Salir
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             ) : (
@@ -297,6 +310,18 @@ export function Header({ onOpenAuthModal }) {
                                             </li>
                                         ))}
                                     </ul>
+                                    <div className="flex flex-wrap gap-1 mt-4">
+                                        {user?.user_type === 'profesional' && (
+                                            <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 w-fit">
+                                                PRO {user.discount_percent}% DESC
+                                            </span>
+                                        )}
+                                        {user?.is_partner && (
+                                            <span className="text-[8px] font-black text-yellow-600 uppercase bg-yellow-50 px-2 py-0.5 rounded border border-yellow-200 w-fit flex items-center gap-1">
+                                                <Star className="w-2 h-2 fill-yellow-600" /> SOCIO VIP
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
                                 {/* Col 3: Sectores B2B (2 cols) */}
