@@ -1362,10 +1362,10 @@ export default function ProductList() {
                         </div>
 
                         {/* Tab Content */}
-                        <div className="flex-1 min-h-0">
+                        <div className="flex-1 min-h-0 flex flex-col">
                             {activeTab !== 'variants' ? (
                                 <form onSubmit={handleSubmit} className="h-full flex flex-col">
-                                    <div className="flex-1 overflow-y-auto p-6 no-scrollbar">
+                                    <div className="flex-1 overflow-y-auto p-6">
 
                                         {/* TAB: IDENTIDAD */}
                                         {activeTab === 'general' && (
@@ -1901,7 +1901,7 @@ export default function ProductList() {
                                     </div>
                                 </form>
                             ) : (
-                                <div className="flex-1 overflow-y-auto p-6 space-y-6 no-scrollbar pb-16">
+                                <div className="flex-1 overflow-y-auto p-6 space-y-6 pb-16">
                                     {!editingId ? (
                                         <div className="bg-white rounded-[2rem] border border-gray-100 p-12 text-center shadow-sm h-full flex flex-col items-center justify-center">
                                             <div className="w-20 h-20 bg-gray-50 rounded-[2rem] flex items-center justify-center mx-auto mb-6 text-3xl opacity-20 relative">

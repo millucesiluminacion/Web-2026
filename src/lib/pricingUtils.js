@@ -40,22 +40,26 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     let finalPrice = basePrice;
 
     // 1. Partner (Socio) - Highest Priority
-    if (isPartner && partnerPrice > 0) {
-        finalPrice = partnerPrice;
-        isPartnerPrice = true;
+    if (isPartner) {
+        if (partnerPrice > 0) {
+            finalPrice = partnerPrice;
+            isPartnerPrice = true;
+        } else {
+            // Fallback to standard base price if no specific partner price set
+            finalPrice = basePrice;
+            isPartnerPrice = false;
+        }
     }
-    // 2. Professional - Second Priority (Professional Price or % Discount)
+    // 2. Professional - Second Priority (Professional Price ONLY, no fallback to % if user wants strict pricing)
     else if (isPro) {
-        const priceFromPercent = standardPrice * (1 - proDiscountPercent / 100);
-
-        // Use professional_price if defined, otherwise use percentage discount
         if (professionalPrice > 0) {
             finalPrice = professionalPrice;
             isProPrice = true;
-        } else if (proDiscountPercent > 0) {
-            // Use the better price for the pro
-            finalPrice = Math.min(priceFromPercent, basePrice);
-            isProPrice = finalPrice < basePrice;
+        } else {
+            // Updated logic: if no professional_price is defined, show standard price
+            // to avoid unintended losses from general discount_percent.
+            finalPrice = basePrice;
+            isProPrice = false;
         }
     }
 
@@ -86,7 +90,7 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     return {
         originalPrice: referencePrice,
         finalPrice,
-        isShowingProDiscount: isPro || isPartner,
+        isShowingProDiscount: isProPrice,
         isPartnerPrice,
         isProPrice,
         displayDiscountPercent: appliedDiscountPercent,
