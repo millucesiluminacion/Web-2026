@@ -268,7 +268,13 @@ export default function ProductDetail() {
             if (variantList.length > 0) {
                 initialVariant = variantList.find(v => {
                     if (!v.attributes) return false;
-                    return Object.entries(initialSelected).every(([k, val]) => v.attributes[k] === val);
+                    return Object.entries(initialSelected).every(([k, val]) => {
+                        const attrVal = v.attributes[k];
+                        if (Array.isArray(attrVal)) {
+                            return attrVal.some(av => av?.toString().toLowerCase() === val?.toString().toLowerCase());
+                        }
+                        return attrVal?.toString().toLowerCase() === val?.toString().toLowerCase();
+                    });
                 }) || null;
             }
 
@@ -375,7 +381,13 @@ export default function ProductDetail() {
         if (variants.length > 0) {
             const match = variants.find(v => {
                 if (!v.attributes) return false;
-                return Object.entries(newAttributes).every(([k, val]) => v.attributes[k] === val);
+                return Object.entries(newAttributes).every(([k, val]) => {
+                    const attrVal = v.attributes[k];
+                    if (Array.isArray(attrVal)) {
+                        return attrVal.some(av => av?.toString().toLowerCase() === val?.toString().toLowerCase());
+                    }
+                    return attrVal?.toString().toLowerCase() === val?.toString().toLowerCase();
+                });
             });
             setCurrentVariant(match || null);
         }
@@ -776,7 +788,8 @@ export default function ProductDetail() {
                                                 const isSelected = selectedAttributes[attrName] === val;
 
                                                 // Render Color or Temperature Swatches
-                                                const isColorSwatch = ['Color', 'Acabado', 'Temperatura', 'Temperatura de Color', 'Tono de Luz'].includes(attrName);
+                                                const lowerAttrName = attrName.toLowerCase();
+                                                const isColorSwatch = ['color', 'acabado', 'temperatura', 'temperatura de color', 'tono de luz'].includes(lowerAttrName);
 
                                                 if (isColorSwatch) {
                                                     const normalizedVal = val.toLowerCase().trim();
