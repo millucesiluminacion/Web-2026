@@ -474,8 +474,7 @@ export default function ProductList() {
             long_description: product.long_description || '',
             original_price: product.original_price || '',
             badge_tags: product.badge_tags || [],
-            badge_ids: [],
-            is_active: product.is_active !== false // default to true
+            badge_ids: []
         });
 
 
