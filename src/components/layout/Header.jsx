@@ -138,7 +138,7 @@ export function Header({ onOpenAuthModal }) {
 
                             {/* Other nav items */}
                             {[
-                                { label: 'Proyectos', path: '/proyectos' },
+                                { label: 'Inspirate', path: '/inspirate' },
                                 { label: 'Ofertas', path: '/ofertas', highlight: true },
                                 { label: 'Blog', path: '/blog' },
                             ].map((item) => (
@@ -398,7 +398,7 @@ export function Header({ onOpenAuthModal }) {
                             </div>
                             <div className="border-t border-gray-100 pt-6 flex flex-col gap-5">
                                 {[
-                                    { label: 'Proyectos', path: '/proyectos' },
+                                    { label: 'Inspirate', path: '/inspirate' },
                                     { label: 'Ofertas', path: '/ofertas' },
                                     { label: 'Blog', path: '/blog' },
                                 ].map((item) => (

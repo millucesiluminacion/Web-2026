@@ -37,7 +37,7 @@ export default function SEOManager() {
                 '/ofertas': 'ofertas',
                 '/catalogo': 'tienda',       // ruta real del catálogo
                 '/decoracion': 'tienda',   // alias de decoración
-                '/proyectos': 'proyectos',
+                '/inspirate': 'proyectos',
                 '/profesionales': 'profesionales',
                 '/blog': 'blog_index',
                 '/cart': 'cart',

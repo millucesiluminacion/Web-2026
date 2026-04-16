@@ -92,7 +92,7 @@ export function AdminLayout() {
             items: [
                 { icon: ImageIcon, label: 'Sliders / Banners', path: '/admin/sliders' },
                 { icon: BookOpen, label: 'Blog', path: '/admin/blog' },
-                { icon: Briefcase, label: 'Proyectos', path: '/admin/projects' },
+                { icon: Briefcase, label: 'Inspirate', path: '/admin/inspirate' },
                 { icon: Star, label: 'Sectores PRO', path: '/admin/professions' },
                 { icon: Award, label: 'Contenido PRO', path: '/admin/professionals' },
                 { icon: ShieldCheck, label: 'Sellos de Confianza', path: '/admin/trust-badges' },

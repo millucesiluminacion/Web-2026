@@ -325,7 +325,7 @@ export default function SliderList() {
                                         <input
                                             type="text"
                                             className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-bold"
-                                            placeholder="Proyectos"
+                                            placeholder="Inspírate"
                                             value={formData.secondary_button_text}
                                             onChange={e => setFormData({ ...formData, secondary_button_text: e.target.value })}
                                         />
@@ -335,7 +335,7 @@ export default function SliderList() {
                                         <input
                                             type="text"
                                             className="w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none font-mono"
-                                            placeholder="/proyectos"
+                                            placeholder="/inspirate"
                                             value={formData.secondary_button_link}
                                             onChange={e => setFormData({ ...formData, secondary_button_link: e.target.value })}
                                         />

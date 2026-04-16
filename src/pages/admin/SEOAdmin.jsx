@@ -54,7 +54,7 @@ export default function SEOAdmin() {
                 { id: 'home', name: 'Home / Portada', slug: '', },
                 { id: 'tienda', name: 'Catálogo / Tienda', slug: 'search', },
                 { id: 'ofertas', name: 'Ofertas y Descuentos', slug: 'ofertas', },
-                { id: 'proyectos', name: 'Proyectos Luz & Arte', slug: 'proyectos', },
+                { id: 'proyectos', name: 'Inspírate', slug: 'inspirate', },
                 { id: 'blog_index', name: 'Blog Boutique (Index)', slug: 'blog', },
                 { id: 'profesionales', name: 'Área Profesionales', slug: 'profesionales', },
                 { id: 'cart', name: 'Carrito de Compra', slug: 'cart', },

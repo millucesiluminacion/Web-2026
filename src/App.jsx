@@ -73,7 +73,7 @@ function App() {
               <Route path="ofertas" element={<OfertasPage />} />
               <Route path="blog" element={<BlogPage />} />
               <Route path="blog/:slug" element={<BlogPostDetail />} />
-              <Route path="proyectos" element={<ProyectosPage />} />
+              <Route path="inspirate" element={<ProyectosPage />} />
               <Route path="profesionales" element={<ProfessionalsPage />} />
               <Route path="contacto" element={<ContactPage />} />
               <Route path="marcas" element={<BrandsPage />} />
@@ -94,7 +94,7 @@ function App() {
               <Route path="rooms" element={<RoomsList />} />
               <Route path="sliders" element={<SliderList />} />
               <Route path="blog" element={<BlogAdmin />} />
-              <Route path="projects" element={<ProjectsAdmin />} />
+              <Route path="inspirate" element={<ProjectsAdmin />} />
               <Route path="payments" element={<PaymentSettings />} />
               <Route path="users" element={<UsersAdmin />} />
               <Route path="professionals" element={<ProfessionalsAdmin />} />
