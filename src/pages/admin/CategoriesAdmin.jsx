@@ -197,6 +197,17 @@ export default function CategoriesAdmin() {
         }
     };
 
+    const handleDelete = async (id) => {
+        if (!confirm('¿Eliminar esta categoría? Los productos asociados quedarán sin categoría.')) return;
+        try {
+            const { error } = await supabase.from('categories').delete().eq('id', id);
+            if (error) throw error;
+            fetchCategories();
+        } catch (error) {
+            alert('Error al eliminar: ' + error.message);
+        }
+    };
+
     const mainCategories = categories.filter(c => !c.parent_id).sort((a, b) => (a.order_index - b.order_index));
     const getSubcategories = (parentId) => categories.filter(c => c.parent_id === parentId).sort((a, b) => (a.order_index - b.order_index));
 
