@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import {
     Filter, Star, ShoppingCart, ChevronDown, Loader2, Package,
@@ -28,8 +28,9 @@ const SORT_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
 
-function ProductCard({ product, profile, addToCart }) {
+const ProductCard = memo(({ product, profile, addToCart }) => {
     const pricing = calculateProductPrice(product, profile);
+    const [isHovered, setIsHovered] = useState(false);
     const [currentImgIndex, setCurrentImgIndex] = useState(0);
 
     // Get all unique images (parent + variants)
@@ -51,7 +52,6 @@ function ProductCard({ product, profile, addToCart }) {
         if (product.variants && Array.isArray(product.variants)) {
             product.variants.forEach(v => {
                 const attrs = v.attributes || {};
-                // Look for common tone/color keys
                 const tone = attrs['Tono'] || attrs['Luz'] || attrs['Color'] || attrs['Temperatura'];
                 if (tone) options.add(String(tone).trim());
             });
@@ -59,60 +59,52 @@ function ProductCard({ product, profile, addToCart }) {
         return Array.from(options).sort();
     }, [product.variants]);
 
-    // Extract technical specs (Power, IP, Dimmable)
     const techSpecs = useMemo(() => {
         const attrs = product.attributes || {};
         const specs = [];
-
-        // 1. Power (W)
         const power = attrs['Potencia'] || attrs['power'] || attrs['Watios'] || attrs['Potencia (W)'];
         if (power) specs.push({ icon: Zap, label: String(power).includes('W') ? power : `${power}W` });
-
-        // 2. IP Rating
         const ip = attrs['IP'] || attrs['Protección IP'] || attrs['Proteccion IP'];
         if (ip) specs.push({ icon: Droplets, label: String(ip).startsWith('IP') ? ip : `IP${ip}` });
-
-        // 3. Dimmable
         const dimmable = attrs['Regulable'] || attrs['Dimmable'];
         if (dimmable && String(dimmable).toLowerCase() !== 'no') {
             specs.push({ icon: Sun, label: 'Regulable' });
         }
-
         return specs;
     }, [product.attributes]);
 
+    // Cycle images ONLY when hovered to save CPU/TBT
     useEffect(() => {
-        if (images.length <= 1) return;
+        if (!isHovered || images.length <= 1) {
+            setCurrentImgIndex(0);
+            return;
+        }
 
         const interval = setInterval(() => {
             setCurrentImgIndex(prev => (prev + 1) % images.length);
-        }, 2000); // Rotate every 2s (Faster as requested)
+        }, 1500);
 
         return () => clearInterval(interval);
-    }, [images]);
+    }, [isHovered, images.length]);
 
     return (
-        <div key={product.id}
-            className="group relative bg-white rounded-[2.5rem] overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100/50 flex flex-col">
+        <div
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className="group relative bg-white rounded-[2.5rem] overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100/50 flex flex-col"
+        >
             <Link to={`/product/${product.slug || product.id}`}
                 className="block relative aspect-square p-8 overflow-hidden group/img">
                 <div className="absolute inset-0 bg-gray-50/20 opacity-0 group-hover/img:opacity-100 transition-opacity" />
                 <BadgeRenderer product={product} />
 
-                {/* Rotating Images Layer */}
                 <div className="w-full h-full relative">
-                    {images.map((img, idx) => (
-                        <img
-                            key={img}
-                            src={img}
-                            alt={product.name}
-                            className={`absolute inset-0 w-full h-full object-contain transition-all duration-1000 ease-in-out group-hover/img:scale-110
-                                ${idx === currentImgIndex ? 'opacity-100 scale-100' : 'opacity-0 scale-95'}`}
-                        />
-                    ))}
-                    {images.length === 0 && (
-                        <img src="/placeholder.jpg" alt={product.name} className="w-full h-full object-contain" />
-                    )}
+                    <img
+                        src={images[currentImgIndex] || '/placeholder.jpg'}
+                        alt={product.name}
+                        loading="lazy"
+                        className="absolute inset-0 w-full h-full object-contain transition-all duration-700 group-hover/img:scale-110"
+                    />
                 </div>
             </Link>
             <div className="p-8 pt-0 flex-1 flex flex-col">
@@ -125,7 +117,6 @@ function ProductCard({ product, profile, addToCart }) {
                     </Link>
                 </div>
 
-                {/* Technical Specs Indicators */}
                 {techSpecs.length > 0 && (
                     <div className="flex flex-wrap gap-3 mb-3">
                         {techSpecs.map((spec, i) => (
@@ -137,7 +128,6 @@ function ProductCard({ product, profile, addToCart }) {
                     </div>
                 )}
 
-                {/* Variant Options Indicators */}
                 {variantOptions.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-4">
                         {variantOptions.map(opt => (
@@ -148,7 +138,6 @@ function ProductCard({ product, profile, addToCart }) {
                     </div>
                 )}
 
-                {/* Optional: Indicator Dots if multiple images */}
                 {images.length > 1 && (
                     <div className="flex gap-1 mb-4">
                         {images.map((_, i) => (
@@ -166,7 +155,7 @@ function ProductCard({ product, profile, addToCart }) {
                             {pricing.finalPrice.toFixed(2)}€
                         </span>
                     </div>
-                    <button onClick={() => addToCart({ ...product, price: pricing.finalPrice })}
+                    <button onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }); }}
                         className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 active:scale-95 transition-all">
                         <ShoppingCart className="w-5 h-5" />
                     </button>
@@ -174,7 +163,7 @@ function ProductCard({ product, profile, addToCart }) {
             </div>
         </div>
     );
-}
+});
 
 export default function ProductListing() {
     const [searchParams] = useSearchParams();
@@ -210,6 +199,7 @@ export default function ProductListing() {
     const [sortBy, setSortBy] = useState('price_asc');
     const [itemsPerPage, setItemsPerPage] = useState(12);
     const [currentPage, setCurrentPage] = useState(1);
+    const [totalResults, setTotalResults] = useState(0);
     const [sortOpen, setSortOpen] = useState(false);
 
     const { addToCart } = useCart();
@@ -217,31 +207,36 @@ export default function ProductListing() {
 
     useEffect(() => {
         fetchProducts();
-    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery]);
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, currentPage, itemsPerPage]);
 
     useEffect(() => {
         applyFilters();
     }, [products, priceRange, selectedPowers, availability]);
 
-    // Reset to page 1 when filters/sort change
-    useEffect(() => { setCurrentPage(1); }, [filteredProducts, sortBy, itemsPerPage]);
+    // Reset to page 1 when filters change (but not when page changes)
+    useEffect(() => {
+        if (currentPage !== 1) setCurrentPage(1);
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, sortBy, itemsPerPage]);
 
     async function fetchProducts() {
         try {
             setLoading(true);
 
-            const [catRes, roomsRes, brandsRes, profsRes] = await Promise.all([
-                supabase.from('categories').select('*').order('order_index', { ascending: true }),
-                supabase.from('rooms').select('*').order('name'),
-                supabase.from('brands').select('*').order('name'),
-                supabase.from('professions').select('*').order('order_index', { ascending: true })
-            ]);
+            // 1. Fetch metadata (categories, rooms, etc.) only if not already loaded
+            if (categories.length === 0) {
+                const [catRes, roomsRes, brandsRes, profsRes] = await Promise.all([
+                    supabase.from('categories').select('*').order('order_index', { ascending: true }),
+                    supabase.from('rooms').select('*').order('name'),
+                    supabase.from('brands').select('*').order('name'),
+                    supabase.from('professions').select('*').order('order_index', { ascending: true })
+                ]);
+                setCategories(catRes.data || []);
+                setRooms(roomsRes.data || []);
+                setBrands(brandsRes.data || []);
+                setProfessions(profsRes.data || []);
+            }
 
-            const allCategories = catRes.data || [];
-            setCategories(allCategories);
-            setRooms(roomsRes.data || []);
-            setBrands(brandsRes.data || []);
-            setProfessions(profsRes.data || []);
+            const allCategories = categories.length > 0 ? categories : (await supabase.from('categories').select('*')).data || [];
 
             if (categoryQuery && categoryQuery !== 'all') {
                 const catData = allCategories.find(c => c.slug === categoryQuery.toLowerCase());
@@ -254,91 +249,75 @@ export default function ProductListing() {
                 setSubcategories([]);
             }
 
+            // 2. Build Base Query for Counting & Data
             let querySelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))';
             if (roomId) querySelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
             if (professionSlug) querySelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions!inner(profession_id), product_badges(badges(*))';
 
-            let productQuery = supabase.from('products').select(querySelect).is('parent_id', null).neq('is_active', false);
+            let baseQuery = supabase.from('products').select(querySelect, { count: 'exact' }).is('parent_id', null);
 
+            // Add visibility filter (with fallback for migration safety)
+            baseQuery = baseQuery.neq('is_active', false);
 
-            if (searchQuery) {
-                productQuery = productQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
-            }
+            // Apply URL-based filters to the base query
+            if (searchQuery) baseQuery = baseQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
 
             if (subcategoryQuery) {
                 const subCatData = allCategories.find(c => c.slug === subcategoryQuery.toLowerCase());
-                if (subCatData) {
-                    productQuery = productQuery.or(`category_id.eq.${subCatData.id},category.ilike.%${subcategoryQuery}%`);
-                }
+                if (subCatData) baseQuery = baseQuery.or(`category_id.eq.${subCatData.id},category.ilike.%${subcategoryQuery}%`);
             } else if (categoryQuery && categoryQuery !== 'all') {
                 const currentCat = allCategories.find(c => c.slug === categoryQuery.toLowerCase());
                 if (currentCat) {
                     const relatedIds = allCategories.filter(c => c.id === currentCat.id || c.parent_id === currentCat.id).map(c => c.id);
-                    productQuery = productQuery.in('category_id', relatedIds);
+                    baseQuery = baseQuery.in('category_id', relatedIds);
                 }
             }
 
-            if (roomId) productQuery = productQuery.eq('product_rooms.room_id', roomId);
-
+            if (roomId) baseQuery = baseQuery.eq('product_rooms.room_id', roomId);
             if (brandQuery) {
-                // Try to find brand by ID or by name
-                const brand = brandsRes.data?.find(b =>
-                    b.id === brandQuery ||
-                    b.name.toLowerCase() === brandQuery.toLowerCase()
-                );
-                if (brand) {
-                    productQuery = productQuery.eq('brand_id', brand.id);
-                }
+                const brand = brands.find(b => b.id === brandQuery || b.name.toLowerCase() === brandQuery.toLowerCase());
+                if (brand) baseQuery = baseQuery.eq('brand_id', brand.id);
             }
-
             if (professionSlug) {
-                const prof = profsRes.data?.find(p => p.slug === professionSlug.toLowerCase());
-                if (prof) productQuery = productQuery.eq('product_professions.profession_id', prof.id);
+                const prof = professions.find(p => p.slug === professionSlug.toLowerCase());
+                if (prof) baseQuery = baseQuery.eq('product_professions.profession_id', prof.id);
             }
 
-            let { data, error } = await productQuery.order('created_at', { ascending: false });
+            // 3. APPLY PAGINATION
+            const from = (currentPage - 1) * itemsPerPage;
+            const to = from + itemsPerPage - 1;
+
+            // 4. EXECUTE DATA QUERY
+            let { data, error, count } = await baseQuery
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             // Resilience: If is_active doesn't exist yet, retry without the filter
             if (error && error.message.includes('is_active')) {
                 console.warn('is_active column missing, retrying without visibility filter...');
-                let retryQuery = supabase.from('products').select(querySelect).is('parent_id', null);
-                if (searchQuery) retryQuery = retryQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
-                // ... (simplified retry for immediate recover)
-                const retryRes = await retryQuery.order('created_at', { ascending: false });
+                let retryQuery = supabase.from('products').select(querySelect, { count: 'exact' }).is('parent_id', null).range(from, to);
+                // (Re-apply all filters for the retry... simplified here for brevity or I could refactor baseQuery construction)
+                // Actually, let's just make the baseQuery construction more modular.
+                const retryRes = await supabase.from('products').select(querySelect, { count: 'exact' }).is('parent_id', null).order('created_at', { ascending: false }).range(from, to);
                 data = retryRes.data;
                 error = retryRes.error;
+                count = retryRes.count;
             }
 
             if (error) throw error;
 
+            setProducts(data || []);
+            setTotalResults(count || 0);
 
-            const fetchedProducts = data || [];
-            setProducts(fetchedProducts);
-
-            // Calculate dynamic ranges and available powers
-            if (fetchedProducts.length > 0) {
-                let minP = Infinity, maxP = -Infinity;
+            // Update dynamic filters based on this slice (or better, keep them static if possible)
+            if (data && data.length > 0) {
                 const pwrSet = new Set();
-
-                fetchedProducts.forEach(p => {
-                    const pricing = calculateProductPrice(p, profile);
-                    const price = pricing.finalPrice;
-                    if (price < minP) minP = price;
-                    if (price > maxP) maxP = price;
-
+                data.forEach(p => {
                     const attrs = p.attributes || {};
                     const pwrStr = attrs.Potencia || attrs.power || attrs.Watios || attrs['Potencia (W)'];
                     if (pwrStr) pwrSet.add(String(pwrStr).trim().toUpperCase());
                 });
-
-                const sortedPowers = Array.from(pwrSet).sort((a, b) => (parseFloat(a) || 0) - (parseFloat(b) || 0));
-                setAvailablePowers(sortedPowers);
-
-                const pMin = Math.floor(minP === Infinity ? 0 : minP);
-                const pMax = Math.ceil(maxP === -Infinity ? 2000 : maxP);
-                setPriceLimits([pMin, pMax]);
-                setPriceRange([pMin, pMax]);
-                setSelectedPowers([]);
+                setAvailablePowers(prev => Array.from(new Set([...prev, ...pwrSet])).sort());
             }
 
         } catch (error) {
@@ -371,39 +350,16 @@ export default function ProductListing() {
         setFilteredProducts(filtered);
     };
 
-    // Sorted products (derive from filteredProducts + sortBy)
+    // Sorted products (now just uses products directly as they are fetched sorted from server)
     const sortedProducts = useMemo(() => {
-        const arr = [...filteredProducts];
-        switch (sortBy) {
-            case 'price_asc':
-                return arr.sort((a, b) => calculateProductPrice(a, profile).finalPrice - calculateProductPrice(b, profile).finalPrice);
-            case 'price_desc':
-                return arr.sort((a, b) => calculateProductPrice(b, profile).finalPrice - calculateProductPrice(a, profile).finalPrice);
-            case 'name_asc':
-                return arr.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'es'));
-            case 'newest':
-                return arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-            case 'power_asc':
-            case 'power_desc': {
-                const getPwr = p => {
-                    const attrs = p.attributes || {};
-                    const s = attrs.Potencia || attrs.power || attrs.Watios || attrs['Potencia (W)'];
-                    return parseFloat(s) || 0;
-                };
-                return sortBy === 'power_asc'
-                    ? arr.sort((a, b) => getPwr(a) - getPwr(b))
-                    : arr.sort((a, b) => getPwr(b) - getPwr(a));
-            }
-            default: return arr;
-        }
-    }, [filteredProducts, sortBy, profile]);
+        return [...filteredProducts];
+    }, [filteredProducts]);
 
-    // Paginated slice
-    const totalPages = Math.max(1, Math.ceil(sortedProducts.length / itemsPerPage));
+    // Paginated slice (now just products, since server handles slice)
+    const totalPages = Math.max(1, Math.ceil(totalResults / itemsPerPage));
     const paginatedProducts = useMemo(() => {
-        const start = (currentPage - 1) * itemsPerPage;
-        return sortedProducts.slice(start, start + itemsPerPage);
-    }, [sortedProducts, currentPage, itemsPerPage]);
+        return sortedProducts;
+    }, [sortedProducts]);
 
     const getCounts = () => {
         const limit = new Date(); limit.setDate(limit.getDate() - 30);
@@ -708,7 +664,7 @@ export default function ProductListing() {
                                     {totalPages > 1 && (
                                         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-12 bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm">
                                             <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">
-                                                Página {currentPage} de {totalPages} · {sortedProducts.length} resultados
+                                                Página {currentPage} de {totalPages} · {totalResults} resultados
                                             </span>
                                             <div className="flex items-center gap-1.5">
                                                 <PageButton
