@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../../lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
+import { optimizeImage } from '../../lib/imageUtils';
 
 const STATIC_CATEGORIES = [
     { name: 'Bombillas', img: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png', link: '/catalogo?category=bombillas' },
@@ -77,8 +78,10 @@ export function CategoryGrid() {
                                     <div className="relative mb-6 mx-auto w-full aspect-square bg-gray-100 rounded-[1.5rem] p-4 shadow-sm group-hover:shadow-luxury-hover group-hover:border-primary/20 transition-all duration-500 overflow-hidden border border-gray-100">
                                         <div className="absolute inset-0 bg-primary/[0.01] opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                         <img
-                                            src={cat.img}
+                                            src={optimizeImage(cat.img, 200, 200)}
                                             alt={cat.name}
+                                            width={200}
+                                            height={200}
                                             className="w-full h-full object-contain relative z-10 transition-transform duration-700 group-hover:scale-110"
                                             loading="lazy"
                                         />

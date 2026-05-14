@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
 import { calculateProductPrice } from '../lib/pricingUtils';
+import { optimizeImage } from '../lib/imageUtils';
 
 const ICON_MAP = {
     BoxSelect, Square, Grid, Zap, Lightbulb, Tag, Settings
@@ -28,7 +29,7 @@ const SORT_OPTIONS = [
 
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
 
-const ProductCard = memo(({ product, profile, addToCart }) => {
+const ProductCard = memo(({ product, profile, addToCart, isLCP = false }) => {
     const pricing = calculateProductPrice(product, profile);
     const [isHovered, setIsHovered] = useState(false);
     const [currentImgIndex, setCurrentImgIndex] = useState(0);
@@ -87,6 +88,10 @@ const ProductCard = memo(({ product, profile, addToCart }) => {
         return () => clearInterval(interval);
     }, [isHovered, images.length]);
 
+    const displayImage = useMemo(() =>
+        optimizeImage(images[currentImgIndex], 400, 400),
+        [images, currentImgIndex]);
+
     return (
         <div
             onMouseEnter={() => setIsHovered(true)}
@@ -100,9 +105,12 @@ const ProductCard = memo(({ product, profile, addToCart }) => {
 
                 <div className="w-full h-full relative">
                     <img
-                        src={images[currentImgIndex] || '/placeholder.jpg'}
+                        src={displayImage}
                         alt={product.name}
-                        loading="lazy"
+                        loading={isLCP ? "eager" : "lazy"}
+                        fetchpriority={isLCP ? "high" : "auto"}
+                        width={400}
+                        height={400}
                         className="absolute inset-0 w-full h-full object-contain transition-all duration-700 group-hover/img:scale-110"
                     />
                 </div>
@@ -637,12 +645,13 @@ export default function ProductListing() {
                             ) : (
                                 <>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                        {paginatedProducts.map(product => (
+                                        {paginatedProducts.map((product, idx) => (
                                             <ProductCard
                                                 key={product.id}
                                                 product={product}
                                                 profile={profile}
                                                 addToCart={addToCart}
+                                                isLCP={idx < 4} // The first 4 products are LCP candidates
                                             />
                                         ))}
 
