@@ -6,6 +6,11 @@
 export const optimizeImage = (url, width, height = null, quality = 80) => {
     if (!url) return '/placeholder.jpg';
 
+    // Check if optimization is disabled via env
+    if (import.meta.env.VITE_ENABLE_IMAGE_OPTIMIZATION === 'false') {
+        return url;
+    }
+
     // Check if it's a Supabase storage URL
     // Pattern: https://[project].supabase.co/storage/v1/object/public/[bucket]/[path]
     if (url.includes('supabase.co/storage/v1/object/public/')) {

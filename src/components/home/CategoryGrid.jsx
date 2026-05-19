@@ -36,11 +36,15 @@ export function CategoryGrid() {
                 if (error) throw error;
 
                 if (data && data.length > 0) {
-                    const formatted = data.map(cat => ({
-                        name: cat.name,
-                        img: cat.image_url || 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png',
-                        link: `/catalogo?category=${cat.slug || cat.name.toLowerCase()}`
-                    }));
+                    const formatted = data.map(cat => {
+                        // Better fallback: if database image is missing, try to find a match in static list
+                        const staticMatch = STATIC_CATEGORIES.find(s => s.name.toLowerCase() === cat.name.toLowerCase());
+                        return {
+                            name: cat.name,
+                            img: cat.image_url || staticMatch?.img || 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png',
+                            link: `/catalogo?category=${cat.slug || cat.name.toLowerCase()}`
+                        };
+                    });
                     setCategories(formatted);
                 } else {
                     setCategories(STATIC_CATEGORIES);
