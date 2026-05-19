@@ -6,8 +6,9 @@
 export const optimizeImage = (url, width, height = null, quality = 80) => {
     if (!url) return '/placeholder.jpg';
 
-    // Check if optimization is disabled via env
-    if (import.meta.env.VITE_ENABLE_IMAGE_OPTIMIZATION === 'false') {
+    // Check if optimization is explicitly enabled via env
+    // Default to false (safe mode) if not set or false
+    if (import.meta.env.VITE_ENABLE_IMAGE_OPTIMIZATION !== 'true') {
         return url;
     }
 
