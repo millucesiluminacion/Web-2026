@@ -215,7 +215,7 @@ export default function ProductListing() {
 
     useEffect(() => {
         fetchProducts();
-    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, currentPage, itemsPerPage]);
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, currentPage, itemsPerPage, sortBy, priceRange, selectedPowers, availability]);
 
     useEffect(() => {
         applyFilters();
@@ -291,14 +291,55 @@ export default function ProductListing() {
                 if (prof) baseQuery = baseQuery.eq('product_professions.profession_id', prof.id);
             }
 
-            // 3. APPLY PAGINATION
+            // 3. APPLY FILTERS (Server-side)
+            if (priceRange[0] > 0) baseQuery = baseQuery.gte('price', priceRange[0]);
+            if (priceRange[1] < 2000) baseQuery = baseQuery.lte('price', priceRange[1]);
+
+            if (selectedPowers.length > 0) {
+                // For JSONB, we can use some filters, but multiple ORs on JSONB fields in Supabase JS is tricky.
+                // We'll use a filter string if possible or just use multiple .or() equivalent.
+                // Simplified: if there are selected powers, filter for products whose attributes->Potencia matches.
+                const powerFilters = selectedPowers.map(p => `attributes->>Potencia.eq.${p}`).join(',');
+                baseQuery = baseQuery.or(powerFilters);
+            }
+
+            if (availability.inStock) baseQuery = baseQuery.gt('stock', 0);
+            if (availability.onOffer) baseQuery = baseQuery.not('discount_price', 'is', null).filter('discount_price', 'lt', 'price');
+            if (availability.isNew) {
+                const limit = new Date();
+                limit.setDate(limit.getDate() - 30);
+                baseQuery = baseQuery.gt('created_at', limit.toISOString());
+            }
+
+            // 4. APPLY SORTING
+            switch (sortBy) {
+                case 'price_asc':
+                    baseQuery = baseQuery.order('price', { ascending: true });
+                    break;
+                case 'price_desc':
+                    baseQuery = baseQuery.order('price', { ascending: false });
+                    break;
+                case 'name_asc':
+                    baseQuery = baseQuery.order('name', { ascending: true });
+                    break;
+                case 'power_asc':
+                    baseQuery = baseQuery.order('attributes->Potencia', { ascending: true });
+                    break;
+                case 'power_desc':
+                    baseQuery = baseQuery.order('attributes->Potencia', { ascending: false });
+                    break;
+                case 'newest':
+                default:
+                    baseQuery = baseQuery.order('created_at', { ascending: false });
+                    break;
+            }
+
+            // 5. APPLY PAGINATION
             const from = (currentPage - 1) * itemsPerPage;
             const to = from + itemsPerPage - 1;
 
-            // 4. EXECUTE DATA QUERY
-            let { data, error, count } = await baseQuery
-                .order('created_at', { ascending: false })
-                .range(from, to);
+            // 6. EXECUTE DATA QUERY
+            let { data, error, count } = await baseQuery.range(from, to);
 
             // Resilience: If is_active doesn't exist yet, retry without the filter
             if (error && error.message.includes('is_active')) {
@@ -336,38 +377,20 @@ export default function ProductListing() {
     }
 
     const applyFilters = () => {
-        let filtered = [...products];
-        filtered = filtered.filter(p => {
-            const { finalPrice } = calculateProductPrice(p, profile);
-            return finalPrice >= priceRange[0] && finalPrice <= priceRange[1];
-        });
-        filtered = filtered.filter(p => {
-            if (selectedPowers.length === 0) return true;
-            const attrs = p.attributes || {};
-            const pwrStr = attrs.Potencia || attrs.power || attrs.Watios || attrs['Potencia (W)'];
-            const normalized = pwrStr ? String(pwrStr).trim().toUpperCase() : null;
-            return normalized && selectedPowers.includes(normalized);
-        });
-        if (availability.inStock) filtered = filtered.filter(p => p.stock > 0);
-        if (availability.onOffer) filtered = filtered.filter(p => p.discount_price > 0 && p.discount_price < p.price);
-        if (availability.isNew) {
-            const limit = new Date();
-            limit.setDate(limit.getDate() - 30);
-            filtered = filtered.filter(p => new Date(p.created_at) > limit);
-        }
-        setFilteredProducts(filtered);
+        // Redundant since we now filter on server-side
+        setFilteredProducts(products);
     };
 
     // Sorted products (now just uses products directly as they are fetched sorted from server)
     const sortedProducts = useMemo(() => {
-        return [...filteredProducts];
-    }, [filteredProducts]);
+        return products;
+    }, [products]);
 
     // Paginated slice (now just products, since server handles slice)
     const totalPages = Math.max(1, Math.ceil(totalResults / itemsPerPage));
     const paginatedProducts = useMemo(() => {
-        return sortedProducts;
-    }, [sortedProducts]);
+        return products;
+    }, [products]);
 
     const getCounts = () => {
         const limit = new Date(); limit.setDate(limit.getDate() - 30);
