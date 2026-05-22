@@ -269,24 +269,33 @@ export default function UsersAdmin() {
 
         Papa.parse(file, {
             header: true,
-            skipEmptyLines: true,
+            skipEmptyLines: 'greedy',
             complete: async (results) => {
                 const importedData = results.data;
+                const headers = results.meta.fields || [];
+
+                // Si el archivo parece ser de CRM (clientes antiguos) y no de usuarios
+                const isCRM = headers.some(h => h.toLowerCase().includes('job title') || h.toLowerCase().includes('address'));
+                if (isCRM) {
+                    alert('⚠️ ATENCIÓN: Parece que estás intentando importar una lista de CLIENTES en la sección de EQUIPO.\n\nPara importar clientes antiguos al CRM, por favor usa la sección "GESTIÓN > CLIENTES" del menú lateral. Esta sección es solo para miembros del equipo con acceso al panel.');
+                    return;
+                }
+
                 let count = 0;
                 let errors = 0;
 
                 for (const row of importedData) {
-                    const id = row.ID;
+                    const id = row.ID || row.id;
                     if (!id) continue;
 
                     const updates = {};
-                    if (row.Nombre) updates.full_name = row.Nombre;
-                    if (row.Rol) updates.role = row.Rol;
-                    if (row.Tipo) updates.user_type = row.Tipo;
-                    if (row.Empresa) updates.company_name = row.Empresa;
-                    if (row.NIF) updates.vat_id = row.NIF;
-                    if (row.Descuento) updates.discount_percent = parseFloat(row.Descuento);
-                    if (row.Socio) updates.is_partner = (row.Socio === 'SÍ' || row.Socio === 'true');
+                    if (row.Nombre || row.full_name) updates.full_name = row.Nombre || row.full_name;
+                    if (row.Rol || row.role) updates.role = row.Rol || row.role;
+                    if (row.Tipo || row.user_type) updates.user_type = row.Tipo || row.user_type;
+                    if (row.Empresa || row.company_name) updates.company_name = row.Empresa || row.company_name;
+                    if (row.NIF || row.vat_id) updates.vat_id = row.NIF || row.vat_id;
+                    if (row.Descuento || row.discount_percent !== undefined) updates.discount_percent = parseFloat(row.Descuento || row.discount_percent);
+                    if (row.Socio || row.is_partner !== undefined) updates.is_partner = (row.Socio === 'SÍ' || row.Socio === 'true' || row.is_partner === true);
 
                     if (Object.keys(updates).length > 0) {
                         const { error } = await supabase.from('profiles').update(updates).eq('id', id);
@@ -294,7 +303,7 @@ export default function UsersAdmin() {
                         else count++;
                     }
                 }
-                alert(`Importación finalizada: ${count} actualizados, ${errors} errores.`);
+                alert(`Importación de equipo finalizada: ${count} actualizados, ${errors} errores.`);
                 fetchUsers();
             }
         });

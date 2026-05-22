@@ -19,7 +19,9 @@ export default function CustomersList() {
         address: '',
         user_type: 'persona',
         company_name: '',
-        vat_id: ''
+        vat_id: '',
+        discount_percent: 0,
+        is_partner: false
     });
 
     useEffect(() => {
@@ -52,7 +54,9 @@ export default function CustomersList() {
             address: '',
             user_type: 'persona',
             company_name: '',
-            vat_id: ''
+            vat_id: '',
+            discount_percent: 0,
+            is_partner: false
         });
         setIsModalOpen(true);
     }
@@ -66,7 +70,9 @@ export default function CustomersList() {
             address: customer.address || '',
             user_type: customer.user_type || 'persona',
             company_name: customer.company_name || '',
-            vat_id: customer.vat_id || ''
+            vat_id: customer.vat_id || '',
+            discount_percent: customer.discount_percent || 0,
+            is_partner: customer.is_partner || false
         });
         setIsModalOpen(true);
     }
@@ -114,6 +120,11 @@ export default function CustomersList() {
             Email: c.email,
             Teléfono: c.phone || '',
             Dirección: c.address || '',
+            Tipo: c.user_type === 'profesional' ? 'Profesional' : 'Particular',
+            Empresa: c.company_name || '',
+            NIF_CIF: c.vat_id || '',
+            Socio: c.is_partner ? 'SÍ' : 'NO',
+            Descuento: `${c.discount_percent || 0}%`,
             Creado: c.created_at
         })));
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -129,38 +140,132 @@ export default function CustomersList() {
 
         Papa.parse(file, {
             header: true,
-            skipEmptyLines: true,
+            skipEmptyLines: 'greedy',
+            dynamicTyping: true,
+            delimiter: "", // Auto-detect delimiter explicitly
             complete: async (results) => {
                 const importedData = results.data;
+                const headers = results.meta.fields || [];
+                const errors_papa = results.errors;
+
+                if (importedData.length === 0) {
+                    alert('No se encontraron datos. Verifica el formato del CSV.');
+                    return;
+                }
+
+                console.log('--- DEBUG IMPORTACIÓN ---');
+                console.log('Headers detectados:', headers);
+                console.log('Total filas PapaParse:', importedData.length);
+                if (errors_papa.length > 0) console.warn('Errores de parsing:', errors_papa);
+
                 let created = 0;
                 let updated = 0;
                 let errors = 0;
+                let skipped = 0;
+                const processedEmails = new Set();
+                let duplicatesInFile = 0;
 
-                for (const row of importedData) {
-                    const email = row.Email;
-                    if (!email) continue;
+                // Muestreo para diagnóstico
+                const skippedSamples = [];
+
+                for (let i = 0; i < importedData.length; i++) {
+                    const row = importedData[i];
+
+                    // 1. Detección de Email ultra-agresiva
+                    let email = '';
+                    // Prioridad 1: Columna directa
+                    const emailKey = Object.keys(row).find(k => k.toLowerCase().trim() === 'email' || k.toLowerCase().includes('correo'));
+                    if (emailKey) email = row[emailKey];
+
+                    // Prioridad 2: Buscar un valor con @ en cualquier columna
+                    if (!email) {
+                        email = Object.values(row).find(v => typeof v === 'string' && v.includes('@') && v.includes('.'));
+                    }
+
+                    if (!email || String(email).trim() === '') {
+                        skipped++;
+                        if (skippedSamples.length < 3) skippedSamples.push(JSON.stringify(row).slice(0, 50));
+                        continue;
+                    }
+
+                    const cleanEmail = String(email).toLowerCase().trim();
+
+                    if (processedEmails.has(cleanEmail)) {
+                        duplicatesInFile++;
+                    }
+                    processedEmails.add(cleanEmail);
+
+                    // 2. Nombre
+                    let fullName = row.full_name || row['Full name'] || row.Nombre || row.nombre;
+                    if (!fullName) {
+                        const first = row['First name'] || row.Name || row.name || '';
+                        const last = row['Last name'] || row.Surname || '';
+                        fullName = `${first} ${last}`.trim();
+                    }
+                    if (!fullName || fullName === ' ') fullName = 'Sin Nombre';
+
+                    // 3. Dirección
+                    const addressParts = [
+                        row.Address1 || row['Dirección 1'] || row.address,
+                        row.Address2 || row['Dirección 2'],
+                        row.City || row.Ciudad,
+                        row['Postal code'] || row.CP || row.Zip
+                    ].filter(Boolean);
 
                     const customerData = {
-                        full_name: row.Nombre || 'Sin Nombre',
-                        email: email,
-                        phone: row.Teléfono || '',
-                        address: row.Dirección || ''
+                        full_name: fullName,
+                        email: cleanEmail,
+                        phone: String(row.Phone || row['Teléfono'] || row.phone || '').trim(),
+                        address: addressParts.join(', '),
+                        company_name: String(row.Organization || row.Empresa || '').trim(),
+                        vat_id: String(row.vat_id || row['VAT ID'] || row.NIF || '').trim(),
+                        is_partner: row.Member === true || row.Member === 'true' || row.Member === 'SÍ',
+                        discount_percent: parseFloat(row.Descuento || row.discount_percent) || 0,
+                        user_type: (row.Organization || row['Job title']?.toLowerCase().includes('pro')) ? 'profesional' : 'persona',
+                        metadata: { ...row, imported_at: new Date().toISOString() }
                     };
 
-                    const id = row.ID;
-                    if (id) {
-                        // Intentar actualizar por ID
-                        const { error } = await supabase.from('customers').update(customerData).eq('id', id);
-                        if (error) errors++;
-                        else updated++;
-                    } else {
-                        // Insertar nuevo
-                        const { error } = await supabase.from('customers').insert([customerData]);
-                        if (error) errors++;
-                        else created++;
+                    try {
+                        const { data: existing } = await supabase.from('customers').select('id').eq('email', cleanEmail).maybeSingle();
+
+                        if (existing) {
+                            const { error } = await supabase.from('customers').update(customerData).eq('id', existing.id);
+                            if (error) throw error;
+                            updated++;
+                        } else {
+                            const { error } = await supabase.from('customers').insert([customerData]);
+                            if (error) throw error;
+                            created++;
+                        }
+
+                        // Sincronización de Newsletter (Opcional, no bloquea el proceso)
+                        const isSubscriber =
+                            row.Subscriber === true || row.Subscriber === 'true' || row.Subscriber === 'SÍ' ||
+                            row['Blog subscriber'] === true || row['Blog subscriber'] === 'true';
+
+                        if (isSubscriber) {
+                            try {
+                                await supabase.from('newsletter_subscribers').upsert(
+                                    { email: cleanEmail, is_active: true },
+                                    { onConflict: 'email' }
+                                );
+                            } catch (nErr) { console.warn('Newsletter sync error:', nErr); }
+                        }
+                    } catch (err) {
+                        console.error(`Error en fila ${i}:`, err);
+                        errors++;
                     }
                 }
-                alert(`Importación finalizada: ${created} creados, ${updated} actualizados, ${errors} errores.`);
+
+                alert(
+                    `IMPORTACIÓN FINALIZADA CON ÉXITO:\n\n` +
+                    `✅ ${created} Clientes creados\n` +
+                    `🔄 ${updated} Clientes actualizados\n` +
+                    `👥 ${duplicatesInFile} Correos duplicados en el archivo\n` +
+                    `❌ ${errors} Errores críticos\n` +
+                    `⚠️ ${skipped} Filas sin email ignoradas\n\n` +
+                    `Total de clientes únicos en tu base de datos: ${processedEmails.size}`
+                );
                 fetchCustomers();
             }
         });
@@ -448,6 +553,34 @@ export default function CustomersList() {
                                     />
                                 </div>
                             </div>
+                            <div className="p-6 bg-brand-carbon/5 rounded-3xl space-y-6">
+                                <p className="text-[10px] font-black uppercase tracking-[.3em] text-primary/60 font-outfit">Programa de Fidelización</p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="flex items-center gap-4">
+                                        <input
+                                            type="checkbox"
+                                            id="is_partner"
+                                            className="w-5 h-5 rounded-lg border-gray-300 text-primary focus:ring-primary/20"
+                                            checked={formData.is_partner}
+                                            onChange={(e) => setFormData({ ...formData, is_partner: e.target.checked })}
+                                        />
+                                        <label htmlFor="is_partner" className="text-[11px] font-black uppercase text-brand-carbon italic font-outfit cursor-pointer">Es Socio VIP / Partner</label>
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Descuento Global (%)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            className="w-full bg-white border-none rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                            value={formData.discount_percent}
+                                            onChange={(e) => setFormData({ ...formData, discount_percent: parseFloat(e.target.value) || 0 })}
+                                            placeholder="Ej: 10"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="space-y-3">
                                 <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Dirección de Envío Principal</label>
                                 <textarea
