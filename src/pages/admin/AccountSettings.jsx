@@ -224,16 +224,22 @@ export default function AccountSettings() {
                     html: `<h1>¡Conexión Exitosa!</h1><p>Este es un correo de prueba enviado desde tu nueva configuración profesional en <b>Mil Luces</b>.</p>`
                 })
             });
-            const result = await response.json();
-            if (response.ok) {
+            const contentType = response.headers.get("content-type");
+            if (response.ok && contentType && contentType.includes("application/json")) {
+                const result = await response.json();
                 alert("✅ Email enviado con éxito. Revisa tu bandeja de entrada.");
-            } else {
+            } else if (!response.ok && contentType && contentType.includes("application/json")) {
+                const result = await response.json();
                 let errorMsg = result.error || "Fallo en el envío";
                 if (result.code === 'EAUTH') errorMsg = 'Error de autenticación: Usuario o contraseña incorrectos.';
                 if (result.code === 'ESOCKET') errorMsg = 'Error de conexión: El servidor no responde o el puerto está bloqueado.';
                 if (result.code === 'EAI_AGAIN' || result.code === 'ENOTFOUND') errorMsg = `No se pudo encontrar el servidor: ${smtpConfig.host}.`;
 
                 alert(`❌ Error en la prueba: ${errorMsg}\n\nDetalles: ${result.details || 'N/A'}\nCódigo: ${result.code || 'N/A'}`);
+            } else {
+                const text = await response.text();
+                console.error("Respuesta no válida del servidor:", text);
+                alert(`❌ Error del Servidor API (Código ${response.status}): El servidor no ha devuelto un resultado válido. \n\nSi estás en local, asegúrate de estar ejecutando 'vercel dev'. si estás en producción, revisa los logs de Vercel.`);
             }
         } catch (err) {
             alert("❌ Error de red o servidor: " + err.message);
@@ -734,9 +740,12 @@ export default function AccountSettings() {
                                         <div className="mt-8 p-6 bg-white/5 rounded-2xl border border-white/10">
                                             <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-3">¿Cómo solucionar la falta de Clave?</p>
                                             <p className="text-[11px] text-gray-400 leading-relaxed italic">
-                                                Ve a tu panel de <b>Vercel &rarr; Settings &rarr; Environment Variables</b> y añade:<br />
-                                                <code className="bg-white/10 px-2 py-0.5 rounded text-primary mt-2 inline-block">SUPABASE_SERVICE_ROLE_KEY</code> con tu clave secreta de Supabase.<br />
-                                                <span className="block mt-2 opacity-60">Esto permitirá al sistema crear usuarios sin que tengan que confirmar su email manualmente.</span>
+                                                Ve a tu panel de <b>Supabase &rarr; Settings &rarr; API</b> y copia la <b>service_role key</b>.<br />
+                                                Luego, en <b>Vercel &rarr; Settings &rarr; Environment Variables</b> (o en tu archivo .env local) añade:<br />
+                                                <code className="bg-white/10 px-2 py-0.5 rounded text-primary mt-2 inline-block">SUPABASE_SERVICE_ROLE_KEY</code><br />
+                                                <code className="bg-white/10 px-2 py-0.5 rounded text-primary mt-1 inline-block">EMAIL_SYSTEM_KEY</code> (Cualquier clave secreta)<br />
+                                                <code className="bg-white/10 px-2 py-0.5 rounded text-primary mt-1 inline-block">VITE_EMAIL_SYSTEM_KEY</code> (La misma clave anterior)<br />
+                                                <span className="block mt-2 opacity-60">Esto permitirá al sistema enviar los emails de bienvenida y pedidos automáticamente.</span>
                                             </p>
                                         </div>
                                     )}

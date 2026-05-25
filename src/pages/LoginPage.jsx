@@ -10,6 +10,20 @@ export default function LoginPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    const translateError = (message) => {
+        const msg = message.toLowerCase();
+        if (msg.includes('invalid login credentials') || msg.includes('invalid email or password')) {
+            return 'Email o contraseña incorrectos. Revisa tus datos.';
+        }
+        if (msg.includes('email not confirmed')) {
+            return 'Tu correo aún no ha sido confirmado. Revisa tu bandeja de entrada o spam.';
+        }
+        if (msg.includes('rate limit exceeded')) {
+            return 'Demasiados intentos seguidos. Por seguridad, espera unos minutos.';
+        }
+        return 'Error al iniciar sesión: ' + message;
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
@@ -24,7 +38,7 @@ export default function LoginPage() {
             if (error) throw error;
             navigate('/');
         } catch (err) {
-            setError(err.message);
+            setError(translateError(err.message));
         } finally {
             setLoading(false);
         }

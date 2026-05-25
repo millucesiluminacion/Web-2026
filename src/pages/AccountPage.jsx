@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import {
     User, Mail, Phone, MapPin, Shield, Star,
     Zap, LogOut, Loader2, Save, Key, ShoppingBag,
-    ArrowRight, Bell, Heart, CreditCard
+    ArrowRight, Bell, Heart, CreditCard, X, Upload, CheckSquare
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -13,13 +14,20 @@ export default function AccountPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('perfil'); // 'perfil', 'favoritos', 'pedidos'
 
+    // Data states
+    const [orders, setOrders] = useState([]);
+    const [favorites, setFavorites] = useState([]);
+    const [isDataLoading, setIsDataLoading] = useState(false);
+
     const [formData, setFormData] = useState({
         full_name: '',
         phone: '',
         address: '',
         company_name: '',
-        vat_id: ''
+        vat_id: '',
+        tax_document_url: ''
     });
+    const [showWelcome, setShowWelcome] = useState(false);
 
     const [passwordData, setPasswordData] = useState({
         password: '',
@@ -33,11 +41,49 @@ export default function AccountPage() {
                 phone: profile.phone || '',
                 address: profile.address || '',
                 company_name: profile.company_name || '',
-                vat_id: profile.vat_id || ''
+                vat_id: profile.vat_id || '',
+                tax_document_url: profile.tax_document_url || ''
             });
+            setShowWelcome(profile.needs_welcome_msg);
             setLoading(false);
+            fetchAccountData();
         }
     }, [profile]);
+
+    const dismissWelcome = async () => {
+        try {
+            await supabase.from('profiles').update({ needs_welcome_msg: false }).eq('id', user.id);
+            setShowWelcome(false);
+        } catch (err) {
+            console.error("Error dismissing welcome:", err);
+        }
+    };
+
+    const fetchAccountData = async () => {
+        if (!user) return;
+        setIsDataLoading(true);
+        try {
+            // Fetch Orders
+            const { data: ordersData } = await supabase
+                .from('orders')
+                .select('*, order_items(*)')
+                .eq('customer_email', user.email)
+                .order('created_at', { ascending: false });
+
+            // Fetch Favorites
+            const { data: favsData } = await supabase
+                .from('user_favorites')
+                .select('*, products(*)')
+                .eq('user_id', user.id);
+
+            if (ordersData) setOrders(ordersData);
+            if (favsData) setFavorites(favsData.map(f => f.products));
+        } catch (err) {
+            console.error("Error fetching account data:", err);
+        } finally {
+            setIsDataLoading(false);
+        }
+    };
 
     const handleUpdateProfile = async (e) => {
         e.preventDefault();
@@ -78,6 +124,21 @@ export default function AccountPage() {
         }
     };
 
+    const handleRemoveFavorite = async (productId) => {
+        try {
+            const { error } = await supabase
+                .from('user_favorites')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('product_id', productId);
+
+            if (error) throw error;
+            setFavorites(favorites.filter(p => p.id !== productId));
+        } catch (err) {
+            alert("Error al quitar favorito");
+        }
+    };
+
     if (loading) return (
         <div className="flex h-[60vh] items-center justify-center">
             <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -86,6 +147,26 @@ export default function AccountPage() {
 
     return (
         <div className="max-w-7xl mx-auto px-6 py-12 font-outfit">
+            {/* Welcome Banner for Migrated Users */}
+            {showWelcome && (
+                <div className="mb-8 p-8 rounded-[2rem] bg-primary/10 border border-primary/20 flex items-center justify-between gap-6 animate-in fade-in slide-in-from-top-4 duration-700">
+                    <div className="flex items-center gap-6">
+                        <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-white shadow-lg">
+                            <Zap className="w-7 h-7" />
+                        </div>
+                        <div>
+                            <p className="text-sm font-black uppercase italic text-brand-carbon tracking-tight">¡Hola {profile.full_name?.split(' ')[0]}! Te echábamos de menos</p>
+                            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mt-1">Hemos migrado tu cuenta y ya la tienes activa, disfruta de nuestra nueva tienda online.</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={dismissWelcome}
+                        className="p-3 hover:bg-white rounded-full transition-all text-gray-400 hover:text-brand-carbon shadow-sm"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+            )}
             {/* Header / Banner */}
             <div className="relative mb-12 rounded-[3rem] overflow-hidden bg-brand-carbon p-10 lg:p-16 text-white shadow-2xl">
                 <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-10">
@@ -134,7 +215,6 @@ export default function AccountPage() {
                         { id: 'favoritos', label: 'Mis Favoritos', icon: Heart },
                         { id: 'pedidos', label: 'Historial de Pedidos', icon: ShoppingBag },
                         { id: 'pagos', label: 'Métodos de Pago', icon: CreditCard },
-                        { id: 'avisos', label: 'Preferencias', icon: Bell },
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -236,6 +316,72 @@ export default function AccountPage() {
                                         </>
                                     )}
 
+                                    {/* Professional Document Upload */}
+                                    {profile?.user_type === 'profesional' && (
+                                        <div className="md:col-span-2 space-y-4 pt-4 border-t border-gray-100">
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <Shield className="w-5 h-5 text-primary" />
+                                                <span className="text-[10px] font-black uppercase tracking-[.3em] text-brand-carbon">Validación Profesional</span>
+                                            </div>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
+                                                Sube tu DNI/CIF o modelo 036 para validar tus ventajas comerciales como cliente profesional.
+                                            </p>
+
+                                            {formData.tax_document_url ? (
+                                                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                                            <CheckSquare className="w-5 h-5" />
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[10px] font-black uppercase text-brand-carbon">Documento Cargado</p>
+                                                            <a
+                                                                href={formData.tax_document_url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="text-[9px] font-bold text-primary uppercase tracking-widest hover:underline"
+                                                            >Ver Documento Actual</a>
+                                                        </div>
+                                                    </div>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, tax_document_url: '' })}
+                                                        className="p-2 hover:bg-white rounded-lg text-gray-400 hover:text-red-500 transition-all"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="relative group">
+                                                    <input
+                                                        type="file"
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                        onChange={async (e) => {
+                                                            const file = e.target.files[0];
+                                                            if (!file) return;
+                                                            try {
+                                                                const { data, error } = await supabase.storage
+                                                                    .from('images')
+                                                                    .upload(`docs/${user.id}/${Date.now()}_${file.name}`, file);
+                                                                if (error) throw error;
+                                                                const { data: { publicUrl } } = supabase.storage
+                                                                    .from('images')
+                                                                    .getPublicUrl(data.path);
+                                                                setFormData({ ...formData, tax_document_url: publicUrl });
+                                                            } catch (err) {
+                                                                alert('Error al subir documento: ' + err.message);
+                                                            }
+                                                        }}
+                                                    />
+                                                    <div className="flex items-center gap-3 p-6 bg-white border-2 border-dashed border-gray-100 rounded-3xl group-hover:border-primary/20 group-hover:bg-primary/5 transition-all text-center justify-center">
+                                                        <Upload className="w-5 h-5 text-gray-300 group-hover:text-primary" />
+                                                        <span className="text-[10px] font-black uppercase italic tracking-tighter text-gray-400 group-hover:text-brand-carbon">Subir DNI / CIF / 036</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <div className="md:col-span-2 pt-6">
                                         <button
                                             type="submit"
@@ -296,14 +442,54 @@ export default function AccountPage() {
                             </div>
                         </div>
                     )}
-
-                    {activeTab !== 'perfil' && (
-                        <div className="bg-gray-50 rounded-[3rem] p-20 flex flex-col items-center justify-center text-center border-2 border-dashed border-gray-200">
-                            <div className="bg-white p-8 rounded-full shadow-luxury mb-8">
-                                <Loader2 className="w-12 h-12 text-gray-300 animate-pulse" />
+                    {activeTab === 'pagos' && (
+                        <div className="space-y-8">
+                            <div className="flex items-center gap-4 mb-2">
+                                <CreditCard className="w-6 h-6 text-emerald-500" />
+                                <h3 className="text-xl font-black text-brand-carbon uppercase italic">Métodos de Pago</h3>
                             </div>
-                            <h3 className="text-2xl font-black text-brand-carbon uppercase italic mb-4">Sección en Construcción</h3>
-                            <p className="text-sm text-gray-400 font-bold uppercase tracking-widest max-w-sm">Estamos preparando el panel de pedidos y favoritos para que sea tan premium como nuestra luz.</p>
+
+                            <div className="bg-white rounded-[3rem] p-10 border border-gray-100 shadow-luxury space-y-8">
+                                <div className="flex items-start gap-6 bg-emerald-50/50 p-8 rounded-3xl border border-emerald-100/50 text-emerald-900">
+                                    <Shield className="w-8 h-8 text-emerald-600 flex-shrink-0" />
+                                    <div>
+                                        <h4 className="text-sm font-black uppercase italic tracking-tight mb-2">Transacciones Blindadas</h4>
+                                        <p className="text-xs font-bold leading-relaxed opacity-70">
+                                            Tus pagos se procesan de forma segura a través de Stripe. No almacenamos los datos completos de tu tarjeta en nuestra base de datos para garantizar el máximo estándar de seguridad (PCI DSS).
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4">
+                                    <div className="p-8 rounded-[2rem] bg-gradient-to-br from-brand-carbon to-slate-800 text-white shadow-2xl relative overflow-hidden group">
+                                        <div className="relative z-10">
+                                            <div className="flex justify-between items-start mb-12">
+                                                <CreditCard className="w-8 h-8 text-primary" />
+                                                <span className="text-[10px] font-black uppercase tracking-[.3em] opacity-40">Stripe Secure</span>
+                                            </div>
+                                            <p className="text-lg font-mono tracking-[.3em] mb-8">•••• •••• •••• 4242</p>
+                                            <div className="flex justify-between items-end">
+                                                <div>
+                                                    <p className="text-[8px] font-black uppercase tracking-widest opacity-40 mb-1">Titular</p>
+                                                    <p className="text-xs font-black uppercase italic">{formData.full_name}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[8px] font-black uppercase tracking-widest opacity-40 mb-1">Expira</p>
+                                                    <p className="text-xs font-black italic">12/28</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16 group-hover:bg-primary/20 transition-all duration-700"></div>
+                                    </div>
+
+                                    <button className="h-full min-h-[200px] border-2 border-dashed border-gray-100 rounded-[2rem] flex flex-col items-center justify-center gap-4 hover:border-primary/40 hover:bg-gray-50/50 transition-all group">
+                                        <div className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-300 group-hover:bg-primary group-hover:text-white transition-all">
+                                            <CreditCard className="w-6 h-6" />
+                                        </div>
+                                        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest group-hover:text-brand-carbon">Gestionar en Stripe</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useCart } from '../../context/CartContext';
 import ImageUpload from '../../components/admin/ImageUpload';
@@ -39,6 +39,11 @@ export default function ProductList() {
     const [isSaving, setIsSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [activeTab, setActiveTab] = useState('general'); // 'general' | 'variants'
+
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pageSize] = useState(50);
+    const [totalCount, setTotalCount] = useState(0);
 
     // Bulk selection state
     const [selectedIds, setSelectedIds] = useState(new Set());
@@ -86,7 +91,7 @@ export default function ProductList() {
 
     useEffect(() => {
         fetchAllData();
-    }, []);
+    }, [page, filterCategory, filterBrand, filterStatus, sortBy]); // Recargar al cambiar página o filtros
 
     async function fetchAllData() {
         try {
@@ -100,17 +105,59 @@ export default function ProductList() {
                 supabase.from('professions').select('id, name').order('name')
             ]);
 
-            let prodRes = await supabase.from('products')
-                .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))')
-                .order('created_at', { ascending: false });
+            let prodQuery = supabase.from('products')
+                .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))', { count: 'exact' });
+
+            // Apply Filters at Server Level
+            if (searchQuery) {
+                prodQuery = prodQuery.ilike('name', `%${searchQuery}%`);
+            }
+            if (filterCategory) {
+                prodQuery = prodQuery.eq('category_id', filterCategory);
+            }
+            if (filterBrand) {
+                prodQuery = prodQuery.eq('brand_id', filterBrand);
+            }
+            if (filterStatus === 'active') {
+                prodQuery = prodQuery.eq('is_active', true);
+            } else if (filterStatus === 'inactive') {
+                prodQuery = prodQuery.eq('is_active', false);
+            } else if (filterStatus === 'low_stock') {
+                prodQuery = prodQuery.lte('stock', 5).gt('stock', 0);
+            } else if (filterStatus === 'no_stock') {
+                prodQuery = prodQuery.eq('stock', 0);
+            } else if (filterStatus === 'on_offer') {
+                prodQuery = prodQuery.gt('discount_price', 0);
+            } else if (filterStatus === 'no_image') {
+                prodQuery = prodQuery.is('image_url', null);
+            }
+
+            // Apply Sorting
+            if (sortBy === 'name_asc') prodQuery = prodQuery.order('name', { ascending: true });
+            else if (sortBy === 'name_desc') prodQuery = prodQuery.order('name', { ascending: false });
+            else if (sortBy === 'price_asc') prodQuery = prodQuery.order('price', { ascending: true });
+            else if (sortBy === 'price_desc') prodQuery = prodQuery.order('price', { ascending: false });
+            else if (sortBy === 'stock_asc') prodQuery = prodQuery.order('stock', { ascending: true });
+            else if (sortBy === 'stock_desc') prodQuery = prodQuery.order('stock', { ascending: false });
+            else prodQuery = prodQuery.order('created_at', { ascending: false });
+
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+
+            let prodRes = await prodQuery
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             // Resilience: If product_badges or badges doesn't exist, retry simple fetch
             if (prodRes.error && (prodRes.error.message.includes('product_badges') || prodRes.error.message.includes('badges'))) {
                 console.warn('Badges tables missing, retrying simple product fetch...');
                 prodRes = await supabase.from('products')
-                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)')
-                    .order('created_at', { ascending: false });
+                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)', { count: 'exact' })
+                    .order('created_at', { ascending: false })
+                    .range(from, to);
             }
+
+            setTotalCount(prodRes.count || 0);
 
             // Fetch badges separately (table may not exist yet)
             let badgesResult = [];
@@ -1153,7 +1200,7 @@ export default function ProductList() {
                                     </th>
                                     <th className="p-4">Producto</th>
                                     <th className="p-4">Categoría / Atributos / Badges</th>
-                                    <th className="p-4">Precio / Stock</th>
+                                    <th className="p-4">Tarifas Estratégicas</th>
                                     <th className="p-4 text-right">Acciones</th>
                                 </tr>
                             </thead>
@@ -1280,18 +1327,34 @@ export default function ProductList() {
                                             </div>
                                         </td>
 
-                                        {/* Precio / Stock */}
-                                        <td className="p-4">
-                                            <div className="font-black text-brand-carbon italic text-sm leading-none">
-                                                {product.discount_price && parseFloat(product.discount_price) > 0
-                                                    ? <><span className="line-through text-gray-300 text-xs">{parseFloat(product.price).toFixed(2)}€</span> <span className="text-red-500">{parseFloat(product.discount_price).toFixed(2)}€</span></>
-                                                    : <>{parseFloat(product.price).toFixed(2)}€</>
-                                                }
+                                        {/* Tarifas Estratégicas */}
+                                        <td className="p-4 min-w-[180px]">
+                                            <div className="flex flex-col gap-1.5">
+                                                {/* PVP Web / Oferta */}
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">🛒 PVP WEB</span>
+                                                    <div className="font-black text-brand-carbon italic text-[11px] leading-none">
+                                                        {product.discount_price && parseFloat(product.discount_price) > 0
+                                                            ? <><span className="line-through text-gray-300 text-[10px] mr-1">{parseFloat(product.price).toFixed(2)}€</span> <span className="text-red-500">{parseFloat(product.discount_price).toFixed(2)}€</span></>
+                                                            : <>{parseFloat(product.price).toFixed(2)}€</>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                {/* Profesional */}
+                                                <div className="flex items-center justify-between gap-4 bg-indigo-50/30 px-2 py-0.5 rounded border border-indigo-100/30">
+                                                    <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-tighter">💼 PRO</span>
+                                                    <span className="font-black text-indigo-600 text-[11px]">{parseFloat(product.professional_price || 0).toFixed(2)}€</span>
+                                                </div>
+                                                {/* Socio/Partner */}
+                                                <div className="flex items-center justify-between gap-4 bg-blue-50/30 px-2 py-0.5 rounded border border-blue-100/30">
+                                                    <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">💎 SOCIO</span>
+                                                    <span className="font-black text-blue-600 text-[11px]">{parseFloat(product.partner_price || 0).toFixed(2)}€</span>
+                                                </div>
                                             </div>
-                                            <div className={`flex items-center gap-1 mt-1 text-[8px] font-black uppercase ${product.stock > 0 ? 'text-emerald-500' : 'text-red-400'
-                                                }`}>
+                                            {/* Stock indicador */}
+                                            <div className={`flex items-center gap-1 mt-2 text-[8px] font-black uppercase ${product.stock > 0 ? 'text-emerald-500' : 'text-red-400'}`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-400'}`}></span>
-                                                {product.stock || 0} uds.
+                                                {product.stock || 0} uds disponibles
                                             </div>
                                         </td>
 
@@ -1319,6 +1382,59 @@ export default function ProductList() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {/* Pagination Controls */}
+                {totalCount > pageSize && (
+                    <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[3rem] border border-gray-100 shadow-luxury animate-in fade-in slide-in-from-bottom-4 duration-700">
+                        <div className="flex items-center gap-4">
+                            <div className="flex -space-x-2">
+                                <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-white flex items-center justify-center text-primary font-black text-xs">
+                                    {Math.ceil(totalCount / pageSize)}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">Arquitectura de Datos</p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">
+                                    Mostrando <span className="text-primary">{products.length}</span> de <span className="text-brand-carbon">{totalCount}</span> activos maestros
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                                disabled={page === 1}
+                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                            >
+                                <ChevronLeft className="w-6 h-6" />
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.min(5, Math.ceil(totalCount / pageSize)))].map((_, i) => {
+                                    const pageNum = i + 1; // Simplificado para las primeras 5 páginas
+                                    return (
+                                        <button
+                                            key={pageNum}
+                                            onClick={() => setPage(pageNum)}
+                                            className={`w-12 h-12 rounded-xl text-[10px] font-black transition-all ${page === pageNum ? 'bg-brand-carbon text-white shadow-lg scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    );
+                                })}
+                                {Math.ceil(totalCount / pageSize) > 5 && <span className="px-2 text-gray-300">...</span>}
+                            </div>
+
+                            <button
+                                onClick={() => setPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
+                                disabled={page >= Math.ceil(totalCount / pageSize)}
+                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                            >
+                                <ChevronRight className="w-6 h-6" />
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>

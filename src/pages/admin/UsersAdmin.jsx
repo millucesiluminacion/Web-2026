@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star } from 'lucide-react';
+import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import Papa from 'papaparse';
 
@@ -24,20 +24,39 @@ export default function UsersAdmin() {
         is_partner: false
     });
 
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pageSize] = useState(50);
+    const [totalCount, setTotalCount] = useState(0);
+
     useEffect(() => {
         fetchUsers();
-    }, []);
+    }, [page, searchQuery, activeTab]); // Recargar al cambiar filtros o página
 
     async function fetchUsers() {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            let query = supabase
                 .from('profiles')
-                .select('*')
-                .order('created_at', { ascending: false });
+                .select('*', { count: 'exact' });
+
+            if (searchQuery) {
+                query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+            }
+            if (activeTab !== 'all') {
+                query = query.eq('user_type', activeTab);
+            }
+
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data, error, count } = await query
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             if (error) throw error;
             setUsers(data || []);
+            setTotalCount(count || 0);
         } catch (error) {
             console.error('Error fetching users:', error.message);
         } finally {
@@ -320,17 +339,7 @@ export default function UsersAdmin() {
         }
     }
 
-    const filteredUsers = users.filter(u => {
-        const matchesSearch =
-            u.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            u.email?.toLowerCase().includes(searchQuery.toLowerCase());
-
-        const matchesTab =
-            activeTab === 'all' ||
-            u.user_type === activeTab;
-
-        return matchesSearch && matchesTab;
-    });
+    const filteredUsers = users; // Ahora filtrado por servidor
 
     const userCounts = {
         all: users.length,
@@ -539,6 +548,59 @@ export default function UsersAdmin() {
                                 )}
                             </tbody>
                         </table>
+                    </div>
+                )}
+
+                {/* Pagination Controls */}
+                {totalCount > pageSize && (
+                    <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[3rem] border border-gray-100 shadow-luxury animate-in fade-in slide-in-from-bottom-4 duration-700 font-outfit">
+                        <div className="flex items-center gap-4">
+                            <div className="flex -space-x-2">
+                                <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-white flex items-center justify-center text-primary font-black text-xs">
+                                    {Math.ceil(totalCount / pageSize)}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">Jerarquía de Boutique</p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">
+                                    Mostrando <span className="text-primary">{users.length}</span> de <span className="text-brand-carbon">{totalCount}</span> administradores
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                                disabled={page === 1}
+                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                            >
+                                <ChevronRight className="w-6 h-6 rotate-180" />
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.min(5, Math.ceil(totalCount / pageSize)))].map((_, i) => {
+                                    const pageNum = i + 1;
+                                    return (
+                                        <button
+                                            key={pageNum}
+                                            onClick={() => setPage(pageNum)}
+                                            className={`w-12 h-12 rounded-xl text-[10px] font-black transition-all ${page === pageNum ? 'bg-brand-carbon text-white shadow-lg scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    );
+                                })}
+                                {Math.ceil(totalCount / pageSize) > 5 && <span className="px-2 text-gray-300">...</span>}
+                            </div>
+
+                            <button
+                                onClick={() => setPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
+                                disabled={page >= Math.ceil(totalCount / pageSize)}
+                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                            >
+                                <ChevronRight className="w-6 h-6" />
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>

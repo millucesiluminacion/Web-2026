@@ -21,7 +21,8 @@ BEGIN
         discount_percent, 
         is_partner,
         phone,
-        address
+        address,
+        needs_welcome_msg -- Marcamos si viene del CRM
     )
     VALUES (
         new.id, 
@@ -34,7 +35,8 @@ BEGIN
         COALESCE(crm_record.discount_percent, 0),
         COALESCE(crm_record.is_partner, false),
         crm_record.phone,
-        crm_record.address
+        crm_record.address,
+        (crm_record.id IS NOT NULL) -- Si existía en CRM, necesita bienvenida
     );
 
     RETURN new;

@@ -14,10 +14,43 @@ export default function RegisterPage({ isPro = false }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
+    const translateError = (message) => {
+        const msg = message.toLowerCase();
+        if (msg.includes('user already registered') || msg.includes('email already in use')) {
+            return 'Este correo electrónico ya tiene una cuenta activa. Prueba a iniciar sesión.';
+        }
+        if (msg.includes('rate limit exceeded')) {
+            return 'Has intentado registrarte demasiadas veces seguidas. Por seguridad, espera unos minutos e inténtalo de nuevo.';
+        }
+        if (msg.includes('password should be at least 6 characters')) {
+            return 'La contraseña es demasiado corta. Debe tener al menos 6 caracteres.';
+        }
+        if (msg.includes('signup is disabled')) {
+            return 'El registro público está temporalmente desactivado. Contacta con soporte.';
+        }
+        if (msg.includes('invalid email')) {
+            return 'El correo electrónico no parece válido. Revisa que no falte el @ o el dominio.';
+        }
+        return 'Hubo un problema al crear tu cuenta: ' + message;
+    };
+
     const handleRegister = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
+
+        // Validaciones locales previas
+        if (password.length < 6) {
+            setError('La contraseña debe tener al menos 6 caracteres por seguridad.');
+            setLoading(false);
+            return;
+        }
+
+        if (userType === 'profesional' && (!companyName || !vatId)) {
+            setError('Para cuentas profesionales, el nombre de empresa y el CIF/NIF son obligatorios.');
+            setLoading(false);
+            return;
+        }
 
         try {
             const { error: signUpError } = await supabase.auth.signUp({
@@ -29,35 +62,35 @@ export default function RegisterPage({ isPro = false }) {
                         user_type: userType,
                         company_name: userType === 'profesional' ? companyName : null,
                         vat_id: userType === 'profesional' ? vatId : null,
-                        role: 'editor' // Registros públicos por defecto son editores LIMITADOS hasta que se verifiquen
+                        role: 'customer'
                     }
                 }
             });
 
             if (signUpError) throw signUpError;
 
-            // Trigger Welcome Email
+            // Trigger Welcome Email logic via System Key
             try {
                 await fetch('/api/send-email', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY
+                    },
                     body: JSON.stringify({
                         to: email,
                         templateKey: 'welcome',
-                        variables: {
-                            name: fullName,
-                            site_name: 'Mil Luces Boutique'
-                        }
+                        variables: { name: fullName, site_name: 'Mil Luces Boutique' }
                     })
                 });
             } catch (emailErr) {
                 console.error('Error triggering welcome email:', emailErr);
             }
 
-            alert('Registro exitoso. Revisa tu email para confirmar o inicia sesión si ya está activa.');
+            alert('¡Bienvenido! Registro completado. Revisa tu email para confirmar tu cuenta.');
             navigate('/login');
         } catch (err) {
-            setError(err.message);
+            setError(translateError(err.message));
         } finally {
             setLoading(false);
         }

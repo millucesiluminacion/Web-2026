@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, Download, Printer, Filter, MoreVertical, Trash } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function OrdersList() {
@@ -14,6 +14,11 @@ export default function OrdersList() {
     const [adminNotes, setAdminNotes] = useState('');
     const [orderItems, setOrderItems] = useState([]);
     const [fetchingItems, setFetchingItems] = useState(false);
+
+    // Pagination state
+    const [page, setPage] = useState(1);
+    const [pageSize] = useState(50);
+    const [totalCount, setTotalCount] = useState(0);
     const [stats, setStats] = useState({
         days7: { total: 0, count: 0 },
         days30: { total: 0, count: 0 },
@@ -35,18 +40,41 @@ export default function OrdersList() {
 
     useEffect(() => {
         fetchOrders();
-    }, []);
+    }, [page, statusFilter, dateFilter, searchQuery]); // Recargar al cambiar página o filtros
 
     async function fetchOrders() {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            let query = supabase
                 .from('orders')
-                .select('*')
-                .order('created_at', { ascending: false });
+                .select('*', { count: 'exact' });
+
+            // Apply Server-side Filters
+            if (searchQuery) {
+                query = query.or(`id.ilike.%${searchQuery}%,customer_email.ilike.%${searchQuery}%,customer_name.ilike.%${searchQuery}%`);
+            }
+            if (statusFilter !== 'ALL') {
+                query = query.eq('status', statusFilter);
+            }
+            if (dateFilter !== 'ALL') {
+                const now = new Date();
+                let cutoff;
+                if (dateFilter === 'TODAY') cutoff = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+                if (dateFilter === 'WEEK') cutoff = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000)).toISOString();
+                if (dateFilter === 'MONTH') cutoff = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+                if (cutoff) query = query.gte('created_at', cutoff);
+            }
+
+            const from = (page - 1) * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data, error, count } = await query
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             if (error) throw error;
             setOrders(data || []);
+            setTotalCount(count || 0);
             calculateStats(data || []);
         } catch (error) {
             console.error('Error fetching orders:', error.message);
@@ -381,25 +409,7 @@ export default function OrdersList() {
         }
     };
 
-    const filteredOrders = orders.filter(o => {
-        const matchesSearch = o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            o.customer_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase());
-
-        const matchesStatus = statusFilter === 'ALL' || o.status === statusFilter;
-
-        let matchesDate = true;
-        if (dateFilter !== 'ALL') {
-            const date = new Date(o.created_at);
-            const now = new Date();
-            const daysDiff = (now - date) / (1000 * 60 * 60 * 24);
-            if (dateFilter === 'TODAY' && daysDiff > 1) matchesDate = false;
-            if (dateFilter === 'WEEK' && daysDiff > 7) matchesDate = false;
-            if (dateFilter === 'MONTH' && daysDiff > 30) matchesDate = false;
-        }
-
-        return matchesSearch && matchesStatus && matchesDate;
-    });
+    const filteredOrders = orders; // Ahora el filtrado es servidor, así que usamos el estado directo
 
     return (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -653,6 +663,59 @@ export default function OrdersList() {
                             )}
                         </tbody>
                     </table>
+                )}
+
+                {/* Pagination Controls */}
+                {totalCount > pageSize && (
+                    <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[3rem] border border-gray-100 shadow-luxury animate-in fade-in slide-in-from-bottom-4 duration-700 font-outfit">
+                        <div className="flex items-center gap-4">
+                            <div className="flex -space-x-2">
+                                <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-white flex items-center justify-center text-primary font-black text-xs">
+                                    {Math.ceil(totalCount / pageSize)}
+                                </div>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">Flujo de Caja</p>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">
+                                    Mostrando <span className="text-primary">{orders.length}</span> de <span className="text-brand-carbon">{totalCount}</span> transacciones
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                                disabled={page === 1}
+                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                            >
+                                <ChevronRight className="w-6 h-6 rotate-180" />
+                            </button>
+
+                            <div className="flex items-center gap-1">
+                                {[...Array(Math.min(5, Math.ceil(totalCount / pageSize)))].map((_, i) => {
+                                    const pageNum = i + 1;
+                                    return (
+                                        <button
+                                            key={pageNum}
+                                            onClick={() => setPage(pageNum)}
+                                            className={`w-12 h-12 rounded-xl text-[10px] font-black transition-all ${page === pageNum ? 'bg-brand-carbon text-white shadow-lg scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                        >
+                                            {pageNum}
+                                        </button>
+                                    );
+                                })}
+                                {Math.ceil(totalCount / pageSize) > 5 && <span className="px-2 text-gray-300">...</span>}
+                            </div>
+
+                            <button
+                                onClick={() => setPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
+                                disabled={page >= Math.ceil(totalCount / pageSize)}
+                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                            >
+                                <ChevronRight className="w-6 h-6" />
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
 

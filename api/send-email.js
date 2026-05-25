@@ -8,105 +8,135 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    if (req.method === 'OPTIONS') return res.status(200).end();
-    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+    console.log('[send-email] Request received:', req.method);
 
-    // 1. Check environment variables
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_KEY;
-
-    if (!supabaseUrl || !supabaseServiceKey) {
-        return res.status(500).json({ error: 'Faltan variables de entorno (Supabase Service Role) en el servidor.' });
-    }
-
-    // 2. Validate admin session
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) return res.status(401).json({ error: 'No authorization header' });
-    const token = authHeader.replace('Bearer ', '');
-
-    const supabase = createClient(supabaseUrl, supabaseUrl.includes('placeholder') ? 'placeholder' : process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY);
+    // Configurar cabeceras de seguridad y CORS básicas
+    res.setHeader('Content-Type', 'application/json');
 
     try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser(token);
-        if (userError || !user) throw new Error('Sesión inválida.');
+        if (req.method === 'OPTIONS') return res.status(200).end();
+        if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-        const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-        if (profile?.role !== 'admin') throw new Error('Permisos insuficientes.');
+        // 1. Check environment variables
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_KEY;
 
-        // 3. Fetch SMTP config using SERVICE ROLE (privileged)
+        console.log('[send-email] DB URL present:', !!supabaseUrl);
+        console.log('[send-email] Service Key present:', !!supabaseServiceKey);
+
+        if (!supabaseUrl || !supabaseServiceKey) {
+            console.error('[send-email] CRITICAL: Missing Env Vars');
+            return res.status(500).json({
+                error: 'Faltan variables de entorno en el servidor.',
+                diagnostics: { url: !!supabaseUrl, key: !!supabaseServiceKey }
+            });
+        }
+
+        // 2. Validate session OR System Key
+        const authHeader = req.headers['authorization'];
+        const systemKey = req.headers['x-api-key'];
+        const expectedSystemKey = process.env.EMAIL_SYSTEM_KEY || process.env.VITE_EMAIL_SYSTEM_KEY;
+        let isAuthorized = false;
+
+        console.log('[send-email] Auth Header present:', !!authHeader);
+        console.log('[send-email] System Key present:', !!systemKey);
+
+        if (systemKey && expectedSystemKey && systemKey === expectedSystemKey) {
+            console.log('[send-email] Authorized via System Key');
+            isAuthorized = true;
+        }
+
+        if (!isAuthorized && authHeader) {
+            const supabase = createClient(supabaseUrl, process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY);
+            const token = authHeader.replace('Bearer ', '');
+            try {
+                const { data: { user }, error: userError } = await supabase.auth.getUser(token);
+                if (!userError && user) {
+                    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+                    if (profile?.role === 'admin') {
+                        console.log('[send-email] Authorized via Admin Session');
+                        isAuthorized = true;
+                    }
+                }
+            } catch (e) {
+                console.error('[send-email] Auth logic crash:', e.message);
+            }
+        }
+
+        if (!isAuthorized) {
+            console.warn('[send-email] Unauthorized access attempt');
+            return res.status(401).json({ error: 'No autorizado. Se requiere sesión de administrador o clave de sistema.' });
+        }
+
+        // 3. Fetch SMTP config
+        console.log('[send-email] Fetching SMTP config from DB...');
         const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+        // Verificamos si la tabla existe intentando una consulta simple
         const { data: setting, error: settingsError } = await supabaseAdmin
             .from('app_settings')
             .select('value')
             .eq('key', 'smtp_config')
-            .single();
+            .maybeSingle();
 
-        if (settingsError || !setting) {
-            console.error('[send-email] SMTP settings not found in DB:', settingsError);
-            return res.status(404).json({
-                error: 'Configuración SMTP no encontrada.',
-                details: settingsError?.message || 'Asegúrate de haber guardado los ajustes de correo primero.'
-            });
+        if (settingsError) {
+            console.error('[send-email] DB Error fetching settings:', settingsError);
+            return res.status(500).json({ error: 'Error al consultar la base de datos.', details: settingsError.message });
+        }
+
+        if (!setting) {
+            console.warn('[send-email] SMTP settings not found in app_settings table');
+            return res.status(404).json({ error: 'Configuración SMTP no encontrada en la base de datos.' });
         }
 
         const smtp = setting.value;
         const { to, subject, html, text } = req.body;
 
         if (!to || !subject || !html) {
-            return res.status(400).json({ error: 'Faltan campos obligatorios (to, subject, html).' });
+            return res.status(400).json({ error: 'Faltan campos (to, subject, html).' });
         }
 
-        console.log(`[send-email] Attempting to send to ${to} via ${smtp.host}:${smtp.port}`);
+        // 4. Nodemailer
+        console.log(`[send-email] Preparing transporter for ${smtp.host} on port ${smtp.port}`);
 
-        // 4. Send Email via Nodemailer
+        const isSecure = smtp.port === '465' || smtp.secure === true;
+
         const transporter = nodemailer.createTransport({
             host: smtp.host,
             port: parseInt(smtp.port),
-            secure: smtp.port === '465' || smtp.secure === true,
-            auth: {
-                user: smtp.user,
-                pass: smtp.pass
-            },
-            connectionTimeout: 10000,
-            greetingTimeout: 10000,
-            socketTimeout: 10000,
+            secure: isSecure, // true para 465, false para otros (STARTTLS)
+            auth: { user: smtp.user, pass: smtp.pass },
+            connectionTimeout: 15000, // Aumentamos timeout
             tls: {
-                rejectUnauthorized: true
+                // Evita el error 'wrong version number' en muchos servidores mal configurados
+                rejectUnauthorized: false,
+                minVersion: 'TLSv1.2'
             }
         });
 
-        // 5. Verify transporter before sending
-        try {
-            await transporter.verify();
-            console.log('[send-email] SMTP Connection Verified');
-        } catch (verifyError) {
-            console.error('[send-email] SMTP Verification Failed:', verifyError);
-            return res.status(500).json({
-                error: 'Error de conexión con el servidor de correo.',
-                code: verifyError.code,
-                command: verifyError.command,
-                details: verifyError.message
-            });
-        }
+        console.log('[send-email] Verifying SMTP connection...');
+        await transporter.verify();
 
         const mailOptions = {
             from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || smtp.user}>`,
             to,
             subject,
             html,
-            text: text || 'Este correo requiere visualización HTML.'
+            text: text || 'HTML required'
         };
 
+        console.log('[send-email] Sending mail...');
         const info = await transporter.sendMail(mailOptions);
         console.log('[send-email] Success:', info.messageId);
 
         return res.status(200).json({ success: true, messageId: info.messageId });
 
     } catch (err) {
-        console.error('[send-email] General Error:', err);
+        console.error('[send-email] FATAL CATCH:', err.message);
         return res.status(500).json({
-            error: 'Error interno del servidor al procesar el envío.',
-            details: err.message
+            error: 'Error catastrófico en el servidor de email.',
+            details: err.message,
+            stack: err.stack?.split('\n')[0] // Solo la primera línea por seguridad
         });
     }
 }
