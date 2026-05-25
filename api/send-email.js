@@ -97,20 +97,24 @@ export default async function handler(req, res) {
         }
 
         // 4. Nodemailer
-        console.log(`[send-email] Preparing transporter for ${smtp.host} on port ${smtp.port}`);
+        // 4. Nodemailer
+        const port = parseInt(smtp.port);
+        console.log(`[send-email] Preparing transporter for ${smtp.host} on port ${port}`);
 
-        const isSecure = smtp.port === '465' || smtp.secure === true;
+        // Auto-corrección de protocolos comunes para evitar 'wrong version number'
+        let isSecure = smtp.secure === true;
+        if (port === 465) isSecure = true;   // 465 SIEMPRE es seguro (SSL directo)
+        if (port === 587 || port === 25 || port === 2525) isSecure = false; // Estos puertos SIEMPRE empiezan en texto plano (STARTTLS)
 
         const transporter = nodemailer.createTransport({
             host: smtp.host,
-            port: parseInt(smtp.port),
-            secure: isSecure, // true para 465, false para otros (STARTTLS)
+            port: port,
+            secure: isSecure,
             auth: { user: smtp.user, pass: smtp.pass },
-            connectionTimeout: 15000, // Aumentamos timeout
+            connectionTimeout: 15000,
             tls: {
-                // Evita el error 'wrong version number' en muchos servidores mal configurados
                 rejectUnauthorized: false,
-                minVersion: 'TLSv1.2'
+                ciphers: 'SSLv3' // Algunos servidores antiguos o mal configurados lo necesitan
             }
         });
 
