@@ -5,11 +5,14 @@ import {
     Truck, FileText, Settings, Sliders
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 export default function AccountSettings() {
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('perfil'); // 'perfil', 'smtp', 'marca', 'envios', 'emails', 'estado'
+    const [selectedTemplate, setSelectedTemplate] = useState('master_layout');
     const [healthData, setHealthData] = useState(null);
     const [isHealthLoading, setIsHealthLoading] = useState(false);
 
@@ -149,7 +152,23 @@ export default function AccountSettings() {
                 if (shipping) setShippingConfig(shipping.value);
 
                 const emails = settings.find(s => s.key === 'email_templates');
-                if (emails) setEmailTemplates(emails.value);
+                if (emails) {
+                    const loadedTemplates = emails.value || {};
+                    // Inyectar nuevas plantillas estructurales si no existen (retrocompatibilidad)
+                    if (!loadedTemplates.master_layout) {
+                        loadedTemplates.master_layout = {
+                            subject: 'N/A (Esqueleto HTML de todos los correos)',
+                            body: '<div style="background-color: #f9f9f9; padding: 40px; font-family: sans-serif;">\n  <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">\n    <div style="padding: 30px; text-align: center; border-bottom: 1px solid #f0f0f0;">\n      <h1 style="color: #111827; margin: 0; font-size: 24px; font-weight: 900; font-style: italic; text-transform: uppercase;">{site_name}</h1>\n    </div>\n    <div style="padding: 40px; color: #374151; font-size: 15px; line-height: 1.6;">\n      {body}\n    </div>\n    <div style="background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb;">\n      <p style="margin:0;">Este es un mensaje automático de {site_name}.</p>\n    </div>\n  </div>\n</div>'
+                        };
+                    }
+                    if (!loadedTemplates.password_reset) {
+                        loadedTemplates.password_reset = {
+                            subject: 'Restablecer contraseña - {site_name}',
+                            body: 'Hola {name},\n\nHemos recibido una solicitud para restablecer la contraseña de tu cuenta.\n\nPara crear una nueva contraseña, haz clic en el siguiente enlace de forma segura:\n\n<a href="{reset_url}" style="display:inline-block; padding: 12px 24px; background-color: #111827; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top:20px; margin-bottom:20px;">Restablecer mi Contraseña</a>\n\nSi no has solicitado este cambio, por favor ignora este correo.'
+                        };
+                    }
+                    setEmailTemplates(loadedTemplates);
+                }
             }
         } catch (err) {
             console.error("Error fetching settings:", err);
@@ -619,57 +638,166 @@ export default function AccountSettings() {
                     )}
 
                     {/* TAB: EMAILS */}
-                    {activeTab === 'emails' && (
-                        <div className="bg-white rounded-[2.5rem] shadow-luxury border border-gray-100 p-10 animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-8">
-                            <div className="flex items-center gap-4 mb-2">
-                                <Mail className="w-6 h-6 text-primary" />
-                                <h3 className="text-xl font-black text-brand-carbon uppercase italic">Plantillas de Notificación</h3>
-                            </div>
+                    {activeTab === 'emails' && (() => {
+                        const templateLabels = {
+                            master_layout: 'Layout Maestro (Diseño Global)',
+                            welcome: '🎉 Registro de Usuario',
+                            order_confirmation: '📦 Nuevo Pedido Recibido',
+                            order_status_update: '🔄 Cambio de Estado',
+                            password_reset: '🔐 Recuperar Contraseña'
+                        };
+                        const mockData = {
+                            name: 'Juan Pérez',
+                            order_id: '#100042',
+                            status: 'Enviado con Correos Express (Tracking: ES8291)',
+                            site_name: branding?.site_name || 'Mil Luces',
+                            reset_url: 'https://millucesiluminacion.com/reset'
+                        };
 
-                            <div className="space-y-8">
-                                {Object.entries(emailTemplates).map(([key, template]) => (
-                                    <div key={key} className="p-8 bg-gray-50/50 rounded-3xl border border-gray-100 hover:border-primary/20 transition-all group">
-                                        <div className="flex items-center justify-between mb-6">
-                                            <h4 className="text-[10px] font-black uppercase tracking-widest text-brand-carbon">
-                                                {key === 'welcome' ? '🎉 Registro de Usuario' :
-                                                    key === 'order_confirmation' ? '📦 Nuevo Pedido Recibido' :
-                                                        '🔄 Cambio de Estado de Pedido'}
-                                            </h4>
-                                            <div className="px-3 py-1 bg-white rounded-lg border border-gray-100 text-[8px] font-black uppercase text-gray-400 group-hover:text-primary transition-colors">Editable</div>
-                                        </div>
+                        const getPreviewHtml = () => {
+                            if (!emailTemplates[selectedTemplate]) return '';
+                            try {
+                                let rawBody = emailTemplates[selectedTemplate].body;
+                                Object.keys(mockData).forEach(key => {
+                                    rawBody = rawBody.replace(new RegExp(`\\{${key}\\}`, 'g'), mockData[key]);
+                                });
 
-                                        <div className="space-y-4">
-                                            <div className="space-y-2">
-                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Asunto del Email</label>
-                                                <input
-                                                    type="text"
-                                                    value={template.subject}
-                                                    onChange={e => setEmailTemplates({
-                                                        ...emailTemplates,
-                                                        [key]: { ...template, subject: e.target.value }
-                                                    })}
-                                                    className="w-full bg-white border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary/10 transition-all"
-                                                />
+                                let htmlContent = '';
+                                if (selectedTemplate === 'master_layout') {
+                                    htmlContent = rawBody;
+                                } else {
+                                    const master = emailTemplates['master_layout']?.body || '{body}';
+                                    let wrapped = master.replace('{body}', marked.parse(rawBody));
+                                    Object.keys(mockData).forEach(key => {
+                                        wrapped = wrapped.replace(new RegExp(`\\{${key}\\}`, 'g'), mockData[key]);
+                                    });
+                                    htmlContent = wrapped;
+                                }
+                                return DOMPurify.sanitize(htmlContent);
+                            } catch (e) { return 'Error en el renderizado'; }
+                        };
+
+                        return (
+                            <div className="bg-white rounded-[2.5rem] shadow-luxury border border-gray-100 p-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <div className="flex items-center gap-4 mb-8">
+                                    <Mail className="w-6 h-6 text-primary" />
+                                    <div>
+                                        <h3 className="text-xl font-black text-brand-carbon uppercase italic">Gestor Avanzado de Plantillas</h3>
+                                        <p className="text-[10px] uppercase font-bold text-gray-400 mt-1 tracking-widest">Edición con vista previa en tiempo real</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-4 mb-8 overflow-x-auto pb-4 scrollbar-hide">
+                                    {Object.keys(templateLabels).map(key => (
+                                        <button
+                                            key={key}
+                                            onClick={() => setSelectedTemplate(key)}
+                                            className={`px-6 py-3 rounded-2xl whitespace-nowrap font-black uppercase text-[10px] tracking-widest transition-all border ${selectedTemplate === key
+                                                ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20'
+                                                : 'bg-gray-50 border-gray-100 text-gray-500 hover:bg-gray-100'
+                                                }`}
+                                        >
+                                            {templateLabels[key]}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                    {/* Editor */}
+                                    <div className="space-y-6">
+                                        <div className="p-6 bg-gray-50/50 rounded-3xl border border-gray-100 h-full flex flex-col">
+                                            <div className="space-y-4 mb-6">
+                                                <div>
+                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-2 block">Asunto del Email</label>
+                                                    <input
+                                                        type="text"
+                                                        value={emailTemplates[selectedTemplate]?.subject || ''}
+                                                        disabled={selectedTemplate === 'master_layout'}
+                                                        onChange={e => setEmailTemplates({
+                                                            ...emailTemplates,
+                                                            [selectedTemplate]: { ...emailTemplates[selectedTemplate], subject: e.target.value }
+                                                        })}
+                                                        className="w-full bg-white border border-gray-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50"
+                                                    />
+                                                </div>
+                                                <div className="flex-1 flex flex-col">
+                                                    <div className="flex justify-between items-end mb-2">
+                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Cuerpo (HTML / Markdown)</label>
+                                                        <span className="text-[8px] text-primary/70 font-bold uppercase py-1 px-2 bg-primary/5 rounded-lg">Auto-guardado</span>
+                                                    </div>
+                                                    <textarea
+                                                        value={emailTemplates[selectedTemplate]?.body || ''}
+                                                        onChange={e => setEmailTemplates({
+                                                            ...emailTemplates,
+                                                            [selectedTemplate]: { ...emailTemplates[selectedTemplate], body: e.target.value }
+                                                        })}
+                                                        className="w-full flex-1 min-h-[300px] bg-white border border-gray-100 rounded-2xl p-4 text-xs font-mono focus:ring-2 focus:ring-primary/10 transition-all resize-none text-gray-700"
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className="space-y-2">
-                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Cuerpo del Mensaje (Markdown/HTML)</label>
-                                                <textarea
-                                                    value={template.body}
-                                                    onChange={e => setEmailTemplates({
-                                                        ...emailTemplates,
-                                                        [key]: { ...template, body: e.target.value }
-                                                    })}
-                                                    rows={4}
-                                                    className="w-full bg-white border border-gray-100 rounded-2xl px-4 py-3 text-xs font-medium focus:ring-2 focus:ring-primary/10 transition-all resize-none"
-                                                />
-                                                <p className="text-[8px] text-gray-400 font-bold uppercase tracking-tight">Variables disponibles: &#123;name&#125;, &#123;order_id&#125;, &#123;status&#125;, &#123;site_name&#125;</p>
+
+                                            <div className="mt-auto pt-6 border-t border-gray-100">
+                                                <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight mb-4">
+                                                    Variables soportadas:
+                                                    <span className="text-primary ml-1">&#123;name&#125;, &#123;site_name&#125;</span>
+                                                    {selectedTemplate.includes('order') && <span className="text-primary ml-1">, &#123;order_id&#125;, &#123;status&#125;</span>}
+                                                    {selectedTemplate === 'password_reset' && <span className="text-primary ml-1">, &#123;reset_url&#125;</span>}
+                                                    {selectedTemplate === 'master_layout' && <span className="font-black text-brand-carbon ml-1">¡IMPRESCINDIBLE INCLUIR &#123;body&#125;!</span>}
+                                                </p>
+
+                                                <button
+                                                    disabled={isTesting}
+                                                    onClick={async () => {
+                                                        const toEmail = testEmail || profile.email || branding.contact_email;
+                                                        if (!toEmail) return alert("Hacen falta datos: Ve a 'Correo SMTP' y pon un email de prueba.");
+                                                        const subjectText = emailTemplates[selectedTemplate]?.subject || 'Prueba de Plantilla';
+                                                        try {
+                                                            const { data: { session } } = await supabase.auth.getSession();
+                                                            const response = await fetch('/api/send-email', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session?.access_token}` },
+                                                                body: JSON.stringify({
+                                                                    to: toEmail,
+                                                                    subject: `[TEST] ${subjectText}`,
+                                                                    html: getPreviewHtml(),
+                                                                    text: 'Visualiza este correo en un cliente HTML.'
+                                                                })
+                                                            });
+                                                            if (response.ok) alert(`✅ Prueba enviada exitosamente a ${toEmail}. Revisa tu bandeja.`);
+                                                            else alert('❌ Error al enviar la prueba.');
+                                                        } catch (e) {
+                                                            alert('❌ Error de conexión.');
+                                                        }
+                                                    }}
+                                                    className="w-full bg-brand-carbon text-white py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-primary transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                >
+                                                    <Send className="w-4 h-4" /> Enviar Prueba Individual
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
-                                ))}
+
+                                    {/* Vista Previa */}
+                                    <div className="h-[600px] bg-gray-100 rounded-3xl border border-gray-200 overflow-hidden flex flex-col relative shadow-inner">
+                                        <div className="bg-gray-200 px-4 py-2 flex items-center gap-2 border-b border-gray-300">
+                                            <div className="flex gap-1.5">
+                                                <div className="w-3 h-3 rounded-full bg-red-400"></div>
+                                                <div className="w-3 h-3 rounded-full bg-amber-400"></div>
+                                                <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                                            </div>
+                                            <span className="text-[10px] font-black uppercase text-gray-500 tracking-widest mx-auto pr-8">
+                                                {selectedTemplate === 'master_layout' ? 'Vista: Plantilla Base' : `Asunto: ${emailTemplates[selectedTemplate]?.subject || 'Sin Asunto'}`}
+                                            </span>
+                                        </div>
+                                        <div
+                                            className="flex-1 overflow-y-auto bg-gray-100 p-4"
+                                            dangerouslySetInnerHTML={{ __html: getPreviewHtml() }}
+                                        />
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        )
+                    })()}
 
                     {/* TAB: ESTADO DEL SISTEMA (HEALTH CHECK) */}
                     {activeTab === 'estado' && (

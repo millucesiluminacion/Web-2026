@@ -90,11 +90,84 @@ export default async function handler(req, res) {
         }
 
         const smtp = setting.value;
-        const { to, subject, html, text } = req.body;
+        const { to, subject, html, text, templateKey, variables } = req.body;
 
-        if (!to || !subject || !html) {
-            return res.status(400).json({ error: 'Faltan campos (to, subject, html).' });
+        if (!to) {
+            return res.status(400).json({ error: 'Falta campo destino (to).' });
         }
+
+        let finalSubject = subject;
+        let finalHtml = html;
+        let finalText = text || 'Este correo requiere un cliente HTML.';
+
+        // Interceptor de Plantillas Avanzadas
+        if (templateKey) {
+            console.log(`[send-email] Autogenerando correo con templateKey: ${templateKey}`);
+            const { data: emailSettings } = await supabaseAdmin
+                .from('app_settings')
+                .select('value')
+                .eq('key', 'email_templates')
+                .maybeSingle();
+
+            if (emailSettings && emailSettings.value) {
+                const templates = emailSettings.value;
+                const template = templates[templateKey];
+
+                if (template) {
+                    finalSubject = template.subject || '';
+                    let rawBody = template.body || '';
+
+                    // Construimos siempre variables. Por defecto metemos site_name de branding
+                    let injectionVars = { ...variables };
+                    try {
+                        if (!injectionVars.site_name) {
+                            const { data: brandSetting } = await supabaseAdmin.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
+                            if (brandSetting) injectionVars.site_name = brandSetting.value.site_name || 'Nuestra Tienda';
+                        }
+                    } catch (e) { }
+
+                    // Inyectar en subject y body
+                    Object.keys(injectionVars).forEach(key => {
+                        const val = injectionVars[key] || '';
+                        finalSubject = finalSubject.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+                        rawBody = rawBody.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+                    });
+
+                    // Renderizar Markdown
+                    let bodyHtml = rawBody;
+                    try {
+                        const { marked } = await import('marked');
+                        bodyHtml = marked.parse(rawBody);
+                    } catch (e) {
+                        console.warn('[send-email] Error compilando markdown:', e);
+                    }
+
+                    // Envolver en master_layout (Layout Maestro)
+                    if (templates['master_layout'] && templates['master_layout'].body) {
+                        let master = templates['master_layout'].body;
+                        Object.keys(injectionVars).forEach(key => {
+                            master = master.replace(new RegExp(`\\{${key}\\}`, 'g'), injectionVars[key] || '');
+                        });
+                        finalHtml = master.replace('{body}', bodyHtml);
+                    } else {
+                        finalHtml = bodyHtml;
+                    }
+                    finalText = rawBody.replace(/<[^>]*>?/gm, ''); // Fallback text básico
+                } else {
+                    console.warn(`[send-email] La plantilla ${templateKey} no existe en DB.`);
+                }
+            }
+        }
+
+        // Validación final
+        if (!finalSubject || !finalHtml) {
+            return res.status(400).json({ error: 'Falta subject o html, y no se pudo resolver la plantilla.' });
+        }
+
+        // Mapeo original para el resto del código
+        const subjectToSend = finalSubject;
+        const htmlToSend = finalHtml;
+        const textToSend = finalText;
 
         // 4. Determinar Proveedor (SMTP vs Resend)
         let infoMessageId = null;
@@ -112,9 +185,9 @@ export default async function handler(req, res) {
             const { data: resendData, error: resendError } = await resendClient.emails.send({
                 from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || 'onboarding@resend.dev'}>`,
                 to: [to],
-                subject: subject,
-                html: html,
-                text: text || 'Este correo requiere HTML.'
+                subject: finalSubject,
+                html: finalHtml,
+                text: finalText
             });
 
             if (resendError) {
@@ -145,10 +218,10 @@ export default async function handler(req, res) {
 
             const mailOptions = {
                 from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || smtp.user}>`,
-                to,
-                subject,
-                html,
-                text: text || 'HTML required'
+                to: to,
+                subject: finalSubject,
+                html: finalHtml,
+                text: finalText
             };
 
             const info = await transporter.sendMail(mailOptions);
