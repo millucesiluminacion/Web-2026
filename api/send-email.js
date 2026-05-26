@@ -96,44 +96,67 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Faltan campos (to, subject, html).' });
         }
 
-        // 4. Nodemailer
-        // 4. Nodemailer
-        const port = parseInt(smtp.port);
-        console.log(`[send-email] Preparing transporter for ${smtp.host} on port ${port}`);
+        // 4. Determinar Proveedor (SMTP vs Resend)
+        let infoMessageId = null;
 
-        // Auto-corrección de protocolos comunes para evitar 'wrong version number'
-        let isSecure = smtp.secure === true;
-        if (port === 465) isSecure = true;   // 465 SIEMPRE es seguro (SSL directo)
-        if (port === 587 || port === 25 || port === 2525) isSecure = false; // Estos puertos SIEMPRE empiezan en texto plano (STARTTLS)
+        const isResend = smtp.host?.includes('resend') || smtp.user === 'resend' || smtp.provider === 'resend';
 
-        const transporter = nodemailer.createTransport({
-            host: smtp.host,
-            port: port,
-            secure: isSecure,
-            auth: { user: smtp.user, pass: smtp.pass },
-            connectionTimeout: 15000,
-            tls: {
-                rejectUnauthorized: false,
-                ciphers: 'SSLv3' // Algunos servidores antiguos o mal configurados lo necesitan
+        if (isResend) {
+            console.log('[send-email] Using RESEND API natively');
+            // Importación dinámica para asegurar que exista
+            const { Resend } = await import('resend');
+
+            // La contraseña en Resend actúa como la API Key en este contexto
+            const resendClient = new Resend(smtp.pass || process.env.VITE_EMAIL_SYSTEM_KEY);
+
+            const { data: resendData, error: resendError } = await resendClient.emails.send({
+                from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || 'onboarding@resend.dev'}>`,
+                to: [to],
+                subject: subject,
+                html: html,
+                text: text || 'Este correo requiere HTML.'
+            });
+
+            if (resendError) {
+                console.error('[send-email] Resend API Error:', resendError);
+                return res.status(500).json({ error: 'Error en la API de Resend', details: resendError.message });
             }
-        });
+            infoMessageId = resendData.id;
+            console.log('[send-email] Resend Success:', infoMessageId);
 
-        console.log('[send-email] Verifying SMTP connection...');
-        await transporter.verify();
+        } else {
+            console.log(`[send-email] Using NODEMAILER for SMTP (${smtp.host})`);
+            const port = parseInt(smtp.port);
+            let isSecure = smtp.secure === true;
+            if (port === 465) isSecure = true;
+            if (port === 587 || port === 25 || port === 2525) isSecure = false;
 
-        const mailOptions = {
-            from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || smtp.user}>`,
-            to,
-            subject,
-            html,
-            text: text || 'HTML required'
-        };
+            const transporter = nodemailer.createTransport({
+                host: smtp.host,
+                port: port,
+                secure: isSecure,
+                auth: { user: smtp.user, pass: smtp.pass },
+                connectionTimeout: 15000,
+                tls: { rejectUnauthorized: false, ciphers: 'SSLv3' }
+            });
 
-        console.log('[send-email] Sending mail...');
-        const info = await transporter.sendMail(mailOptions);
-        console.log('[send-email] Success:', info.messageId);
+            console.log('[send-email] Verifying SMTP...');
+            await transporter.verify();
 
-        return res.status(200).json({ success: true, messageId: info.messageId });
+            const mailOptions = {
+                from: `"${smtp.from_name || 'Mil Luces'}" <${smtp.from_email || smtp.user}>`,
+                to,
+                subject,
+                html,
+                text: text || 'HTML required'
+            };
+
+            const info = await transporter.sendMail(mailOptions);
+            infoMessageId = info.messageId;
+            console.log('[send-email] Nodemailer Success:', infoMessageId);
+        }
+
+        return res.status(200).json({ success: true, messageId: infoMessageId });
 
     } catch (err) {
         console.error('[send-email] FATAL CATCH:', err.message);

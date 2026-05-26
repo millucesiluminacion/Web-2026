@@ -367,48 +367,82 @@ export default function AccountSettings() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Servidor SMTP (Host)</label>
-                                    <input
-                                        type="text"
-                                        value={smtpConfig.host}
-                                        onChange={e => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
-                                        placeholder="smtp.tudominio.com"
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
-                                    />
+                            <div className="mb-8">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-3 block">Proveedor de Correo</label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        onClick={() => setSmtpConfig({ ...smtpConfig, provider: 'smtp', host: '', user: '', pass: '' })}
+                                        className={`p-4 rounded-2xl border text-sm font-bold flex flex-col items-start gap-2 transition-all ${smtpConfig.provider !== 'resend' ? 'bg-blue-50 border-blue-200 text-blue-900' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
+                                    >
+                                        SMTP Tradicional
+                                        <span className="text-[10px] font-normal leading-tight opacity-70 text-left">Gmail, Hostinger, Outlook. Requiere puertos y credenciales.</span>
+                                    </button>
+                                    <button
+                                        onClick={() => setSmtpConfig({ ...smtpConfig, provider: 'resend', host: 'resend', user: 'resend', pass: '' })}
+                                        className={`p-4 rounded-2xl border text-sm font-bold flex flex-col items-start gap-2 transition-all ${smtpConfig.provider === 'resend' ? 'bg-primary/10 border-primary/20 text-brand-carbon' : 'bg-gray-50 border-gray-100 text-gray-400 hover:bg-gray-100'}`}
+                                    >
+                                        API Resend ⚡
+                                        <span className="text-[10px] font-normal leading-tight opacity-70 text-left">Máxima velocidad y entregabilidad. Solo requiere API Key.</span>
+                                    </button>
                                 </div>
+                            </div>
+
+                            {smtpConfig.provider === 'resend' ? (
                                 <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Puerto</label>
-                                    <input
-                                        type="text"
-                                        value={smtpConfig.port}
-                                        onChange={e => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
-                                        placeholder="465 o 587"
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
-                                    />
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Usuario / Email SMTP</label>
-                                    <input
-                                        type="text"
-                                        value={smtpConfig.user}
-                                        onChange={e => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
-                                        placeholder="hola@tudominio.com"
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
-                                    />
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Contraseña</label>
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">API Key de Resend</label>
                                     <input
                                         type="password"
                                         value={smtpConfig.pass}
                                         onChange={e => setSmtpConfig({ ...smtpConfig, pass: e.target.value })}
-                                        placeholder="••••••••••••"
-                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        placeholder="re_..."
+                                        className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all font-mono"
                                     />
+                                    <p className="text-[10px] text-gray-400 italic ml-2 mt-2">La API Key se guarda segura de forma encriptada en la base de datos.</p>
                                 </div>
-                            </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Servidor SMTP (Host)</label>
+                                        <input
+                                            type="text"
+                                            value={smtpConfig.host}
+                                            onChange={e => setSmtpConfig({ ...smtpConfig, host: e.target.value })}
+                                            placeholder="smtp.tudominio.com"
+                                            className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Puerto</label>
+                                        <input
+                                            type="text"
+                                            value={smtpConfig.port}
+                                            onChange={e => setSmtpConfig({ ...smtpConfig, port: e.target.value })}
+                                            placeholder="465 o 587"
+                                            className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Usuario / Email SMTP</label>
+                                        <input
+                                            type="text"
+                                            value={smtpConfig.user}
+                                            onChange={e => setSmtpConfig({ ...smtpConfig, user: e.target.value })}
+                                            placeholder="hola@tudominio.com"
+                                            className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Contraseña</label>
+                                        <input
+                                            type="password"
+                                            value={smtpConfig.pass}
+                                            onChange={e => setSmtpConfig({ ...smtpConfig, pass: e.target.value })}
+                                            placeholder="••••••••••••"
+                                            className="w-full bg-gray-50/50 border-none rounded-2xl px-6 py-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all"
+                                        />
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="pt-10 border-t border-gray-50">
                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[.3em] mb-6">Detalles de Remitente</h4>
