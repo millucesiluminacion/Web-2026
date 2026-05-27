@@ -198,10 +198,11 @@ export default function ProductListing() {
 
     // Advanced Filter States
     const [priceRange, setPriceRange] = useState([0, 2000]);
-    const [selectedPowers, setSelectedPowers] = useState([]);
-    const [availablePowers, setAvailablePowers] = useState([]);
+    const [selectedDynamicFilters, setSelectedDynamicFilters] = useState({}); // e.g. { Potencia: ['12W'], Color: ['Rojo'] }
+    const [availableDynamicFilters, setAvailableDynamicFilters] = useState({}); // e.g. { Potencia: Set(['12W']), ... }
     const [priceLimits, setPriceLimits] = useState([0, 2000]);
     const [availability, setAvailability] = useState({ inStock: false, onOffer: false, isNew: false });
+    const [dynamicFiltersConfig, setDynamicFiltersConfig] = useState([]); // [{id, attribute_key, label, ...}]
 
     // Pagination & Sort
     const [sortBy, setSortBy] = useState('price_asc');
@@ -214,17 +215,55 @@ export default function ProductListing() {
     const { profile } = useAuth();
 
     useEffect(() => {
+        fetchFilterConfig();
         fetchProducts();
-    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, currentPage, itemsPerPage, sortBy, priceRange, selectedPowers, availability]);
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, currentPage, itemsPerPage, sortBy, priceRange, selectedDynamicFilters, availability]);
+
+    async function fetchFilterConfig() {
+        try {
+            const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('id, slug')).data || [];
+            const currentCat = allCats.find(c => c.slug === categoryQuery?.toLowerCase());
+
+            // Fetch all active filters WITH their category associations (N:N)
+            const { data: allFilters, error } = await supabase
+                .from('dynamic_filters')
+                .select('*, associations:dynamic_filter_categories(category_id)')
+                .eq('is_active', true)
+                .order('order_index', { ascending: true });
+
+            if (error) throw error;
+
+            // Show filter if: (1) No associations = Global, OR (2) associated with current category
+            const filteredConfig = (allFilters || []).filter(f => {
+                const assocs = f.associations || [];
+                if (assocs.length === 0) return true;
+                if (currentCat) return assocs.some(a => a.category_id === currentCat.id);
+                return false;
+            });
+
+            setDynamicFiltersConfig(filteredConfig);
+
+        } catch (error) {
+            console.error('Error fetching filter config:', error);
+            setDynamicFiltersConfig([]);
+        }
+    }
 
     useEffect(() => {
         applyFilters();
-    }, [products, priceRange, selectedPowers, availability]);
+    }, [products, priceRange, selectedDynamicFilters, availability]);
 
-    // Reset to page 1 when filters change (but not when page changes)
+    // Reset filters and page when major parameters change
+    useEffect(() => {
+        setCurrentPage(1);
+        setSelectedDynamicFilters({});
+        setAvailableDynamicFilters({}); // Clear available filters to re-populate from new context
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery]);
+
+    // Reset pagination when sorting or items per page change
     useEffect(() => {
         if (currentPage !== 1) setCurrentPage(1);
-    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery, sortBy, itemsPerPage]);
+    }, [sortBy, itemsPerPage]);
 
     async function fetchProducts() {
         try {
@@ -264,11 +303,15 @@ export default function ProductListing() {
 
             let baseQuery = supabase.from('products').select(querySelect, { count: 'exact' }).is('parent_id', null);
 
-            // Add visibility filter (with fallback for migration safety)
+            // Add visibility filter
             baseQuery = baseQuery.neq('is_active', false);
 
-            // Apply URL-based filters to the base query
-            if (searchQuery) baseQuery = baseQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+            // Apply URL-based filters
+            if (searchQuery) {
+                // Si hay búsqueda, permitimos encontrar por nombre o referencia en toda la tabla 
+                // e intentamos que sea una búsqueda lo más abierta posible.
+                baseQuery = baseQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`);
+            }
 
             if (subcategoryQuery) {
                 const subCatData = allCategories.find(c => c.slug === subcategoryQuery.toLowerCase());
@@ -276,7 +319,14 @@ export default function ProductListing() {
             } else if (categoryQuery && categoryQuery !== 'all') {
                 const currentCat = allCategories.find(c => c.slug === categoryQuery.toLowerCase());
                 if (currentCat) {
-                    const relatedIds = allCategories.filter(c => c.id === currentCat.id || c.parent_id === currentCat.id).map(c => c.id);
+                    const getAllChildIds = (parentId, cats) => {
+                        let ids = [parentId];
+                        cats.filter(c => c.parent_id === parentId).forEach(child => {
+                            ids = [...ids, ...getAllChildIds(child.id, cats)];
+                        });
+                        return ids;
+                    };
+                    const relatedIds = getAllChildIds(currentCat.id, allCategories);
                     baseQuery = baseQuery.in('category_id', relatedIds);
                 }
             }
@@ -291,17 +341,19 @@ export default function ProductListing() {
                 if (prof) baseQuery = baseQuery.eq('product_professions.profession_id', prof.id);
             }
 
-            // 3. APPLY FILTERS (Server-side)
+            // 3. APPLY DYNAMIC ATTRIBUTE FILTERS (Server-side)
+            Object.entries(selectedDynamicFilters).forEach(([key, selectedValues]) => {
+                if (selectedValues && selectedValues.length > 0) {
+                    // Build robust filter: text matches OR array contains
+                    const attrFilters = selectedValues.map(v =>
+                        `attributes->>${key}.ilike.${v},attributes->${key}.cs.["${v}"]`
+                    ).join(',');
+                    baseQuery = baseQuery.or(attrFilters);
+                }
+            });
+
             if (priceRange[0] > 0) baseQuery = baseQuery.gte('price', priceRange[0]);
             if (priceRange[1] < 2000) baseQuery = baseQuery.lte('price', priceRange[1]);
-
-            if (selectedPowers.length > 0) {
-                // For JSONB, we can use some filters, but multiple ORs on JSONB fields in Supabase JS is tricky.
-                // We'll use a filter string if possible or just use multiple .or() equivalent.
-                // Simplified: if there are selected powers, filter for products whose attributes->Potencia matches.
-                const powerFilters = selectedPowers.map(p => `attributes->>Potencia.eq.${p}`).join(',');
-                baseQuery = baseQuery.or(powerFilters);
-            }
 
             if (availability.inStock) baseQuery = baseQuery.gt('stock', 0);
             if (availability.onOffer) baseQuery = baseQuery.not('discount_price', 'is', null).filter('discount_price', 'lt', 'price');
@@ -358,15 +410,36 @@ export default function ProductListing() {
             setProducts(data || []);
             setTotalResults(count || 0);
 
-            // Update dynamic filters based on this slice (or better, keep them static if possible)
+            // Update dynamic filters based on this slice
             if (data && data.length > 0) {
-                const pwrSet = new Set();
+                const newAttrFilters = {};
+
+                // FALLBACK MECHANISM: Use provided config or hardcoded defaults
+                let filterableKeys = dynamicFiltersConfig.map(f => f.attribute_key);
+                if (filterableKeys.length === 0) {
+                    filterableKeys = ['Potencia', 'Color', 'Voltaje', 'Medida', 'Material', 'Protección IP', 'CASQUILLO', 'Longitud'];
+                }
+
                 data.forEach(p => {
                     const attrs = p.attributes || {};
-                    const pwrStr = attrs.Potencia || attrs.power || attrs.Watios || attrs['Potencia (W)'];
-                    if (pwrStr) pwrSet.add(String(pwrStr).trim().toUpperCase());
+                    Object.entries(attrs).forEach(([key, val]) => {
+                        if (!filterableKeys.includes(key)) return;
+
+                        if (!filterableKeys.includes(key)) return;
+
+                        if (!newAttrFilters[key]) newAttrFilters[key] = new Set();
+                        if (Array.isArray(val)) {
+                            val.forEach(v => newAttrFilters[key].add(String(v).trim()));
+                        } else if (val) {
+                            newAttrFilters[key].add(String(val).trim());
+                        }
+                    });
                 });
-                setAvailablePowers(prev => Array.from(new Set([...prev, ...pwrSet])).sort());
+
+                // 7. Update dynamic filters based on this context
+                setAvailableDynamicFilters(newAttrFilters);
+            } else {
+                setAvailableDynamicFilters({});
             }
 
         } catch (error) {
@@ -410,7 +483,7 @@ export default function ProductListing() {
 
     const clearFilters = () => {
         setPriceRange([priceLimits[0], priceLimits[1]]);
-        setSelectedPowers([]);
+        setSelectedDynamicFilters({});
         setAvailability({ inStock: false, onOffer: false, isNew: false });
     };
 
@@ -482,26 +555,66 @@ export default function ProductListing() {
                                 </div>
                             </div>
 
-                            {/* Power Selection */}
-                            {availablePowers.length > 0 && (
-                                <div className="space-y-5">
-                                    <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Potencia</h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {availablePowers.map(pwr => (
-                                            <button
-                                                key={pwr}
-                                                onClick={() => setSelectedPowers(prev =>
-                                                    prev.includes(pwr) ? prev.filter(p => p !== pwr) : [...prev, pwr]
-                                                )}
-                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black italic transition-all border
-                                                ${selectedPowers.includes(pwr)
-                                                        ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-105'
-                                                        : 'bg-white border-gray-100 text-brand-carbon hover:border-primary hover:text-primary'}`}
-                                            >{pwr}</button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            {/* Dynamic Attribute Filters */}
+                            {(() => {
+                                // Group technical filters by their Human Label
+                                const groupedFilters = {};
+                                Object.entries(availableDynamicFilters).forEach(([key, valueSet]) => {
+                                    const config = dynamicFiltersConfig.find(f => f.attribute_key === key);
+                                    const label = config ? config.label : key;
+                                    const order = config ? config.order_index : 999;
+
+                                    if (!groupedFilters[label]) {
+                                        groupedFilters[label] = { label, order, values: new Set(), techKeys: [] };
+                                    }
+                                    groupedFilters[label].techKeys.push(key);
+                                    valueSet.forEach(v => groupedFilters[label].values.add(v));
+                                });
+
+                                // Sort groups by order and render
+                                return Object.values(groupedFilters)
+                                    .sort((a, b) => a.order - b.order)
+                                    .map(group => {
+                                        const values = Array.from(group.values).sort((a, b) =>
+                                            a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+                                        );
+
+                                        if (values.length === 0) return null;
+
+                                        return (
+                                            <div key={group.label} className="space-y-5">
+                                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{group.label}</h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {values.map(val => {
+                                                        const isSelected = group.techKeys.some(tk => (selectedDynamicFilters[tk] || []).includes(val));
+
+                                                        return (
+                                                            <button
+                                                                key={val}
+                                                                onClick={() => {
+                                                                    const targetKey = group.techKeys[0];
+                                                                    setSelectedDynamicFilters(prev => {
+                                                                        const current = prev[targetKey] || [];
+                                                                        const next = current.includes(val)
+                                                                            ? current.filter(v => v !== val)
+                                                                            : [...current, val];
+                                                                        return { ...prev, [targetKey]: next };
+                                                                    });
+                                                                }}
+                                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black italic transition-all border
+                                                                ${isSelected
+                                                                        ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-105'
+                                                                        : 'bg-white border-gray-100 text-brand-carbon hover:border-primary hover:text-primary'}`}
+                                                            >
+                                                                {val}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                            })()}
 
                             {/* Availability */}
                             <div className="space-y-4">

@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Menu, Tag, Award,
     CheckSquare, Sofa, Image as ImageIcon, CreditCard, BookOpen, Briefcase, UserPlus, Star,
-    Search, ShieldCheck, Mail, FileText as CMSIcon
+    Search, ShieldCheck, Mail, FileText as CMSIcon, Sliders
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
@@ -85,6 +85,7 @@ export function AdminLayout() {
                 { icon: Tag, label: 'Ofertas', path: '/admin/offers' },
                 { icon: Award, label: 'Marcas', path: '/admin/brands' },
                 { icon: Tag, label: 'Badges Boutique', path: '/admin/badges' },
+                { icon: Sliders, label: 'Filtros Avanzados', path: '/admin/filters' },
             ]
         },
         {

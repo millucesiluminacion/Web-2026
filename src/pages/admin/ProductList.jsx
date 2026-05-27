@@ -32,9 +32,10 @@ export default function ProductList() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
+    const [filterSubCategory, setFilterSubCategory] = useState('');
     const [filterBrand, setFilterBrand] = useState('');
-    const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'low_stock', 'no_image', 'on_offer'
-    const [sortBy, setSortBy] = useState('created_at_desc'); // 'name_asc', 'name_desc', 'price_asc', 'price_desc', 'stock_asc', 'stock_desc', 'created_at_desc', 'created_at_asc'
+    const [filterStatus, setFilterStatus] = useState('all'); // 'all', 'published', 'draft', 'low_stock', 'no_image', 'on_offer'
+    const [sortBy, setSortBy] = useState('created_at_desc');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -89,9 +90,29 @@ export default function ProductList() {
     const [newAttrKey, setNewAttrKey] = useState('');
     const [newAttrValue, setNewAttrValue] = useState('');
 
+    // Helper to get all child category IDs (recursive)
+    const getChildIds = (pId, all) => {
+        let ids = [pId];
+        if (!all || all.length === 0) return ids;
+        all.filter(c => c.parent_id === pId).forEach(child => {
+            ids = [...ids, ...getChildIds(child.id, all)];
+        });
+        return ids;
+    };
+
     useEffect(() => {
         fetchAllData();
-    }, [page, filterCategory, filterBrand, filterStatus, sortBy]); // Recargar al cambiar página o filtros
+    }, [page, filterCategory, filterSubCategory, filterBrand, filterStatus, sortBy, searchQuery]); // Recargar al cambiar página, filtros o búsqueda
+
+    // Reset page to 1 when any filter or search changes
+    useEffect(() => {
+        setPage(1);
+    }, [filterCategory, filterSubCategory, filterBrand, filterStatus, searchQuery, sortBy]);
+
+    // Reset subcategory when parent category changes
+    useEffect(() => {
+        setFilterSubCategory('');
+    }, [filterCategory]);
 
     async function fetchAllData() {
         try {
@@ -109,18 +130,24 @@ export default function ProductList() {
                 .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))', { count: 'exact' });
 
             // Apply Filters at Server Level
-            if (searchQuery) {
-                prodQuery = prodQuery.ilike('name', `%${searchQuery}%`);
+            const search = searchQuery?.trim();
+            if (search) {
+                prodQuery = prodQuery.or(`name.ilike.%${search}%,reference.ilike.%${search}%`);
             }
-            if (filterCategory) {
-                prodQuery = prodQuery.eq('category_id', filterCategory);
+            if (filterSubCategory) {
+                // If subcategory is selected, query ONLY that ID
+                prodQuery = prodQuery.eq('category_id', filterSubCategory);
+            } else if (filterCategory) {
+                // If only parent is selected, query recursive branch
+                const categoryIds = getChildIds(filterCategory, catRes.data || []);
+                prodQuery = prodQuery.in('category_id', categoryIds);
             }
             if (filterBrand) {
                 prodQuery = prodQuery.eq('brand_id', filterBrand);
             }
-            if (filterStatus === 'active') {
+            if (filterStatus === 'published') {
                 prodQuery = prodQuery.eq('is_active', true);
-            } else if (filterStatus === 'inactive') {
+            } else if (filterStatus === 'draft') {
                 prodQuery = prodQuery.eq('is_active', false);
             } else if (filterStatus === 'low_stock') {
                 prodQuery = prodQuery.lte('stock', 5).gt('stock', 0);
@@ -144,17 +171,44 @@ export default function ProductList() {
             const from = (page - 1) * pageSize;
             const to = from + pageSize - 1;
 
-            let prodRes = await prodQuery
-                .order('created_at', { ascending: false })
-                .range(from, to);
+            let prodRes = await prodQuery.range(from, to);
 
-            // Resilience: If product_badges or badges doesn't exist, retry simple fetch
-            if (prodRes.error && (prodRes.error.message.includes('product_badges') || prodRes.error.message.includes('badges'))) {
-                console.warn('Badges tables missing, retrying simple product fetch...');
-                prodRes = await supabase.from('products')
-                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)', { count: 'exact' })
-                    .order('created_at', { ascending: false })
-                    .range(from, to);
+            // Resilience: If product_badges or badges doesn't exist, retry fallback fetch
+            if (prodRes.error && (
+                prodRes.error.message?.includes('product_badges') ||
+                prodRes.error.message?.includes('badges') ||
+                JSON.stringify(prodRes.error).includes('product_badges') ||
+                JSON.stringify(prodRes.error).includes('badges')
+            )) {
+                console.warn('Badges tables missing, retrying product fetch without badges...');
+
+                // Re-build query WITHOUT badges/badges relationship
+                let fallbackQuery = supabase.from('products')
+                    .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id)', { count: 'exact' });
+
+                // Re-apply same filters as above
+                if (searchQuery) fallbackQuery = fallbackQuery.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%`);
+                if (filterSubCategory) {
+                    fallbackQuery = fallbackQuery.eq('category_id', filterSubCategory);
+                } else if (filterCategory) {
+                    const categoryIds = getChildIds(filterCategory, catRes.data || []);
+                    fallbackQuery = fallbackQuery.in('category_id', categoryIds);
+                }
+                if (filterBrand) fallbackQuery = fallbackQuery.eq('brand_id', filterBrand);
+                if (filterStatus === 'published') fallbackQuery = fallbackQuery.eq('is_active', true);
+                else if (filterStatus === 'draft') fallbackQuery = fallbackQuery.eq('is_active', false);
+                else if (filterStatus === 'low_stock') fallbackQuery = fallbackQuery.lte('stock', 5).gt('stock', 0);
+
+                // Re-apply sorting
+                if (sortBy === 'name_asc') fallbackQuery = fallbackQuery.order('name', { ascending: true });
+                else if (sortBy === 'name_desc') fallbackQuery = fallbackQuery.order('name', { ascending: false });
+                else if (sortBy === 'price_asc') fallbackQuery = fallbackQuery.order('price', { ascending: true });
+                else if (sortBy === 'price_desc') fallbackQuery = fallbackQuery.order('price', { ascending: false });
+                else if (sortBy === 'stock_asc') fallbackQuery = fallbackQuery.order('stock', { ascending: true });
+                else if (sortBy === 'stock_desc') fallbackQuery = fallbackQuery.order('stock', { ascending: false });
+                else fallbackQuery = fallbackQuery.order('created_at', { ascending: false });
+
+                prodRes = await fallbackQuery.range(from, to);
             }
 
             setTotalCount(prodRes.count || 0);
@@ -791,89 +845,8 @@ export default function ProductList() {
         setFormData(prev => ({ ...prev, attributes: newAttrs }));
     };
 
-    const filteredProducts = useMemo(() => {
-        // 1. First, apply primitive filters to all products
-        const baseFiltered = products.filter(p => {
-            const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
-            const matchCategory = !filterCategory || p.category_id === filterCategory;
-            const matchBrand = !filterBrand || p.brand_id === filterBrand;
-
-            let matchStatus = true;
-            if (filterStatus === 'low_stock') matchStatus = (p.stock || 0) < 5;
-            if (filterStatus === 'no_image') matchStatus = !p.image_url;
-            if (filterStatus === 'on_offer') matchStatus = p.discount_price && parseFloat(p.discount_price) > 0;
-            if (filterStatus === 'draft') matchStatus = p.is_active === false;
-            if (filterStatus === 'published') matchStatus = p.is_active !== false;
-
-            return matchSearch && matchCategory && matchBrand && matchStatus;
-        });
-
-        // 2. Separate parents and variants
-        const parents = baseFiltered.filter(p => !p.parent_id);
-        const variantsMap = {};
-
-        // We look for variants in the FULL products list to ensure they appear if the parent is visible
-        products.forEach(p => {
-            if (p.parent_id) {
-                if (!variantsMap[p.parent_id]) variantsMap[p.parent_id] = [];
-                // Only include variants that match the base filters too
-                const matchSearch = p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    p.reference?.toLowerCase().includes(searchQuery.toLowerCase());
-                const matchStatus = filterStatus === 'all' || (
-                    (filterStatus === 'low_stock' && (p.stock || 0) < 5) ||
-                    (filterStatus === 'no_image' && !p.image_url) ||
-                    (filterStatus === 'on_offer' && p.discount_price && parseFloat(p.discount_price) > 0)
-                );
-
-                if (matchSearch && matchStatus) {
-                    variantsMap[p.parent_id].push(p);
-                }
-            }
-        });
-
-        // 3. Sort parents
-        parents.sort((a, b) => {
-            switch (sortBy) {
-                case 'name_asc': return a.name.localeCompare(b.name);
-                case 'name_desc': return b.name.localeCompare(a.name);
-                case 'price_asc': return parseFloat(a.price) - parseFloat(b.price);
-                case 'price_desc': return parseFloat(b.price) - parseFloat(a.price);
-                case 'stock_asc': return (a.stock || 0) - (b.stock || 0);
-                case 'stock_desc': return (b.stock || 0) - (a.stock || 0);
-                case 'created_at_asc': return new Date(a.created_at) - new Date(b.created_at);
-                case 'created_at_desc': return new Date(b.created_at) - new Date(a.created_at);
-                default: return 0;
-            }
-        });
-
-        // 4. Flatten hierarchy: Parent -> its variants
-        const final = [];
-        parents.forEach(parent => {
-            final.push(parent);
-            if (variantsMap[parent.id]) {
-                const sortedVariants = [...variantsMap[parent.id]].sort((a, b) => {
-                    if (a.order_index !== undefined && b.order_index !== undefined) {
-                        return a.order_index - b.order_index;
-                    }
-                    return a.name.localeCompare(b.name);
-                });
-                final.push(...sortedVariants);
-            }
-        });
-
-        // 5. Detect and add filtered "orphan" variants (variants whose parent didn't match filters)
-        baseFiltered.forEach(p => {
-            if (p.parent_id && !final.find(f => f.id === p.id)) {
-                final.push(p);
-            }
-        });
-
-        return final;
-    }, [products, searchQuery, filterCategory, filterBrand, filterStatus, sortBy]);
-
     // Bulk selection helpers
-    const allFilteredIds = filteredProducts.map(p => p.id);
+    const allFilteredIds = products.map(p => p.id);
     const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id));
     const someSelected = selectedIds.size > 0;
 
@@ -1114,15 +1087,28 @@ export default function ProductList() {
                         />
                     </div>
 
-                    {/* Quick filters */}
-                    <select
-                        value={filterCategory}
-                        onChange={e => setFilterCategory(e.target.value)}
-                        className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
-                    >
-                        <option value="">Todas las categorías</option>
-                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    {/* Dual Category Filters */}
+                    <div className="flex items-center gap-2">
+                        <select
+                            value={filterCategory}
+                            onChange={e => setFilterCategory(e.target.value)}
+                            className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-gray-600 focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm"
+                        >
+                            <option value="">Sección: Todas</option>
+                            {categories.filter(c => !c.parent_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+
+                        {filterCategory && (
+                            <select
+                                value={filterSubCategory}
+                                onChange={e => setFilterSubCategory(e.target.value)}
+                                className="h-12 px-4 bg-white border border-gray-100 rounded-2xl text-[10px] font-black uppercase text-primary focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-sm animate-in fade-in slide-in-from-left-2"
+                            >
+                                <option value="">Subcategoría: Todas</option>
+                                {categories.filter(c => c.parent_id === filterCategory).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        )}
+                    </div>
 
                     <select
                         value={filterBrand}
@@ -1205,7 +1191,7 @@ export default function ProductList() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {filteredProducts.length > 0 ? filteredProducts.map(product => (
+                                {products.length > 0 ? products.map(product => (
                                     <tr
                                         key={product.id}
                                         className={`hover:bg-gray-50/70 transition-all duration-200 group ${selectedIds.has(product.id) ? 'bg-primary/5' : product.parent_id ? 'bg-gray-50/20' : ''

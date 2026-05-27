@@ -34,6 +34,7 @@ import ProjectsAdmin from './pages/admin/ProjectsAdmin';
 import ReviewsAdmin from './pages/admin/ReviewsAdmin';
 import BadgesAdmin from './pages/admin/BadgesAdmin';
 import NewsletterAdmin from './pages/admin/NewsletterAdmin';
+import FiltersAdmin from './pages/admin/FiltersAdmin';
 
 
 import PaymentSettings from './pages/admin/PaymentSettings';
@@ -107,6 +108,7 @@ function App() {
               <Route path="reviews" element={<ReviewsAdmin />} />
               <Route path="badges" element={<BadgesAdmin />} />
               <Route path="newsletter" element={<NewsletterAdmin />} />
+              <Route path="filters" element={<FiltersAdmin />} />
             </Route>
           </Routes>
         </BrowserRouter>
