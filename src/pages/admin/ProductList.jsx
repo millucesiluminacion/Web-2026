@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useCart } from '../../context/CartContext';
 import ImageUpload from '../../components/admin/ImageUpload';
@@ -52,6 +52,11 @@ export default function ProductList() {
     const [bulkValue, setBulkValue] = useState('');
     const [isBulkSaving, setIsBulkSaving] = useState(false);
     const [bulkToast, setBulkToast] = useState('');
+
+    // Quick-edit inline state
+    const [quickEditId, setQuickEditId] = useState(null);
+    const [quickEditData, setQuickEditData] = useState({});
+    const [isQuickSaving, setIsQuickSaving] = useState(false);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -781,6 +786,31 @@ export default function ProductList() {
         }
     }
 
+    async function saveQuickEdit(productId) {
+        setIsQuickSaving(true);
+        try {
+            const payload = {
+                price: parseFloat(quickEditData.price) || 0,
+                professional_price: quickEditData.professional_price !== '' && quickEditData.professional_price != null
+                    ? parseFloat(quickEditData.professional_price)
+                    : null,
+                partner_price: quickEditData.partner_price !== '' && quickEditData.partner_price != null
+                    ? parseFloat(quickEditData.partner_price)
+                    : null,
+                stock: parseInt(quickEditData.stock) || 0
+            };
+            const { error } = await supabase.from('products').update(payload).eq('id', productId);
+            if (error) throw error;
+            // Actualizar el estado local sin recargar toda la lista
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, ...payload } : p));
+            setQuickEditId(null);
+        } catch (err) {
+            alert('Error al guardar: ' + err.message);
+        } finally {
+            setIsQuickSaving(false);
+        }
+    }
+
     async function deleteProduct(id) {
         if (!confirm('¿Estás seguro de que quieres eliminar este producto? Si tiene variantes, estas también se eliminarán.')) return;
         try {
@@ -1314,40 +1344,133 @@ export default function ProductList() {
                                         </td>
 
                                         {/* Tarifas Estratégicas */}
-                                        <td className="p-4 min-w-[180px]">
-                                            <div className="flex flex-col gap-1.5">
-                                                {/* PVP Web / Oferta */}
-                                                <div className="flex items-center justify-between gap-4">
-                                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">🛒 PVP WEB</span>
-                                                    <div className="font-black text-brand-carbon italic text-[11px] leading-none">
-                                                        {product.discount_price && parseFloat(product.discount_price) > 0
-                                                            ? <><span className="line-through text-gray-300 text-[10px] mr-1">{parseFloat(product.price).toFixed(2)}€</span> <span className="text-red-500">{parseFloat(product.discount_price).toFixed(2)}€</span></>
-                                                            : <>{parseFloat(product.price).toFixed(2)}€</>
-                                                        }
+                                        <td className="p-4 min-w-[220px]">
+                                            {quickEditId === product.id ? (
+                                                /* ── MODO EDICIÓN RÁPIDA ── */
+                                                <div className="flex flex-col gap-1.5 animate-in fade-in duration-150">
+                                                    {/* PVP Web */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[8px] font-bold text-gray-400 uppercase w-12 flex-shrink-0">🛒 PVP</span>
+                                                        <input
+                                                            type="number" step="0.01" min="0"
+                                                            value={quickEditData.price ?? ''}
+                                                            onChange={e => setQuickEditData(prev => ({ ...prev, price: e.target.value }))}
+                                                            className="flex-1 h-7 px-2 text-[11px] font-black text-brand-carbon border border-gray-200 rounded-lg focus:outline-none focus:border-primary bg-white"
+                                                            placeholder="0.00"
+                                                            autoFocus
+                                                        />
+                                                        <span className="text-[9px] text-gray-400">€</span>
+                                                    </div>
+                                                    {/* PRO */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[8px] font-bold text-indigo-400 uppercase w-12 flex-shrink-0">💼 PRO</span>
+                                                        <input
+                                                            type="number" step="0.01" min="0"
+                                                            value={quickEditData.professional_price ?? ''}
+                                                            onChange={e => setQuickEditData(prev => ({ ...prev, professional_price: e.target.value }))}
+                                                            className="flex-1 h-7 px-2 text-[11px] font-black text-indigo-600 border border-indigo-100 rounded-lg focus:outline-none focus:border-indigo-400 bg-indigo-50/30"
+                                                            placeholder="0.00"
+                                                        />
+                                                        <span className="text-[9px] text-gray-400">€</span>
+                                                    </div>
+                                                    {/* SOCIO */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[8px] font-bold text-blue-400 uppercase w-12 flex-shrink-0">💎 SOCIO</span>
+                                                        <input
+                                                            type="number" step="0.01" min="0"
+                                                            value={quickEditData.partner_price ?? ''}
+                                                            onChange={e => setQuickEditData(prev => ({ ...prev, partner_price: e.target.value }))}
+                                                            className="flex-1 h-7 px-2 text-[11px] font-black text-blue-600 border border-blue-100 rounded-lg focus:outline-none focus:border-blue-400 bg-blue-50/30"
+                                                            placeholder="0.00"
+                                                        />
+                                                        <span className="text-[9px] text-gray-400">€</span>
+                                                    </div>
+                                                    {/* STOCK */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[8px] font-bold text-emerald-500 uppercase w-12 flex-shrink-0">📦 Stock</span>
+                                                        <input
+                                                            type="number" step="1" min="0"
+                                                            value={quickEditData.stock ?? ''}
+                                                            onChange={e => setQuickEditData(prev => ({ ...prev, stock: e.target.value }))}
+                                                            className="flex-1 h-7 px-2 text-[11px] font-black text-emerald-700 border border-emerald-100 rounded-lg focus:outline-none focus:border-emerald-400 bg-emerald-50/30"
+                                                            placeholder="0"
+                                                        />
+                                                        <span className="text-[9px] text-gray-400">uds</span>
+                                                    </div>
+                                                    {/* Botones guardar / cancelar */}
+                                                    <div className="flex gap-2 mt-1">
+                                                        <button
+                                                            onClick={() => saveQuickEdit(product.id)}
+                                                            disabled={isQuickSaving}
+                                                            className="flex-1 h-7 bg-primary text-white rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-1 hover:bg-primary/80 transition-all disabled:opacity-50"
+                                                        >
+                                                            {isQuickSaving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                                                            Guardar
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setQuickEditId(null)}
+                                                            disabled={isQuickSaving}
+                                                            className="h-7 px-3 bg-gray-100 text-gray-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
                                                     </div>
                                                 </div>
-                                                {/* Profesional */}
-                                                <div className="flex items-center justify-between gap-4 bg-indigo-50/30 px-2 py-0.5 rounded border border-indigo-100/30">
-                                                    <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-tighter">💼 PRO</span>
-                                                    <span className="font-black text-indigo-600 text-[11px]">{parseFloat(product.professional_price || 0).toFixed(2)}€</span>
+                                            ) : (
+                                                /* ── MODO LECTURA (original) ── */
+                                                <div
+                                                    className="flex flex-col gap-1.5 cursor-pointer group/qe"
+                                                    title="Clic en ⚡ para edición rápida"
+                                                >
+                                                    {/* PVP Web / Oferta */}
+                                                    <div className="flex items-center justify-between gap-4">
+                                                        <span className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">🛒 PVP WEB</span>
+                                                        <div className="font-black text-brand-carbon italic text-[11px] leading-none">
+                                                            {product.discount_price && parseFloat(product.discount_price) > 0
+                                                                ? <><span className="line-through text-gray-300 text-[10px] mr-1">{parseFloat(product.price).toFixed(2)}€</span> <span className="text-red-500">{parseFloat(product.discount_price).toFixed(2)}€</span></>
+                                                                : <>{parseFloat(product.price).toFixed(2)}€</>
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                    {/* Profesional */}
+                                                    <div className="flex items-center justify-between gap-4 bg-indigo-50/30 px-2 py-0.5 rounded border border-indigo-100/30">
+                                                        <span className="text-[8px] font-bold text-indigo-400 uppercase tracking-tighter">💼 PRO</span>
+                                                        <span className="font-black text-indigo-600 text-[11px]">{parseFloat(product.professional_price || 0).toFixed(2)}€</span>
+                                                    </div>
+                                                    {/* Socio/Partner */}
+                                                    <div className="flex items-center justify-between gap-4 bg-blue-50/30 px-2 py-0.5 rounded border border-blue-100/30">
+                                                        <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">💎 SOCIO</span>
+                                                        <span className="font-black text-blue-600 text-[11px]">{parseFloat(product.partner_price || 0).toFixed(2)}€</span>
+                                                    </div>
+                                                    {/* Stock indicador */}
+                                                    <div className={`flex items-center gap-1 mt-1 text-[8px] font-black uppercase ${product.stock > 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-400'}`}></span>
+                                                        {product.stock || 0} uds disponibles
+                                                    </div>
                                                 </div>
-                                                {/* Socio/Partner */}
-                                                <div className="flex items-center justify-between gap-4 bg-blue-50/30 px-2 py-0.5 rounded border border-blue-100/30">
-                                                    <span className="text-[8px] font-bold text-blue-400 uppercase tracking-tighter">💎 SOCIO</span>
-                                                    <span className="font-black text-blue-600 text-[11px]">{parseFloat(product.partner_price || 0).toFixed(2)}€</span>
-                                                </div>
-                                            </div>
-                                            {/* Stock indicador */}
-                                            <div className={`flex items-center gap-1 mt-2 text-[8px] font-black uppercase ${product.stock > 0 ? 'text-emerald-500' : 'text-red-400'}`}>
-                                                <span className={`w-1.5 h-1.5 rounded-full ${product.stock > 0 ? 'bg-emerald-500' : 'bg-red-400'}`}></span>
-                                                {product.stock || 0} uds disponibles
-                                            </div>
+                                            )}
                                         </td>
 
                                         {/* Acciones */}
                                         <td className="p-4 text-right">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-200">
-                                                <button onClick={() => openEdit(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-primary hover:border-primary transition-all" title="Editar">
+                                                {/* Edición rápida de precios */}
+                                                <button
+                                                    onClick={() => {
+                                                        setQuickEditId(product.id);
+                                                        setQuickEditData({
+                                                            price: product.price ?? '',
+                                                            professional_price: product.professional_price ?? '',
+                                                            partner_price: product.partner_price ?? '',
+                                                            stock: product.stock ?? 0
+                                                        });
+                                                    }}
+                                                    className="w-9 h-9 bg-amber-50 border border-amber-100 rounded-xl flex items-center justify-center text-amber-400 hover:text-amber-600 hover:border-amber-300 transition-all"
+                                                    title="Edición rápida de precios y stock"
+                                                >
+                                                    <Zap className="w-3.5 h-3.5" />
+                                                </button>
+                                                <button onClick={() => openEdit(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-primary hover:border-primary transition-all" title="Editar completo">
                                                     <Edit2 className="w-3.5 h-3.5" />
                                                 </button>
                                                 <button onClick={() => handleDuplicate(product)} className="w-9 h-9 bg-white border border-gray-100 rounded-xl flex items-center justify-center text-gray-300 hover:text-indigo-400 hover:border-indigo-100 transition-all" title="Duplicar">
