@@ -20,17 +20,20 @@ const COLOR_MAP = {
     "Blanco": "#FFFFFF",
     "Negro": "#1a1a1a",
     "Gris": "#808080",
-    "Dorado": "linear-gradient(135deg, #BF953F, #FCF6BA, #B38728, #FBF5B7, #AA771C)",
-    "Plateado": "linear-gradient(135deg, #757575, #e0e0e0, #757575)",
-    "Cobre": "linear-gradient(135deg, #b87333, #f4a460, #b87333)",
-    "Rojo": "#DC2626",
-    "Azul": "#2563EB",
-    "Verde": "#16A34A",
-    "Madera": "#8B4513",
+    "Dorado": "linear-gradient(135deg, #FFD700, #FFFACD, #B8860B, #FFD700)",
+    "Plateado": "linear-gradient(135deg, #C0C0C0, #FFFFFF, #808080)",
+    "Cobre": "linear-gradient(135deg, #B87333, #FF7F50, #8B4513)",
+    "Rojo": "#FF0000",
+    "Azul": "#0047AB",
+    "Azul Claro": "#00CCFF",
+    "Cian": "#00CCFF",
+    "Azul Hielo": "#ACE5EE",
+    "Verde": "#00FF66",
+    "Madera": "#A0522D",
     "Beige": "#F5F5DC",
-    "Rosa": "#F472B6",
-    "Morado": "#A855F7",
-    "Naranja": "linear-gradient(135deg, #FF6B00, #FF9E00)",
+    "Rosa": "#FF00FF",
+    "Morado": "#BF00FF",
+    "Naranja": "#FF6600",
     "RGB": "conic-gradient(from 0deg, red, yellow, lime, aqua, blue, magenta, red)",
     "Multicolor": "conic-gradient(from 0deg, red, yellow, lime, aqua, blue, magenta, red)",
     "CCT (Tricolor)": "linear-gradient(135deg, #FFF1DC 0%, #F3F4F6 50%, #EEF4FF 100%)",
@@ -49,8 +52,35 @@ const SORT_OPTIONS = [
 ];
 
 const PAGE_SIZE_OPTIONS = [12, 24, 48, 96];
+const MAX_P_FALLBACK = 2000;
 
-const ProductCard = memo(({ product, profile, addToCart, isLCP = false }) => {
+// Aliases for unified filtering (case-insensitive)
+const ATTRIBUTE_ALIASES = {
+    'Potencia': ['potencia', 'power', 'watios', 'potencia (w)', 'w'],
+    'Color': ['color', 'tono', 'luz', 'temperatura', 'cct'],
+    'Voltaje': ['voltaje', 'voltage', 'tension', 'v'],
+    'Protección IP': ['protección ip', 'proteccion ip', 'ip'],
+};
+
+const normalizeFilterValue = (val) => {
+    if (!val) return '';
+    let v = String(val).trim();
+    let clean = v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+    // Unificación de Blancos (Solicitud del usuario)
+    if (/^3000k?$/i.test(v) || clean.includes('calido') || clean.includes('caliido') || clean.includes('3000')) return 'Blanco Cálido';
+    if (/^4000k?$/i.test(v) || clean.includes('neutro') || clean.includes('4000')) return 'Blanco Neutro';
+    if (/^6000k?$/i.test(v) || clean.includes('frio') || clean.includes('6000')) return 'Blanco Frío';
+
+    if (v.toUpperCase() === 'CCT' || v.toUpperCase() === 'TRICOLOR' || (v.toUpperCase().includes('CCT') && !v.toUpperCase().includes('VALOR'))) return 'CCT (Tricolor)';
+
+    // Si tiene números (Potencia, Voltaje, etc.), mantener mayúsculas
+    if (/\d/.test(v)) return v.toUpperCase();
+
+    return v.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+};
+
+const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters = {}, isLCP = false }) => {
     const pricing = calculateProductPrice(product, profile);
     const [isHovered, setIsHovered] = useState(false);
     const [currentImgIndex, setCurrentImgIndex] = useState(0);
@@ -72,13 +102,46 @@ const ProductCard = memo(({ product, profile, addToCart, isLCP = false }) => {
         return Array.from(options).sort();
     }, [product.variants]);
 
+    const techSpecs = useMemo(() => {
+        const attrs = product.attributes || {};
+        const specs = [];
+        const power = attrs['Potencia'] || attrs['power'] || attrs['Watios'] || attrs['Potencia (W)'];
+        if (power) specs.push({ icon: Zap, label: String(power).includes('W') ? power : `${power}W` });
+        const ip = attrs['IP'] || attrs['Protección IP'] || attrs['Proteccion IP'];
+        if (ip) specs.push({ icon: Droplets, label: String(ip).startsWith('IP') ? ip : `IP${ip}` });
+        const dimmable = attrs['Regulable'] || attrs['Dimmable'];
+        if (dimmable && String(dimmable).toLowerCase() !== 'no') {
+            specs.push({ icon: Sun, label: 'Regulable' });
+        }
+        return specs;
+    }, [product.attributes]);
+
     useEffect(() => {
         if (!isHovered || images.length <= 1) { setCurrentImgIndex(0); return; }
         const interval = setInterval(() => setCurrentImgIndex(prev => (prev + 1) % images.length), 1500);
         return () => clearInterval(interval);
     }, [isHovered, images.length]);
 
-    const displayImage = useMemo(() => optimizeImage(images[currentImgIndex], 400, 400), [images, currentImgIndex]);
+    const activeVariantImg = useMemo(() => {
+        if (!product.variants || product.variants.length === 0) return null;
+        const activeColors = selectedDynamicFilters['Color'] || selectedDynamicFilters['Tono'] || [];
+        if (activeColors.length === 0) return null;
+
+        // Find a variant that matches one of the active colors
+        const match = product.variants.find(v => {
+            const tone = v.attributes?.['Tono'] || v.attributes?.['Luz'] || v.attributes?.['Color'] || v.attributes?.['Temperatura'];
+            if (!tone) return false;
+            const normTone = normalizeFilterValue(String(tone).trim());
+            return activeColors.includes(normTone);
+        });
+
+        return match?.image_url || null;
+    }, [product.variants, selectedDynamicFilters]);
+
+    const displayImage = useMemo(() => {
+        const rawImg = activeVariantImg || images[currentImgIndex];
+        return optimizeImage(rawImg, 400, 400);
+    }, [images, currentImgIndex, activeVariantImg]);
 
     return (
         <div onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}
@@ -97,6 +160,18 @@ const ProductCard = memo(({ product, profile, addToCart, isLCP = false }) => {
                         <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight group-hover:text-primary transition-colors line-clamp-2">{product.name}</h3>
                     </Link>
                 </div>
+
+                {techSpecs.length > 0 && (
+                    <div className="flex flex-wrap gap-3 mb-3">
+                        {techSpecs.map((spec, i) => (
+                            <div key={i} className="flex items-center gap-1.5 text-gray-400 group/spec">
+                                <spec.icon className="w-3 h-3 text-primary/60 group-hover/spec:text-primary transition-colors" />
+                                <span className="text-[9px] font-bold uppercase tracking-tight">{spec.label}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {variantOptions.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-4">
                         {variantOptions.map(opt => <span key={opt} className="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-md text-[7px] font-black uppercase text-gray-500">{opt}</span>)}
@@ -150,6 +225,7 @@ export default function ProductListing() {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalResults, setTotalResults] = useState(0);
     const [availability, setAvailability] = useState({ inStock: false, onOffer: false, isNew: false });
+    const [availabilityCounts, setAvailabilityCounts] = useState({ inStock: 0, onOffer: 0, isNew: 0 });
 
     const { addToCart } = useCart();
     const { profile } = useAuth();
@@ -160,26 +236,16 @@ export default function ProductListing() {
     useEffect(() => {
         setSelectedDynamicFilters({});
         setAvailability({ inStock: false, onOffer: false, isNew: false });
+        setPriceRange([0, 2000]);
         setCurrentPage(1);
     }, [categoryQuery, roomId, brandQuery, professionSlug, searchQuery]);
 
-    const normalizeFilterValue = (val) => {
-        if (!val) return '';
-        let v = String(val).trim();
-        let clean = v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    // Sync price slider to real product limits when they load
+    useEffect(() => {
+        setPriceRange([priceLimits[0], priceLimits[1]]);
+    }, [priceLimits[0], priceLimits[1]]);
 
-        // Unificación de Blancos (Solicitud del usuario)
-        if (/^3000k?$/i.test(v) || clean.includes('calido') || clean.includes('caliido') || clean.includes('3000')) return 'Blanco Cálido';
-        if (/^4000k?$/i.test(v) || clean.includes('neutro') || clean.includes('4000')) return 'Blanco Neutro';
-        if (/^6000k?$/i.test(v) || clean.includes('frio') || clean.includes('6000')) return 'Blanco Frío';
 
-        if (v.toUpperCase() === 'CCT' || v.toUpperCase() === 'TRICOLOR' || (v.toUpperCase().includes('CCT') && !v.toUpperCase().includes('VALOR'))) return 'CCT (Tricolor)';
-
-        // Si tiene números (Potencia, Voltaje, etc.), mantener mayúsculas
-        if (/\d/.test(v)) return v.toUpperCase();
-
-        return v.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-    };
 
     useEffect(() => {
         async function init() {
@@ -206,91 +272,122 @@ export default function ProductListing() {
             const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('*')).data || [];
             const currentCat = allCats.find(c => c.slug === categoryQuery?.toLowerCase());
 
-            // 1. Fetch Dynamic Filter Config for this category
+            // 1. Gather all category IDs in scope
+            const gatherCatIds = (id, cats) => {
+                const ids = [id];
+                cats.filter(c => c.parent_id === id).forEach(child => ids.push(...gatherCatIds(child.id, cats)));
+                return ids;
+            };
+            const scopedCatIds = currentCat ? gatherCatIds(currentCat.id, allCats) : [];
+
+            // 2. Fetch Filter Config
             const { data: allF } = await supabase.from('dynamic_filters').select('*, associations:dynamic_filter_categories(category_id)').eq('is_active', true).order('order_index');
             const catF = (allF || []).filter(f => {
                 const assocs = f.associations || [];
-                return assocs.length === 0 || (currentCat && assocs.some(a => a.category_id === currentCat.id));
+                return assocs.length === 0 || (scopedCatIds.length > 0 && assocs.some(a => scopedCatIds.includes(a.category_id)));
             });
             setDynamicFiltersConfig(catF);
 
-            // 2. Build and Execute Meta Query (Hibrido - Trae todos los atributos)
+            // 3. Build Query
             let qSelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))';
             if (roomId) qSelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
 
             let buildQ = (isMeta = false) => {
-                let q = supabase.from('products').select(isMeta ? 'id, attributes, price, parent_id' : qSelect, { count: 'exact' });
+                let q = supabase.from('products').select(isMeta ? 'id, attributes, price, discount_price, created_at, parent_id, stock' : qSelect, { count: 'exact' });
                 if (!isMeta) q = q.is('parent_id', null);
                 q = q.neq('is_active', false);
-                if (currentCat) {
-                    const getIds = (id, cats) => {
-                        let ids = [id];
-                        cats.filter(c => c.parent_id === id).forEach(child => ids = [...ids, ...getIds(child.id, cats)]);
-                        return ids;
-                    };
-                    q = q.in('category_id', getIds(currentCat.id, allCats));
+
+                if (currentCat && scopedCatIds.length > 0) {
+                    q = q.in('category_id', scopedCatIds);
                 }
+
                 if (subcategoryQuery) {
                     const sub = allCats.find(c => c.slug === subcategoryQuery.toLowerCase());
                     if (sub) q = q.eq('category_id', sub.id);
                 }
+
                 if (searchQuery) q = q.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%`);
                 if (roomId) q = q.eq('product_rooms.room_id', roomId);
                 return q;
             };
 
-            const { data: metaData } = await buildQ(true).limit(5000);
-            const newValueMap = {}; const newIdMap = {}; const newAttrFilters = {};
+            // 4. Meta Data for Filters and Availability
+            const { data: metaData, error: metaErr } = await buildQ(true).limit(5000);
+            if (metaErr) console.error('Meta Query Error:', metaErr);
+
+            const newAttrFilters = {}; const newIdMap = {};
             let minP = Infinity; let maxP = -Infinity;
+            const availableGroups = { inStock: new Set(), onOffer: new Set(), isNew: new Set() };
 
             if (metaData) {
-                const keys = catF.map(f => f.attribute_key);
+                let filterableKeys = catF.length > 0 ? catF.map(f => f.attribute_key) : ['Potencia', 'Color', 'Voltaje', 'Medida', 'Material', 'Protección IP', 'CASQUILLO', 'Longitud', 'IP'];
+
+                const thirtyDaysAgo = new Date();
+                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
                 metaData.forEach(p => {
-                    const attrs = p.attributes || {}; const price = p.price || 0; const targetId = p.parent_id || p.id;
-                    if (price < minP) minP = price; if (price > maxP) maxP = price;
+                    const targetId = p.parent_id || p.id;
+                    const price = parseFloat(p.price || 0);
+                    const salePrice = parseFloat(p.discount_price || 0);
+                    const stock = parseInt(p.stock || 0);
+
+                    if (price < minP) minP = price;
+                    if (price > 0 && price <= MAX_P_FALLBACK && price > maxP) maxP = price;
+
+                    if (stock > 0) availableGroups.inStock.add(targetId);
+                    if (salePrice > 0 && salePrice < price) availableGroups.onOffer.add(targetId);
+                    if (p.created_at && new Date(p.created_at) > thirtyDaysAgo) availableGroups.isNew.add(targetId);
+
+                    // Attributes
+                    const attrs = p.attributes || {};
                     Object.entries(attrs).forEach(([k, v]) => {
-                        if (!keys.includes(k)) return;
-                        if (!newAttrFilters[k]) newAttrFilters[k] = new Set();
-                        if (!newIdMap[k]) newIdMap[k] = {};
+                        const kLower = k.toLowerCase();
+                        const matchingKey = filterableKeys.find(fk => fk.toLowerCase() === kLower || (ATTRIBUTE_ALIASES[fk] || []).includes(kLower));
+                        if (!matchingKey) return;
+
+                        if (!newAttrFilters[matchingKey]) newAttrFilters[matchingKey] = new Set();
+                        if (!newIdMap[matchingKey]) newIdMap[matchingKey] = {};
+
                         const proc = (val) => {
-                            const orig = String(val).trim(); const norm = normalizeFilterValue(orig);
-                            newAttrFilters[k].add(norm);
-                            if (!newIdMap[k][norm]) newIdMap[k][norm] = new Set();
-                            newIdMap[k][norm].add(targetId);
+                            const norm = normalizeFilterValue(String(val).trim());
+                            if (!norm || norm.toLowerCase() === 'n/a') return;
+                            newAttrFilters[matchingKey].add(norm);
+                            if (!newIdMap[matchingKey][norm]) newIdMap[matchingKey][norm] = new Set();
+                            newIdMap[matchingKey][norm].add(targetId);
                         };
                         if (Array.isArray(v)) v.forEach(proc); else if (v) proc(v);
                     });
                 });
-                setAvailableDynamicFilters(newAttrFilters); setFilterIdMap(newIdMap);
-                const fMin = minP === Infinity ? 0 : Math.floor(minP);
-                const fMax = maxP === -Infinity ? 2000 : Math.ceil(maxP);
-                if (priceLimits[0] !== fMin || priceLimits[1] !== fMax) setPriceLimits([fMin, fMax]);
+
+                if (maxP === -Infinity) maxP = MAX_P_FALLBACK;
+                setAvailableDynamicFilters(newAttrFilters);
+                setFilterIdMap(newIdMap);
+                setAvailabilityCounts({ inStock: availableGroups.inStock.size, onOffer: availableGroups.onOffer.size, isNew: availableGroups.isNew.size });
+                setPriceLimits([minP === Infinity ? 0 : Math.floor(minP), Math.ceil(maxP)]);
             }
 
-            // 3. In-memory Filter Logic
-            let filteredIds = null;
-            const activeF = Object.entries(selectedDynamicFilters).filter(([_, v]) => v && v.length > 0);
-            if (activeF.length > 0) {
-                activeF.forEach(([key, values]) => {
-                    const groupIds = new Set();
-                    values.forEach(v => {
-                        const ids = (newIdMap[key] || filterIdMap[key] || {})[v];
-                        if (ids) ids.forEach(id => groupIds.add(id));
-                    });
-                    if (filteredIds === null) filteredIds = groupIds;
-                    else filteredIds = new Set([...filteredIds].filter(id => groupIds.has(id)));
-                });
-            }
+            // 5. Intersect Filter Results
+            let combinedIds = null;
+            if (availability.inStock) combinedIds = new Set(availableGroups.inStock);
+            if (availability.onOffer) combinedIds = combinedIds ? new Set([...combinedIds].filter(id => availableGroups.onOffer.has(id))) : new Set(availableGroups.onOffer);
+            if (availability.isNew) combinedIds = combinedIds ? new Set([...combinedIds].filter(id => availableGroups.isNew.has(id))) : new Set(availableGroups.isNew);
 
-            if (filteredIds !== null && filteredIds.size === 0) {
+            const activeF = Object.entries(selectedDynamicFilters).filter(([_, v]) => v?.length > 0);
+            activeF.forEach(([key, values]) => {
+                const groupIds = new Set();
+                values.forEach(v => (newIdMap[key]?.[v] || []).forEach(id => groupIds.add(id)));
+                combinedIds = combinedIds ? new Set([...combinedIds].filter(id => groupIds.has(id))) : groupIds;
+            });
+
+            if (combinedIds !== null && combinedIds.size === 0) {
                 setProducts([]); setTotalResults(0); setLoading(false); return;
             }
 
-            // 4. Final Query
+            // 6. Fetch Page
             let dataQ = buildQ(false);
-            if (filteredIds) dataQ = dataQ.in('id', Array.from(filteredIds));
+            if (combinedIds) dataQ = dataQ.in('id', Array.from(combinedIds));
             if (priceRange[0] > 0) dataQ = dataQ.gte('price', priceRange[0]);
-            if (priceRange[1] < (maxP === -Infinity ? 2000 : maxP)) dataQ = dataQ.lte('price', priceRange[1]);
+            if (priceRange[1] < maxP) dataQ = dataQ.lte('price', priceRange[1]);
 
             switch (sortBy) {
                 case 'price_asc': dataQ = dataQ.order('price', { ascending: true }); break;
@@ -305,10 +402,10 @@ export default function ProductListing() {
             setActiveCategory(currentCat);
             setSubcategories(allCats.filter(c => c.parent_id === currentCat?.id));
 
-        } catch (e) { console.error(e); } finally { setLoading(false); }
+        } catch (e) { console.error('Product Fetch Error:', e); } finally { setLoading(false); }
     }
 
-    const clearFilters = () => { setPriceRange([priceLimits[0], priceLimits[1]]); setSelectedDynamicFilters({}); };
+    const clearFilters = () => { setPriceRange([priceLimits[0], priceLimits[1]]); setSelectedDynamicFilters({}); setAvailability({ inStock: false, onOffer: false, isNew: false }); };
 
     const totalPages = Math.max(1, Math.ceil(totalResults / itemsPerPage));
     const pageNumbers = useMemo(() => {
@@ -336,6 +433,7 @@ export default function ProductListing() {
                                 <Filter className="w-4 h-4 text-primary" /> Filtros
                             </h3>
 
+                            {/* 1. Precio */}
                             <div className="space-y-4">
                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Precio</h4>
                                 <input type="range" min={priceLimits[0]} max={priceLimits[1]} value={priceRange[1]}
@@ -344,12 +442,21 @@ export default function ProductListing() {
                                 <div className="flex justify-between text-[10px] font-black italic"><span>{priceRange[0]}€</span><span className="text-primary">{priceRange[1]}€</span></div>
                             </div>
 
+                            {/* 2. Filtros dinámicos */}
                             {Object.entries(availableDynamicFilters).map(([k, set]) => {
                                 const config = dynamicFiltersConfig.find(f => f.attribute_key === k);
                                 const label = config ? config.label : k;
 
-                                // Ordenamiento inteligente: Ascendente si tiene números (Potencia, Kelvin...), sino alfabético
+                                // Custom Sorting: Whites first, then numeric/alpha
+                                const priority = ["Blanco Cálido", "Blanco Neutro", "Blanco Frío"];
                                 const values = Array.from(set).sort((a, b) => {
+                                    const idxA = priority.indexOf(a);
+                                    const idxB = priority.indexOf(b);
+                                    if (idxA !== -1 || idxB !== -1) {
+                                        if (idxA === -1) return 1;
+                                        if (idxB === -1) return -1;
+                                        return idxA - idxB;
+                                    }
                                     const numA = parseFloat(String(a).replace(/[^\d.-]/g, '')) || 0;
                                     const numB = parseFloat(String(b).replace(/[^\d.-]/g, '')) || 0;
                                     if (numA !== 0 || numB !== 0) return numA - numB;
@@ -363,14 +470,25 @@ export default function ProductListing() {
                                             {values.map(val => {
                                                 const isSel = (selectedDynamicFilters[k] || []).includes(val);
                                                 const cCode = COLOR_MAP[val] || COLOR_MAP[Object.keys(COLOR_MAP).find(ck => ck.toLowerCase() === val.toLowerCase())];
-                                                if (cCode) return (
-                                                    <button key={val} onClick={() => setSelectedDynamicFilters(prev => {
-                                                        const cur = prev[k] || [];
-                                                        return { ...prev, [k]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] };
-                                                    })} title={val} className={`w-10 h-10 rounded-full border-2 transition-all duration-500 flex items-center justify-center relative
-                                                        ${isSel ? 'ring-4 ring-primary scale-125 border-primary z-10 shadow-2xl' : 'border-white shadow-md hover:scale-110'}`}
-                                                        style={{ background: cCode, boxShadow: isSel ? `0 0 30px rgba(59,130,246,0.6)` : '0 4px 10px rgba(0,0,0,0.05)' }} />
-                                                );
+
+                                                if (cCode) {
+                                                    const isWhite = val.toLowerCase().includes('blanco');
+                                                    const glowColor = cCode.startsWith('linear') || cCode.startsWith('conic') ? 'rgba(255,255,255,0.2)' : cCode;
+                                                    const glow = !isWhite ? `0 0 15px ${glowColor}${isSel ? 'aa' : '44'}` : '0 4px 10px rgba(0,0,0,0.05)';
+
+                                                    return (
+                                                        <button key={val} onClick={() => setSelectedDynamicFilters(prev => {
+                                                            const cur = prev[k] || [];
+                                                            return { ...prev, [k]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] };
+                                                        })} title={val} className={`w-10 h-10 rounded-full border-2 transition-all duration-500 flex items-center justify-center relative
+                                                            ${isSel ? 'ring-4 ring-primary scale-125 border-primary z-10 shadow-2xl' : 'border-white shadow-md hover:scale-110'}`}
+                                                            style={{
+                                                                background: cCode,
+                                                                boxShadow: isSel ? `0 0 30px ${isWhite ? 'rgba(59,130,246,0.6)' : glowColor}` : glow
+                                                            }} />
+                                                    );
+                                                }
+
                                                 return (
                                                     <button key={val} onClick={() => setSelectedDynamicFilters(prev => {
                                                         const cur = prev[k] || [];
@@ -385,7 +503,48 @@ export default function ProductListing() {
                                     </div>
                                 );
                             })}
+
+                            {/* 3. Disponibilidad */}
+                            <div className="space-y-3">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Disponibilidad</h4>
+                                {[
+                                    { key: 'inStock', label: 'En Stock', count: availabilityCounts.inStock },
+                                    { key: 'onOffer', label: 'En Oferta', count: availabilityCounts.onOffer },
+                                    { key: 'isNew', label: 'Novedades', count: availabilityCounts.isNew },
+                                ].map(({ key, label, count }) => (
+                                    <label key={key} className="flex items-center gap-3 cursor-pointer group">
+                                        <span
+                                            className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 ${availability[key] ? 'bg-primary border-primary' : 'border-gray-200 group-hover:border-primary/40'
+                                                }`}
+                                            onClick={() => setAvailability(prev => ({ ...prev, [key]: !prev[key] }))}
+                                        >
+                                            {availability[key] && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
+                                        </span>
+                                        <span className="text-[10px] font-black uppercase italic text-gray-500 group-hover:text-brand-carbon transition-colors flex-1">{label}</span>
+                                        <span className="text-[9px] font-black text-gray-300">{count}</span>
+                                    </label>
+                                ))}
+                            </div>
+
+                            {/* 4. Limpiar */}
                             <button onClick={clearFilters} className="w-full py-3 bg-gray-50 text-gray-400 rounded-2xl text-[10px] font-black uppercase italic border border-gray-100">Limpiar Todo</button>
+
+                            {/* 5. Catálogo nav */}
+                            <div className="space-y-1 border-t border-gray-100 pt-4">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Catálogo</h4>
+                                <button onClick={() => navigate('/catalogo')}
+                                    className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase italic transition-all duration-200 text-gray-400 hover:bg-gray-50 hover:text-brand-carbon">
+                                    Ver Todo
+                                </button>
+                                {categories.filter(c => !c.parent_id).map(cat => (
+                                    <button key={cat.id}
+                                        onClick={() => navigate(`/catalogo?category=${cat.slug}`)}
+                                        className={`w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase italic transition-all duration-200 ${categoryQuery === cat.slug ? 'bg-primary text-white shadow-md' : 'text-gray-400 hover:bg-gray-50 hover:text-brand-carbon'
+                                            }`}>
+                                        {cat.name}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </aside>
                 )}
@@ -394,6 +553,36 @@ export default function ProductListing() {
                     {isCatalogHome ? <div className="pt-4"><CategoryGrid /></div> : (
                         <>
                             {activeCategory && <h2 className="text-3xl md:text-5xl font-black text-brand-carbon uppercase italic leading-none mb-10">{activeCategory.name} <br /><span className="text-gray-300">Colección</span></h2>}
+
+                            {/* Subcategorías — Unificadas e Iconográficas */}
+                            {subcategories.length > 0 && (
+                                <div className="mb-10 flex flex-wrap gap-4 overflow-x-auto pb-4 hide-scrollbar">
+                                    {subcategories.map(sub => {
+                                        const isActive = subcategoryQuery === sub.slug;
+                                        return (
+                                            <button
+                                                key={sub.id}
+                                                onClick={() => {
+                                                    if (isActive) navigate(`/catalogo?category=${categoryQuery}`);
+                                                    else navigate(`/catalogo?category=${categoryQuery}&subcategory=${sub.slug}`);
+                                                }}
+                                                className={`group flex flex-col items-center justify-center min-w-[80px] py-3 px-1 border-b-2 transition-all duration-300
+                                                    ${isActive ? 'border-primary text-primary' : 'border-transparent text-gray-400 hover:text-brand-carbon'}`}
+                                            >
+                                                <div className="w-8 h-8 mb-2 flex items-center justify-center">
+                                                    {sub.image_url ? (
+                                                        <img src={sub.image_url} alt={sub.name} className={`w-full h-full object-contain transition-opacity duration-300 ${isActive ? 'opacity-100' : 'opacity-30 group-hover:opacity-100'}`} />
+                                                    ) : (() => {
+                                                        const IconComp = ICON_MAP[sub.icon_name] || Tag;
+                                                        return <IconComp className={`w-5 h-5 transition-colors duration-300 ${isActive ? 'text-primary' : 'text-gray-300 group-hover:text-primary'}`} />;
+                                                    })()}
+                                                </div>
+                                                <span className={`text-[8px] font-black uppercase tracking-tight transition-colors duration-300 ${isActive ? 'text-primary' : 'text-gray-400'}`}>{sub.name}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
                             <div className="flex items-center justify-between mb-8 p-5 bg-white rounded-[2rem] border border-gray-100 shadow-sm">
                                 <div className="flex items-center gap-3">
@@ -415,7 +604,7 @@ export default function ProductListing() {
                             ) : (
                                 <>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                                        {products.map((p, i) => <ProductCard key={p.id} product={p} profile={profile} addToCart={addToCart} isLCP={i < 4} />)}
+                                        {products.map((p, i) => <ProductCard key={p.id} product={p} profile={profile} addToCart={addToCart} selectedDynamicFilters={selectedDynamicFilters} isLCP={i < 4} />)}
                                         {products.length === 0 && <div className="col-span-full py-20 text-center text-[10px] font-black uppercase text-gray-400">Sin piezas disponibles para esta selección</div>}
                                     </div>
                                     {totalPages > 1 && (
