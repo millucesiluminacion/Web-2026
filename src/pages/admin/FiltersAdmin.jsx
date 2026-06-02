@@ -57,20 +57,27 @@ export default function FiltersAdmin() {
 
     async function discoverAttributes() {
         try {
-            // Get a sample of products to find common attribute keys
+            // Get a much larger sample of products to find common attribute keys
+            // 100 was too low for a catalog with thousands of products
             const { data } = await supabase
                 .from('products')
                 .select('attributes')
-                .limit(100);
+                .not('attributes', 'is', null)
+                .limit(1000);
 
             if (data) {
                 const keys = new Set();
                 data.forEach(p => {
                     if (p.attributes) {
-                        Object.keys(p.attributes).forEach(k => keys.add(k));
+                        Object.keys(p.attributes).forEach(k => {
+                            // Trim and avoid duplicates with different casing/spacing
+                            keys.add(k.trim());
+                        });
                     }
                 });
-                setDiscoveredKeys(Array.from(keys).sort());
+                setDiscoveredKeys(Array.from(keys).sort((a, b) =>
+                    a.localeCompare(b, undefined, { sensitivity: 'base' })
+                ));
             }
         } catch (error) {
             console.error('Error discovering attributes:', error);
