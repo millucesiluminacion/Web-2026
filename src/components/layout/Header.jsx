@@ -163,7 +163,7 @@ export function Header({ onOpenAuthModal }) {
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Encuentra la luz perfecta..."
+                            placeholder="Encuentra todo lo que necesitas..."
                             className="premium-input pl-14 w-full h-12 bg-gray-50/50 hover:bg-white border-transparent focus:border-primary/20 focus:bg-white"
                         />
                         <div className="absolute inset-y-0 right-5 flex items-center">
@@ -178,8 +178,8 @@ export function Header({ onOpenAuthModal }) {
                                 <Phone className="w-4 h-4" />
                             </div>
                             <div className="hidden lg:block">
-                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Atención Boutique</p>
-                                <p className="text-[10px] font-black italic text-brand-carbon group-hover:text-primary transition-colors">900 123 456</p>
+                                <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Atención Telefónica</p>
+                                <p className="text-[10px] font-black italic text-brand-carbon group-hover:text-primary transition-colors">+34 689 935 436</p>
                             </div>
                         </a>
 

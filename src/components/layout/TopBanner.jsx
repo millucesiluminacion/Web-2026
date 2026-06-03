@@ -23,9 +23,9 @@ export function TopBanner({ onOpenAuthModal }) {
         textColor: 'text-primary-light',
         accentColor: 'text-primary-light/80',
         messages: [
-            { icon: <Zap className="w-3.5 h-3.5" />, text: "SESIÓN PROFESIONAL ACTIVA" },
-            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Precios B2B de Fábrica" },
-            { icon: <Zap className="w-3.5 h-3.5" />, text: "Soporte Técnico VIP" }
+            { icon: <Zap className="w-3.5 h-3.5" />, text: "PERFIL PROFESIONAL ACTIVO" },
+            { icon: <ShieldCheck className="w-3.5 h-3.5" />, text: "Precios con Descuento B2B" },
+            { icon: <Zap className="w-3.5 h-3.5" />, text: "Soporte Técnico Prioritario" }
         ],
         cta: `Panel Pro - ${profile?.full_name?.split(' ')[0] || 'Profesional'}`
     } : user ? {
@@ -45,9 +45,9 @@ export function TopBanner({ onOpenAuthModal }) {
         textColor: 'text-white/90',
         accentColor: 'text-white/60',
         messages: [
-            { text: "Iluminación Boutique y Proyectos" },
-            { text: "Asesoramiento Luminotécnico" },
-            { text: "Envío 24/48h" }
+            { text: "Tu Tienda online de Iluminación lineal" },
+            { text: "Tu espacio Luminotécnico" },
+            { text: "Envíos en 24/48h" }
         ],
         cta: "Acceso Profesionales"
     };
