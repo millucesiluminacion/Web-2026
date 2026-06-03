@@ -50,7 +50,7 @@ export default function ContactPage() {
                 {/* Simplified Header */}
                 <header className="mb-16 text-center relative group">
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
-                        {cmsContent?.content?.header_subtitle || 'Concierge & Client Relations'}
+                        {cmsContent?.content?.header_subtitle || 'Atención al cliente'}
                     </span>
                     <h1 className="text-4xl md:text-7xl font-black text-brand-carbon uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-sm">
                         {cmsContent?.content?.header_title || (
@@ -77,10 +77,10 @@ export default function ContactPage() {
                                             <MapPin className="w-6 h-6" />
                                         </div>
                                         <div>
-                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Sede Central & Showroom</h4>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Tienda & Showroom</h4>
                                             <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">
                                                 {cmsContent?.content?.address || (
-                                                    <>{'Calle de la Luz, 12, Planta Noble'}<br />{'28001 Madrid, España'}</>
+                                                    <>{'Calle Rio Tormes, 5, Local 3'}<br />{'28943 Fuenlabrada, Madrid, España'}</>
                                                 )}
                                             </p>
                                         </div>
@@ -93,11 +93,11 @@ export default function ContactPage() {
                                             <Mail className="w-6 h-6" />
                                         </div>
                                         <div>
-                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Gestión de Proyectos</h4>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Proyectos</h4>
                                             <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">
-                                                {cmsContent?.content?.email || 'boutique@milluces.com'}
+                                                {cmsContent?.content?.email || 'milluces@millucesiluminacion.com'}
                                             </p>
-                                            <p className="text-[10px] text-primary font-bold uppercase mt-1 tracking-widest">Respuesta en menos de 2h (L-V)</p>
+                                            <p className="text-[10px] text-primary font-bold uppercase mt-1 tracking-widest">Respuesta en menos de 24h (L-V)</p>
                                         </div>
                                     </div>
                                 </div>
@@ -108,11 +108,11 @@ export default function ContactPage() {
                                             <Phone className="w-6 h-6" />
                                         </div>
                                         <div>
-                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Línea Directa Boutique</h4>
+                                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 italic">Atencion Telefonicae</h4>
                                             <p className="text-lg font-black text-brand-carbon uppercase italic leading-tight font-outfit">
-                                                {cmsContent?.content?.phone || '+34 900 123 456'}
+                                                {cmsContent?.content?.phone || '+34 917 654 062'}
                                             </p>
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-widest leading-none">Lunes a Viernes: 10:00 - 19:00</p>
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-widest leading-none">Domingo a Viernes: 09:30 - 19:00</p>
                                         </div>
                                     </div>
                                 </div>
@@ -151,7 +151,7 @@ export default function ContactPage() {
                                         </div>
                                         <h3 className="text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4 font-outfit">Mensaje Enviado</h3>
                                         <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-10 leading-loose mx-auto max-w-xs">
-                                            Tu solicitud ha entrado en nuestra secuencia de prioridad. Un asesor boutique contactará contigo en breve.
+                                            Tu solicitud ha entrado en nuestra secuencia de prioridad. Nuestro personal se pondrá en contacto contigo en breve.
                                         </p>
                                         <button
                                             onClick={() => setSubmitted(false)}
@@ -163,32 +163,32 @@ export default function ContactPage() {
                                 ) : (
                                     <>
                                         <div className="mb-10">
-                                            <h3 className="text-2xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-2 font-outfit">Canal de Consulta Express</h3>
-                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Completa el formulario y activa la respuesta inmediata</p>
+                                            <h3 className="text-2xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-2 font-outfit">Escribenos </h3>
+                                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Completa el formulario y te responderemos lo antes posible</p>
                                         </div>
 
                                         <form onSubmit={handleSubmit} className="space-y-6">
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Etimología / Nombre</label>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nombre</label>
                                                     <input
                                                         type="text"
                                                         required
                                                         value={formData.name}
                                                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                                                         className="w-full h-14 bg-gray-50 border-none rounded-2xl px-6 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all font-outfit"
-                                                        placeholder="Juan Pérez"
+                                                        placeholder="Tu nombre..."
                                                     />
                                                 </div>
                                                 <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email de Contacto</label>
+                                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email</label>
                                                     <input
                                                         type="email"
                                                         required
                                                         value={formData.email}
                                                         onChange={e => setFormData({ ...formData, email: e.target.value })}
                                                         className="w-full h-14 bg-gray-50 border-none rounded-2xl px-6 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all font-outfit"
-                                                        placeholder="juan@ejemplo.com"
+                                                        placeholder="tucorreo@"
                                                     />
                                                 </div>
                                             </div>
@@ -206,14 +206,14 @@ export default function ContactPage() {
                                             </div>
 
                                             <div className="space-y-2">
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Explica tu Visión</label>
+                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Tu Mensaje</label>
                                                 <textarea
                                                     required
                                                     rows="6"
                                                     value={formData.message}
                                                     onChange={e => setFormData({ ...formData, message: e.target.value })}
                                                     className="w-full bg-gray-50 border-none rounded-[2rem] p-6 text-sm font-medium text-gray-600 focus:ring-4 focus:ring-primary/10 transition-all resize-none leading-relaxed font-outfit"
-                                                    placeholder="Cuéntanos más sobre tus necesidades de iluminación..."
+                                                    placeholder="Cuéntanos más sobre lo que necesidades..."
                                                 />
                                             </div>
 
@@ -235,7 +235,7 @@ export default function ContactPage() {
                                                 ) : (
                                                     <Send className="w-5 h-5 text-primary group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                                                 )}
-                                                <span className="text-lg">{loading ? 'Transmitiendo...' : 'Activar Contacto Maestro'}</span>
+                                                <span className="text-lg">{loading ? 'Transmitiendo...' : 'Enviar'}</span>
                                             </button>
                                         </form>
                                     </>
