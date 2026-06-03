@@ -49,7 +49,7 @@ export default function CookieBanner() {
                             <Shield className="w-6 h-6" />
                         </div>
                         <div>
-                            <h3 className="text-sm font-black uppercase tracking-widest italic leading-none">Tu Privacidad, <span className="text-primary">Nuestra Prioridad</span></h3>
+                            <h3 className="text-sm font-black uppercase tracking-widest italic leading-none text-gray-500">Tu Privacidad, <span className="text-primary">Nuestra Prioridad</span></h3>
                             <p className="text-[8px] font-bold uppercase tracking-[.3em] text-white/30 mt-2">Seguridad & Transparencia Boutique</p>
                         </div>
                     </div>

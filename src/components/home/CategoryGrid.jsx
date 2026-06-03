@@ -65,7 +65,7 @@ export function CategoryGrid() {
             <div className="container mx-auto px-6 max-w-[1600px]">
                 <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
                     <div className="max-w-3xl">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Selección Mil Luces</span>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Nuestras Categorías</span>
                         <h2 className="text-4xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Explora nuestro <span className="text-primary/60 font-black">Universo de Luz</span></h2>
                     </div>
                 </div>
