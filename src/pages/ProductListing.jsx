@@ -60,6 +60,7 @@ const ATTRIBUTE_ALIASES = {
     'Color': ['color', 'tono', 'luz', 'temperatura', 'cct'],
     'Voltaje': ['voltaje', 'voltage', 'tension', 'v'],
     'Protección IP': ['protección ip', 'proteccion ip', 'ip'],
+    'Medida': ['medida', 'medidas', 'dimensiones', 'tamaño'],
 };
 
 const normalizeFilterValue = (val) => {
@@ -109,6 +110,13 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
         if (power) specs.push({ icon: Zap, label: String(power).includes('W') ? power : `${power}W` });
         const ip = attrs['IP'] || attrs['Protección IP'] || attrs['Proteccion IP'];
         if (ip) specs.push({ icon: Droplets, label: String(ip).startsWith('IP') ? ip : `IP${ip}` });
+
+        const measurements = attrs['Medidas'] || attrs['Medida'] || attrs['Dimensiones'];
+        if (measurements) {
+            const label = Array.isArray(measurements) ? measurements[0] : measurements;
+            specs.push({ icon: BoxSelect, label: String(label).toLowerCase().includes('mm') || String(label).includes('x') ? label : `${label}mm` });
+        }
+
         const dimmable = attrs['Regulable'] || attrs['Dimmable'];
         if (dimmable && String(dimmable).toLowerCase() !== 'no') {
             specs.push({ icon: Sun, label: 'Regulable' });
