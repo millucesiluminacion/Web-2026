@@ -60,6 +60,13 @@ export default function CategoriesAdmin() {
         }
     }
 
+    const suggestSlug = () => {
+        const slug = formData.name.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, '-').replace(/[^\w-]/g, '');
+        setFormData({ ...formData, slug });
+    };
+
     const handleOpenModal = (category = null, type = 'main') => {
         setModalType(type);
         if (category) {
@@ -438,7 +445,10 @@ export default function CategoriesAdmin() {
                                     </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Slug (Ruta Semántica)</label>
+                                    <div className="flex items-center justify-between ml-1">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Slug (Ruta Semántica)</label>
+                                        <button type="button" onClick={suggestSlug} className="text-[8px] text-primary hover:underline font-black uppercase tracking-widest">Sugerir</button>
+                                    </div>
                                     <input
                                         type="text"
                                         required

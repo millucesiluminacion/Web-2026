@@ -278,7 +278,7 @@ export default function ProductListing() {
         try {
             setLoading(true);
             const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('*')).data || [];
-            const currentCat = allCats.find(c => c.slug === categoryQuery?.toLowerCase());
+            const currentCat = allCats.find(c => c.slug?.toLowerCase() === categoryQuery?.toLowerCase());
 
             // 1. Gather all category IDs in scope
             const gatherCatIds = (id, cats) => {
@@ -310,7 +310,7 @@ export default function ProductListing() {
                 }
 
                 if (subcategoryQuery) {
-                    const sub = allCats.find(c => c.slug === subcategoryQuery.toLowerCase());
+                    const sub = allCats.find(c => c.slug?.toLowerCase() === subcategoryQuery.toLowerCase());
                     if (sub) q = q.eq('category_id', sub.id);
                 }
 
