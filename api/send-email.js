@@ -34,19 +34,19 @@ export default async function handler(req, res) {
 
         // 2. Validate session OR System Key
         const authHeader = req.headers['authorization'];
-        const systemKey = req.headers['x-api-key'];
+        const systemKey = req.headers['x-api-key'] || req.headers['X-API-KEY'] || req.headers['x-api-token'];
         const expectedSystemKey = process.env.EMAIL_SYSTEM_KEY || process.env.VITE_EMAIL_SYSTEM_KEY;
         let isAuthorized = false;
 
-        console.log('[send-email] Auth Header present:', !!authHeader);
-        console.log('[send-email] System Key present:', !!systemKey);
+        console.log(`[send-email] Auth Check: hasHeader=${!!authHeader}, hasSystemKey=${!!systemKey}, expectedKeySet=${!!expectedSystemKey}`);
 
-        if (systemKey && expectedSystemKey && systemKey === expectedSystemKey) {
+        if (systemKey && expectedSystemKey && systemKey.trim() === expectedSystemKey.trim()) {
             console.log('[send-email] Authorized via System Key');
             isAuthorized = true;
         }
 
         if (!isAuthorized && authHeader) {
+            console.log('[send-email] Attempting Auth via Bearer Token...');
             const supabase = createClient(supabaseUrl, process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY);
             const token = authHeader.replace('Bearer ', '');
             try {

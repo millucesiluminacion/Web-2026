@@ -166,21 +166,72 @@ export default function Cart() {
 
         // Trigger Order Confirmation Email
         try {
-            await fetch('/api/send-email', {
+            const emailKey = import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026';
+
+            // 1. Send to Customer
+            const customerResp = await fetch('/api/send-email', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': emailKey
+                },
                 body: JSON.stringify({
                     to: formData.email,
                     templateKey: 'order_confirmation',
                     variables: {
                         name: formData.name,
                         order_id: order.id.slice(0, 8).toUpperCase(),
-                        site_name: 'Mil Luces Boutique'
+                        site_name: 'Mil Luces Iluminación'
                     }
                 })
             });
+            console.log('[Cart] Customer Email Status:', customerResp.status);
+            if (!customerResp.ok) {
+                const errData = await customerResp.json().catch(() => ({}));
+                console.error('[Cart] Customer Email Error:', errData);
+            }
+
+            // 2. Send to Admin (Notification of New Order)
+            // Fetch admin email from branding settings if possible, otherwise use fallback
+            let adminEmail = 'milluces@millucesiluminacion.com';
+            try {
+                const { data: brandData } = await supabase.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
+                if (brandData?.value?.contact_email) adminEmail = brandData.value.contact_email;
+            } catch (e) { }
+
+            const adminResp = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': emailKey
+                },
+                body: JSON.stringify({
+                    to: adminEmail,
+                    subject: `[NUEVO PEDIDO] #${order.id.slice(0, 8).toUpperCase()} - ${formData.name}`,
+                    html: `
+                        <div style="font-family: sans-serif; padding: 20px; color: #111827;">
+                            <h1 style="font-style: italic; text-transform: uppercase; font-weight: 900; border-bottom: 2px solid #111827; padding-bottom: 10px;">Nuevo Pedido Recibido</h1>
+                            <p style="font-size: 14px; margin-top: 20px;">Se ha registrado un nuevo pedido en la web:</p>
+                            <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; margin: 20px 0;">
+                                <p><b>ID Pedido:</b> #${order.id.slice(0, 8).toUpperCase()}</p>
+                                <p><b>Cliente:</b> ${formData.name}</p>
+                                <p><b>Email:</b> ${formData.email}</p>
+                                <p><b>Teléfono:</b> ${formData.phone || 'No facilitado'}</p>
+                                <p><b>Total:</b> ${effectiveTotalPrice.toFixed(2)}€</p>
+                                <p><b>Método:</b> ${formData.shippingMethod === 'pickup' ? 'Recogida en Tienda' : 'Envio a Domicilio'}</p>
+                            </div>
+                            <p style="font-size: 12px; color: #6b7280;">Puedes gestionar este pedido desde el panel de administración.</p>
+                        </div>
+                    `
+                })
+            });
+            console.log('[Cart] Admin Notification Status:', adminResp.status);
+            if (!adminResp.ok) {
+                const errData = await adminResp.json().catch(() => ({}));
+                console.error('[Cart] Admin Notification Error:', errData);
+            }
         } catch (emailErr) {
-            console.error('Error triggering order confirmation email:', emailErr);
+            console.error('Error triggering order confirmation emails:', emailErr);
         }
 
         return order;

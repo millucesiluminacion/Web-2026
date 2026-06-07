@@ -80,7 +80,7 @@ export default function RegisterPage({ isPro = false }) {
                     body: JSON.stringify({
                         to: email,
                         templateKey: 'welcome',
-                        variables: { name: fullName, site_name: 'Mil Luces Boutique' }
+                        variables: { name: fullName, site_name: 'Mil Luces Iluminación' }
                     })
                 });
             } catch (emailErr) {

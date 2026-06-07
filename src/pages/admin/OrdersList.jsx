@@ -364,9 +364,13 @@ export default function OrdersList() {
 
             // Trigger Status Update Email
             try {
-                await fetch('/api/send-email', {
+                const emailKey = import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026';
+                const resp = await fetch('/api/send-email', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': emailKey
+                    },
                     body: JSON.stringify({
                         to: currentOrder.customer_email,
                         templateKey: 'order_status_update',
@@ -378,6 +382,11 @@ export default function OrdersList() {
                         }
                     })
                 });
+                console.log('[OrdersList] Status Update Email:', resp.status);
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('[OrdersList] Email Error:', err);
+                }
             } catch (emailErr) {
                 console.error('Error triggering status update email:', emailErr);
             }
