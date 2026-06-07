@@ -190,7 +190,12 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                         <span className={`text-[10px] font-black uppercase mb-1 ${pricing.isPartnerPrice ? 'text-yellow-500' : pricing.isProPrice ? 'text-primary' : 'text-gray-300'}`}>
                             {pricing.isPartnerPrice ? '★ Socio VIP' : pricing.isProPrice ? '✦ Precio Pro' : 'Precio'}
                         </span>
-                        <span className="text-xl font-black italic text-brand-carbon">{pricing.finalPrice.toFixed(2)}€</span>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-xl font-black italic text-brand-carbon">{pricing.displayPrice.toFixed(2)}€</span>
+                            {pricing.showPriceWithoutVat && (
+                                <span className="text-[10px] font-black text-primary uppercase italic">+IVA</span>
+                            )}
+                        </div>
                     </div>
                     <button onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }); }}
                         className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 transition-all">

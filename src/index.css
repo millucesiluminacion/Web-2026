@@ -181,3 +181,87 @@
 .animate-slide-up {
   animation: slide-up 1s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
+
+@media print {
+  @page {
+    margin: 0;
+    size: A4 vertical;
+  }
+
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    margin: 0 !important;
+    padding: 0 !important;
+    visibility: hidden;
+    /* Hide EVERYTHING by default */
+  }
+
+  /* Show ONLY the invoice and its children */
+  #invoice-print,
+  #invoice-print * {
+    visibility: visible !important;
+  }
+
+  #invoice-print {
+    display: block !important;
+    visibility: visible !important;
+    position: relative !important;
+    width: 100% !important;
+    min-height: 26cm !important;
+    padding: 1.5cm !important;
+    margin: 0 !important;
+    background: white !important;
+  }
+
+  #invoice-print-footer {
+    position: absolute !important;
+    bottom: 1.5cm !important;
+    left: 1.5cm !important;
+    right: 1.5cm !important;
+    width: auto !important;
+  }
+
+
+  /* Force hide problematic elements that visibility might miss */
+  header,
+  footer,
+  nav,
+  aside,
+  button,
+  .modal-overlay button,
+  .print-hide {
+    display: none !important;
+  }
+
+  #invoice-print .grid {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 3rem !important;
+  }
+
+  #invoice-print table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+
+  #invoice-print th,
+  #invoice-print td {
+    border-bottom: 1px solid #eee !important;
+  }
+}
+
+/* Force show for blank page protection */
+body.is-printing #invoice-print {
+  display: block !important;
+  visibility: visible !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 9999999 !important;
+  background: white !important;
+  padding: 1.5cm !important;
+}

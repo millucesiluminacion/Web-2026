@@ -29,9 +29,7 @@ export function FooterBottom() {
                         ))}
                     </ul>
                 </div>
-                <div className="flex gap-4 xl:gap-8 items-center max-md:justify-center">
-                    <img src="/Logo-MilLuces.png" className="w-full max-w-[100px] max-h-[60px]" alt="MilLuces" loading="lazy" />
-                </div>
+
             </div>
 
             <div className="flex flex-col gap-4">
@@ -64,7 +62,7 @@ export function FooterBottom() {
                     ))}
                 </div>
                 <div className="text-xs text-gray-600">
-                    © {new Date().getFullYear()} All rights reserved | Mil Luces Iluminación S.L. - Prismica Clone
+                    © {new Date().getFullYear()} All rights reserved | Mil Luces Iluminación | IntegralPlas24 S.L.
                 </div>
             </div>
         </section>

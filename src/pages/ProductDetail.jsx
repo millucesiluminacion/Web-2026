@@ -4,7 +4,7 @@ import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { calculateProductPrice } from '../lib/pricingUtils';
+import { calculateProductPrice, IVA_RATE } from '../lib/pricingUtils';
 import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
 import { generateProductPDF } from '../lib/pdfGenerator';
 
@@ -417,8 +417,8 @@ export default function ProductDetail() {
 
         addToCart({
             ...productToAdd,
-            price: finalPrice, // Use the already computed best price
-            original_price: originalPrice, // Keep original for reference in cart
+            price: rawFinalPrice, // Use the total price with VAT (consistent with DB)
+            original_price: rawOriginalPrice,
             // Include selected options as extra info for the cart
             selectedOptions: { ...selectedAttributes, measure: selectedMeasurement?.measure },
             cartLabel: selectedLabel || null
@@ -448,17 +448,23 @@ export default function ProductDetail() {
     const { profile } = useAuth();
 
     // Compute prices using centralized utility
+    const pricing = calculateProductPrice(displayProduct || parentProduct, profile);
     const {
         originalPrice: baseOriginalPrice,
         finalPrice: baseFinalPrice,
         isShowingProDiscount,
         isPartnerPrice,
         displayDiscountPercent,
-        hasAnyDiscount
-    } = calculateProductPrice(displayProduct || parentProduct, profile);
+        hasAnyDiscount,
+        showPriceWithoutVat
+    } = pricing;
 
-    const finalPrice = selectedMeasurement ? selectedMeasurement.price : baseFinalPrice;
-    const originalPrice = selectedMeasurement ? selectedMeasurement.price : baseOriginalPrice;
+    const rawFinalPrice = selectedMeasurement ? selectedMeasurement.price : baseFinalPrice;
+    const rawOriginalPrice = selectedMeasurement ? selectedMeasurement.price : baseOriginalPrice;
+
+    // Adjust for B2B display if needed
+    const finalPrice = showPriceWithoutVat ? (rawFinalPrice / (1 + IVA_RATE)) : rawFinalPrice;
+    const originalPrice = showPriceWithoutVat ? (rawOriginalPrice / (1 + IVA_RATE)) : rawOriginalPrice;
 
     // Gallery images: if product has extra_images array, use it; otherwise single image
     const productImages = displayProduct?.extra_images && Array.isArray(displayProduct.extra_images) && displayProduct.extra_images.length > 0
@@ -614,7 +620,9 @@ export default function ProductDetail() {
                                             {finalPrice.toFixed(2)}
                                         </span>
                                         <span className={`text-2xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>€</span>
-                                        <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">IVA Incluido</span>
+                                        <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">
+                                            {showPriceWithoutVat ? '+ IVA' : 'IVA Incluido'}
+                                        </span>
                                     </div>
                                 </div>
                             ) : (
@@ -623,7 +631,9 @@ export default function ProductDetail() {
                                         {displayProduct ? originalPrice.toFixed(2) : '---'}
                                     </span>
                                     <span className="text-2xl font-black text-brand-carbon italic tracking-tighter">€</span>
-                                    <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">IVA Incluido</span>
+                                    <span className="ml-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest italic">
+                                        {showPriceWithoutVat ? '+ IVA' : 'IVA Incluido'}
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -1094,16 +1104,24 @@ export default function ProductDetail() {
                                             </div>
                                             <div className="p-4 border-t border-gray-50">
                                                 <p className="text-[10px] font-black text-brand-carbon uppercase italic line-clamp-2 mb-2 tracking-tight">{rp.name}</p>
-                                                <div className="flex items-baseline gap-2">
-                                                    {rpHasDiscount ? (
-                                                        <>
-                                                            <span className="text-sm font-black text-red-600 italic">{parseFloat(rp.discount_price).toFixed(2)}€</span>
-                                                            <span className="text-[10px] text-gray-300 line-through">{parseFloat(rp.price).toFixed(2)}€</span>
-                                                        </>
-                                                    ) : (
-                                                        <span className="text-sm font-black text-brand-carbon italic">{parseFloat(rp.price).toFixed(2)}€</span>
-                                                    )}
-                                                </div>
+                                                {(() => {
+                                                    const pricing = calculateProductPrice(rp, profile);
+                                                    return (
+                                                        <div className="flex items-baseline gap-2">
+                                                            <span className={`text-sm font-black italic ${pricing.hasAnyDiscount ? 'text-red-600' : 'text-brand-carbon'}`}>
+                                                                {pricing.displayPrice.toFixed(2)}€
+                                                            </span>
+                                                            {pricing.hasAnyDiscount && (
+                                                                <span className="text-[10px] text-gray-300 line-through">
+                                                                    {(pricing.showPriceWithoutVat ? pricing.originalPrice / (1 + IVA_RATE) : pricing.originalPrice).toFixed(2)}€
+                                                                </span>
+                                                            )}
+                                                            {pricing.showPriceWithoutVat && (
+                                                                <span className="text-[7px] font-black text-primary uppercase italic">+IVA</span>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </div>
                                         </div>
                                     </Link>

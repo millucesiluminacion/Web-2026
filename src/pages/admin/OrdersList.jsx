@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 export default function OrdersList() {
@@ -229,13 +229,11 @@ export default function OrdersList() {
     }
 
     const printOrder = () => {
-        const printContent = document.getElementById('printable-order');
-        if (!printContent) return;
-        const originalContent = document.body.innerHTML;
-        document.body.innerHTML = printContent.innerHTML;
+        document.body.classList.add('is-printing');
         window.print();
-        document.body.innerHTML = originalContent;
-        window.location.reload(); // Recargar para restaurar los eventos de React (alternativa rápida)
+        setTimeout(() => {
+            document.body.classList.remove('is-printing');
+        }, 100);
     };
 
     const exportToCSV = () => {
@@ -376,7 +374,7 @@ export default function OrdersList() {
                             name: currentOrder.customer_name || 'Cliente',
                             order_id: id.slice(0, 8).toUpperCase(),
                             status: newStatus,
-                            site_name: 'Mil Luces Boutique'
+                            site_name: 'Mil Luces Iluminación'
                         }
                     })
                 });
@@ -564,6 +562,7 @@ export default function OrdersList() {
                                 <th className="p-7">Cliente</th>
                                 <th className="p-7">Total</th>
                                 <th className="p-7">Estado</th>
+                                <th className="p-7">Tipo</th>
                                 <th className="p-7">Pago</th>
                                 <th className="p-7 text-right">Acciones</th>
                             </tr>
@@ -620,19 +619,19 @@ export default function OrdersList() {
                                         </select>
                                     </td>
                                     <td className="p-7">
-                                        <div className="flex flex-col gap-1.5">
-                                            <div className="flex items-center gap-2">
-                                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                                                <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{order.payment_method}</span>
-                                            </div>
-                                            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg w-fit ${order.shipping_address === 'STORE_PICKUP' ? 'bg-amber-50 text-amber-600 border border-amber-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
-                                                }`}>
-                                                {order.shipping_address === 'STORE_PICKUP' ? (
-                                                    <><Plus className="w-3 h-3 hover:rotate-0" /> <span className="text-[8px] font-black uppercase">Recogida</span></>
-                                                ) : (
-                                                    <><Truck className="w-3 h-3" /> <span className="text-[8px] font-black uppercase">Envío</span></>
-                                                )}
-                                            </div>
+                                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg w-fit ${order.shipping_method === 'pickup' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                            }`}>
+                                            {order.shipping_method === 'pickup' ? (
+                                                <><Package className="w-3 h-3 hover:rotate-0" /> <span className="text-[8px] font-black uppercase">Recogida</span></>
+                                            ) : (
+                                                <><Truck className="w-3 h-3" /> <span className="text-[8px] font-black uppercase">Envio</span></>
+                                            )}
+                                        </div>
+                                    </td>
+                                    <td className="p-7">
+                                        <div className="flex items-center gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+                                            <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{order.payment_method}</span>
                                         </div>
                                     </td>
                                     <td className="p-7 text-right">
@@ -764,6 +763,20 @@ export default function OrdersList() {
                         </div>
 
                         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar" id="printable-order">
+                            {/* Print-only Header */}
+                            <div className="hidden print:block mb-8 border-b-2 border-brand-carbon pb-6">
+                                <div className="flex justify-between items-end">
+                                    <div>
+                                        <h1 className="text-3xl font-black uppercase italic leading-none mb-2">Mil Luces <span className="text-gray-400">Iluminación</span></h1>
+                                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Factura de Pedido / Albarán de Entrega</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-brand-carbon uppercase italic tabular-nums">#{selectedOrder.id.toUpperCase()}</p>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleString()}</p>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
                                 {/* Columna Izquierda: Información del Cliente y Envío */}
                                 <div className="lg:col-span-1 space-y-12">
@@ -798,10 +811,20 @@ export default function OrdersList() {
                                             <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit">Dirección Boutique</h3>
                                         </div>
                                         <div className="bg-gray-50/50 p-8 rounded-[2rem] border border-gray-100 font-outfit space-y-4">
-                                            <p className="text-xs font-bold text-gray-600 leading-relaxed uppercase tracking-wider">
-                                                {selectedOrder.shipping_address}<br />
-                                                <span className="text-brand-carbon font-black">{selectedOrder.shipping_zip} {selectedOrder.shipping_city}</span>
-                                            </p>
+                                            {selectedOrder.shipping_method === 'pickup' ? (
+                                                <div className="flex items-center gap-3 p-4 bg-emerald-50 rounded-2xl border border-emerald-100 mb-2">
+                                                    <Package className="w-5 h-5 text-emerald-500" />
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-emerald-600 uppercase italic">Recogida en Tienda</p>
+                                                        <p className="text-[9px] font-bold text-emerald-400 uppercase tracking-widest leading-none">El cliente vendrá al local</p>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <p className="text-xs font-bold text-gray-600 leading-relaxed uppercase tracking-wider">
+                                                    {selectedOrder.shipping_address}<br />
+                                                    <span className="text-brand-carbon font-black">{selectedOrder.shipping_zip} {selectedOrder.shipping_city}</span>
+                                                </p>
+                                            )}
                                             {selectedOrder.notes && (
                                                 <div className="pt-4 border-t border-gray-200/50">
                                                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notas del Cliente</p>
@@ -1128,6 +1151,115 @@ export default function OrdersList() {
                     </div>
                 </div>
             )}
+
+            {/* ── Professional Print Template (Hidden on Screen) ──────────────── */}
+            {selectedOrder && (
+                <div id="invoice-print" className="hidden print:block font-outfit text-brand-carbon bg-white">
+                    {/* Header: Logo & Branding */}
+                    <div className="flex justify-between items-start border-b-4 border-brand-carbon pb-8 mb-12">
+                        <div>
+                            <h1 className="text-4xl font-black uppercase italic leading-none mb-2">
+                                Mil Luces <span className="text-gray-300">Iluminación</span>
+                            </h1>
+                            <p className="text-[11px] font-black uppercase tracking-[.4em] text-primary italic">Iluminación Lineal & LED Profesional</p>
+                        </div>
+                        <div className="text-right">
+                            <h2 className="text-xl font-black uppercase italic mb-1">Orden de Pedido</h2>
+                            <p className="text-xs font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+                        </div>
+                    </div>
+
+                    {/* Customer & Shipping Grid */}
+                    <div className="grid grid-cols-2 gap-12 mb-16">
+                        <section className="space-y-4">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Información del Cliente</h3>
+                            <div className="space-y-1">
+                                <p className="text-sm font-black uppercase italic">{selectedOrder.customer_name}</p>
+                                <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_email}</p>
+                                <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_phone || 'Teléfono no facilitado'}</p>
+                            </div>
+                        </section>
+                        <section className="space-y-4">
+                            <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Método de Entrega / Envío</h3>
+                            <div className="space-y-1">
+                                {selectedOrder.shipping_method === 'pickup' ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                        <p className="text-sm font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="text-sm font-black uppercase italic">Entrega a Domicilio</p>
+                                        <p className="text-[11px] font-medium leading-relaxed">
+                                            {selectedOrder.shipping_address}<br />
+                                            {selectedOrder.shipping_zip} {selectedOrder.shipping_city}
+                                        </p>
+                                    </>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+
+                    {/* Items Table */}
+                    <div className="mb-16">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b-2 border-brand-carbon uppercase text-[10px] font-black tracking-widest text-gray-400">
+                                    <th className="py-4 pr-4">Concepto</th>
+                                    <th className="py-4 px-4 text-center">Cant.</th>
+                                    <th className="py-4 px-4 text-right">Precio Ud.</th>
+                                    <th className="py-4 pl-4 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {orderItems.map((item, idx) => (
+                                    <tr key={idx} className="group italic">
+                                        <td className="py-6 pr-4">
+                                            <p className="text-[11px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
+                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">REF: {item.product_id?.slice(-6).toUpperCase()}</p>
+                                        </td>
+                                        <td className="py-6 px-4 text-center font-black text-sm">x{item.quantity}</td>
+                                        <td className="py-6 px-4 text-right text-xs font-bold">{item.unit_price.toFixed(2)}€</td>
+                                        <td className="py-6 pl-4 text-right text-sm font-black italic">{(item.unit_price * item.quantity).toFixed(2)}€</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Totals Summary */}
+                    <div className="flex justify-end mb-12">
+                        <div className="w-full max-w-[280px] space-y-3 bg-gray-50 p-8 rounded-3xl border border-gray-100">
+                            <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                <span>Base Imponible</span>
+                                <span>{(selectedOrder.total / 1.21).toFixed(2)}€</span>
+                            </div>
+                            <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                <span>Impuestos (21%)</span>
+                                <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)}€</span>
+                            </div>
+                            <div className="pt-4 border-t border-gray-200 flex justify-between items-end">
+                                <span className="text-xs font-black uppercase italic text-brand-carbon">Total Factura</span>
+                                <div className="text-right leading-none">
+                                    <span className="text-3xl font-black italic">{selectedOrder.total.toFixed(2)}</span>
+                                    <span className="text-lg font-black ml-1">€</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div id="invoice-print-footer" className="border-t border-gray-100 pt-6 text-center space-y-2">
+                        <p className="text-[10px] font-black uppercase tracking-[.4em] text-gray-300 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
+                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
+                            Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
+                            milluces@millucesiluminacion.com · +34 917 654 062
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

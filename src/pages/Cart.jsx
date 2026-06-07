@@ -12,6 +12,7 @@ import {
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import StripePaymentForm from '../components/commerce/StripePaymentForm';
+import { IVA_RATE } from '../lib/pricingUtils';
 
 const INPUT_CLASS = "w-full bg-gray-50/80 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all placeholder:font-normal placeholder:text-gray-300";
 const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1.5 block ml-1";
@@ -44,12 +45,18 @@ export default function Cart() {
         zip: '',
         country: 'España',
         notes: '',
-        paymentMethod: ''
+        paymentMethod: '',
+        shippingMethod: null // 'delivery' or 'pickup'
     });
 
-    const IVA_RATE = 0.21;
-    const baseImponible = totalPrice / (1 + IVA_RATE);
-    const iva = totalPrice - baseImponible;
+    const isB2B = profile?.user_type === 'profesional' || !!profile?.is_partner;
+
+    // Explicit shipping cost calculation based on method choice
+    const effectiveShippingCost = formData.shippingMethod === 'pickup' ? 0 : (formData.shippingMethod === 'delivery' ? shippingCost : 0);
+
+    const effectiveTotalPrice = subtotal + effectiveShippingCost;
+    const baseImponible = effectiveTotalPrice / (1 + IVA_RATE);
+    const iva = effectiveTotalPrice - baseImponible;
 
     // Verificar si venimos de un pago exitoso
     useEffect(() => {
@@ -136,8 +143,9 @@ export default function Cart() {
                 shipping_city: formData.city,
                 shipping_zip: formData.zip,
                 notes: formData.notes,
-                total: totalPrice,
+                total: effectiveTotalPrice,
                 payment_method: formData.paymentMethod,
+                shipping_method: formData.shippingMethod || 'delivery',
                 status: 'PENDING',
                 user_id: user?.id || null,
             }])
@@ -364,7 +372,10 @@ export default function Cart() {
                                                         )}
                                                     </div>
                                                     <div className="text-right min-w-[70px]">
-                                                        <p className="text-sm font-black text-brand-carbon italic tracking-tighter">{(item.price * item.quantity).toFixed(2)} €</p>
+                                                        <p className="text-sm font-black text-brand-carbon italic tracking-tighter">
+                                                            {isB2B ? ((item.price / (1 + IVA_RATE)) * item.quantity).toFixed(2) : (item.price * item.quantity).toFixed(2)} €
+                                                        </p>
+                                                        {isB2B && <span className="text-[8px] font-black text-primary uppercase italic">+IVA</span>}
                                                     </div>
                                                     {item.isMandatory ? (
                                                         <div className="w-8 h-8 flex items-center justify-center text-amber-200 cursor-not-allowed" title="Accesorio obligatorio">
@@ -392,45 +403,97 @@ export default function Cart() {
                                 )}
                             </div>
 
-                            {/* 2: Datos de envío */}
+                            {/* 2: Método de Entrega */}
                             <div className="bg-white rounded-[2.5rem] shadow-luxury border border-gray-100/50 p-8 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-50/60 blur-[80px] rounded-full pointer-events-none"></div>
+                                <div className="flex items-center gap-5 mb-8 relative z-10">
+                                    <div className="w-11 h-11 bg-emerald-50 rounded-2xl flex items-center justify-center border border-emerald-100">
+                                        <Truck className="w-5 h-5 text-emerald-500" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-sm font-black text-brand-carbon uppercase italic leading-none mb-0.5">Método de Entrega</h2>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">¿Cómo prefieres recibir tu pedido?</p>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
+                                    <label className={`flex flex-col p-5 rounded-2xl cursor-pointer transition-all border-2 ${formData.shippingMethod === 'delivery' ? 'border-primary bg-primary/5' : 'border-gray-50 hover:border-gray-200 bg-gray-50/30'}`}>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.shippingMethod === 'delivery' ? 'border-primary' : 'border-gray-300'}`}>
+                                                {formData.shippingMethod === 'delivery' && <div className="w-2 h-2 bg-primary rounded-full"></div>}
+                                            </div>
+                                            <input type="radio" name="shippingMethod" value="delivery" checked={formData.shippingMethod === 'delivery'} onChange={handleChange} className="hidden" />
+                                            <span className="text-xs font-black text-brand-carbon uppercase italic leading-none">Envío a Domicilio</span>
+                                        </div>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-7">
+                                            {shippingCost === 0 ? 'GRATIS' : `${shippingCost.toFixed(2)}€`} · {currentShipping.delivery_time}
+                                        </p>
+                                    </label>
+
+                                    <label className={`flex flex-col p-5 rounded-2xl cursor-pointer transition-all border-2 ${formData.shippingMethod === 'pickup' ? 'border-primary bg-primary/5' : 'border-gray-50 hover:border-gray-200 bg-gray-50/30'}`}>
+                                        <div className="flex items-center gap-3 mb-2">
+                                            <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${formData.shippingMethod === 'pickup' ? 'border-primary' : 'border-gray-300'}`}>
+                                                {formData.shippingMethod === 'pickup' && <div className="w-2 h-2 bg-primary rounded-full"></div>}
+                                            </div>
+                                            <input type="radio" name="shippingMethod" value="pickup" checked={formData.shippingMethod === 'pickup'} onChange={handleChange} className="hidden" />
+                                            <span className="text-xs font-black text-brand-carbon uppercase italic leading-none">Recogida en Tienda</span>
+                                        </div>
+                                        <p className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest pl-7 italic">
+                                            GRATIS · Recogida en tienda en 2 horas
+                                        </p>
+                                    </label>
+                                </div>
+                            </div>
+
+                            {/* 3: Datos de envío / Facturación */}
+                            <div className={`bg-white rounded-[2.5rem] shadow-luxury border border-gray-100/50 p-8 relative overflow-hidden transition-all duration-500 ${!formData.shippingMethod ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                                 <div className="absolute top-0 right-0 w-40 h-40 bg-primary/5 blur-[80px] rounded-full pointer-events-none"></div>
                                 <div className="flex items-center gap-5 mb-8 relative z-10">
                                     <div className="w-11 h-11 bg-primary/10 rounded-2xl flex items-center justify-center border border-primary/10">
-                                        <Truck className="w-5 h-5 text-primary" />
+                                        <Package className="w-5 h-5 text-primary" />
                                     </div>
                                     <div>
-                                        <h2 className="text-sm font-black text-brand-carbon uppercase italic leading-none mb-0.5">Destino de Envío</h2>
-                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">¿A dónde enviamos tu selección?</p>
+                                        <h2 className="text-sm font-black text-brand-carbon uppercase italic leading-none mb-0.5">
+                                            {formData.shippingMethod === 'pickup' ? 'Datos del Cliente' : 'Destino de Envío'}
+                                        </h2>
+                                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                            {formData.shippingMethod === 'pickup' ? 'Identifícate para la recogida' : '¿A dónde enviamos tu selección?'}
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 relative z-10">
                                     <div><label className={LABEL_CLASS}>Nombre Completo *</label><input required name="name" value={formData.name} onChange={handleChange} type="text" placeholder="Nombre & Apellidos" className={INPUT_CLASS} /></div>
                                     <div><label className={LABEL_CLASS}>Email de Contacto *</label><input required name="email" value={formData.email} onChange={handleChange} type="email" placeholder="hola@milluces.com" className={INPUT_CLASS} /></div>
                                     <div><label className={LABEL_CLASS}>Teléfono *</label><input required name="phone" value={formData.phone} onChange={handleChange} type="tel" placeholder="+34 600 000 000" className={INPUT_CLASS} /></div>
-                                    <div><label className={LABEL_CLASS}>País *</label>
-                                        <select
-                                            name="country"
-                                            value={formData.country}
-                                            onChange={handleChange}
-                                            className={INPUT_CLASS}
-                                        >
-                                            <option value="España">España</option>
-                                            <option value="Portugal">Portugal</option>
-                                            <option value="Francia">Francia</option>
-                                            <option value="Alemania">Alemania</option>
-                                            <option value="Internacional">Otro (Internacional)</option>
-                                        </select>
-                                    </div>
-                                    <div><label className={LABEL_CLASS}>Código Postal *</label><input required name="zip" value={formData.zip} onChange={handleChange} type="text" placeholder="28001" className={INPUT_CLASS} /></div>
-                                    <div className="md:col-span-2"><label className={LABEL_CLASS}>Dirección de Entrega *</label><input required name="address" value={formData.address} onChange={handleChange} type="text" placeholder="Calle, número, piso, puerta..." className={INPUT_CLASS} /></div>
-                                    <div><label className={LABEL_CLASS}>Ciudad *</label><input required name="city" value={formData.city} onChange={handleChange} type="text" placeholder="Madrid" className={INPUT_CLASS} /></div>
-                                    <div><label className={LABEL_CLASS}>Notas del pedido</label><input name="notes" value={formData.notes} onChange={handleChange} type="text" placeholder="Instrucciones especiales..." className={INPUT_CLASS} /></div>
+
+                                    {formData.shippingMethod === 'delivery' && (
+                                        <>
+                                            <div><label className={LABEL_CLASS}>País *</label>
+                                                <select
+                                                    name="country"
+                                                    value={formData.country}
+                                                    onChange={handleChange}
+                                                    className={INPUT_CLASS}
+                                                >
+                                                    <option value="España">España</option>
+                                                    <option value="Portugal">Portugal</option>
+                                                    <option value="Francia">Francia</option>
+                                                    <option value="Alemania">Alemania</option>
+                                                    <option value="Internacional">Otro (Internacional)</option>
+                                                </select>
+                                            </div>
+                                            <div><label className={LABEL_CLASS}>Código Postal *</label><input required name="zip" value={formData.zip} onChange={handleChange} type="text" placeholder="28001" className={INPUT_CLASS} /></div>
+                                            <div className="md:col-span-2"><label className={LABEL_CLASS}>Dirección de Entrega *</label><input required name="address" value={formData.address} onChange={handleChange} type="text" placeholder="Calle, número, piso, puerta..." className={INPUT_CLASS} /></div>
+                                            <div><label className={LABEL_CLASS}>Ciudad *</label><input required name="city" value={formData.city} onChange={handleChange} type="text" placeholder="Madrid" className={INPUT_CLASS} /></div>
+                                        </>
+                                    )}
+
+                                    <div className="md:col-span-2"><label className={LABEL_CLASS}>Notas del pedido</label><input name="notes" value={formData.notes} onChange={handleChange} type="text" placeholder="Instrucciones especiales..." className={INPUT_CLASS} /></div>
                                 </div>
                             </div>
 
-                            {/* 3: Método de pago */}
-                            <div className="bg-white rounded-[2.5rem] shadow-luxury border border-gray-100/50 p-8 relative overflow-hidden">
+                            {/* 4: Método de pago */}
+                            <div className={`bg-white rounded-[2.5rem] shadow-luxury border border-gray-100/50 p-8 relative overflow-hidden transition-all duration-500 ${!formData.shippingMethod ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
                                 <div className="absolute top-0 left-0 w-40 h-40 bg-indigo-50/60 blur-[80px] rounded-full pointer-events-none"></div>
                                 <div className="flex items-center gap-5 mb-8 relative z-10">
                                     <div className="w-11 h-11 bg-indigo-50 rounded-2xl flex items-center justify-center border border-indigo-100">
@@ -475,7 +538,7 @@ export default function Cart() {
                                             <div className="pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
                                                 <Elements stripe={stripePromise}>
                                                     <StripePaymentForm
-                                                        amount={totalPrice}
+                                                        amount={effectiveTotalPrice}
                                                         prePaymentHook={async () => {
                                                             try {
                                                                 const order = await saveOrder();
@@ -509,7 +572,7 @@ export default function Cart() {
                                 <div className="absolute top-0 right-0 w-40 h-40 bg-primary/15 blur-[80px] rounded-full"></div>
                                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-primary/10 blur-[60px] rounded-full"></div>
                                 <h3 className="text-lg font-black uppercase italic tracking-tighter mb-6 relative z-10">
-                                    Resumen de <br /><span className="text-gray-500">Compra</span>
+                                    <span className="text-white">Resumen de</span> <br /><span className="text-gray-500">Compra</span>
                                 </h3>
                                 <div className="space-y-3 mb-6 max-h-[200px] overflow-y-auto pr-1 relative z-10">
                                     {cart.map(item => (
@@ -521,51 +584,52 @@ export default function Cart() {
                                                 <p className="text-[9px] font-black text-white/70 uppercase italic leading-tight line-clamp-1">{item.name}</p>
                                                 <p className="text-[8px] font-bold text-white/30 uppercase tracking-widest">×{item.quantity}</p>
                                             </div>
-                                            <p className="text-xs font-black text-white italic flex-shrink-0">{(item.price * item.quantity).toFixed(2)} €</p>
+                                            <p className="text-xs font-black text-white italic flex-shrink-0">
+                                                {isB2B ? ((item.price / (1 + IVA_RATE)) * item.quantity).toFixed(2) : (item.price * item.quantity).toFixed(2)} €
+                                            </p>
                                         </div>
                                     ))}
                                 </div>
                                 <div className="space-y-3 border-t border-white/10 pt-5 mb-5 relative z-10">
-                                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
-                                        <span className="text-gray-500">P.V.P. Original</span>
-                                        <span className={totalSavings > 0 ? 'line-through text-gray-600' : ''}>{totalOriginal.toFixed(2)} €</span>
-                                    </div>
                                     {totalSavings > 0 && (
                                         <div className="flex justify-between text-[10px] font-black uppercase tracking-[.2em] text-primary italic">
-                                            <span>Ahorro Exclusivo</span><span>−{totalSavings.toFixed(2)} €</span>
+                                            <span>Ahorro Exclusivo</span>
+                                            <span>−{isB2B ? (totalSavings / (1 + IVA_RATE)).toFixed(2) : totalSavings.toFixed(2)} €</span>
+                                        </div>
+                                    )}
+                                    {!formData.shippingMethod && (
+                                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
+                                            <span className="text-gray-500">Envío</span>
+                                            <span className="text-primary font-black italic uppercase">A elegir</span>
+                                        </div>
+                                    )}
+                                    {formData.shippingMethod && (
+                                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
+                                            <span className="text-gray-500">Envío</span>
+                                            <span className={`${effectiveShippingCost === 0 ? 'text-primary' : 'text-white'} font-black italic uppercase`}>
+                                                {effectiveShippingCost === 0 ? 'GRATIS' : `${(isB2B ? effectiveShippingCost / (1 + IVA_RATE) : effectiveShippingCost).toFixed(2)} €`}
+                                            </span>
                                         </div>
                                     )}
                                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
-                                        <span className="text-gray-500">Envío</span>
-                                        <span className={`${shippingCost === 0 ? 'text-primary' : 'text-white'} font-black italic`}>
-                                            {shippingCost === 0 ? 'GRATIS' : `${shippingCost.toFixed(2)} €`}
-                                        </span>
+                                        <span className="text-gray-500">Base Imponible</span>
+                                        <span className="text-white font-bold">{baseImponible.toFixed(2)} €</span>
                                     </div>
-                                    {shippingCost > 0 && currentShipping.free_shipping_threshold > 0 && (
-                                        <div className="bg-white/[0.03] border border-white/10 px-5 py-4 rounded-[1.5rem] mt-6 group hover:bg-white/[0.05] transition-all duration-500">
-                                            <div className="flex items-start gap-4">
-                                                <div className="w-8 h-8 rounded-xl bg-white/5 flex items-center justify-center border border-white/5 shrink-0 group-hover:scale-110 transition-transform duration-500">
-                                                    <Truck className="w-4 h-4 text-white/40" />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[9px] font-bold text-white/40 uppercase tracking-[.2em] mb-1">Ahorrate los gastos de envío!</p>
-                                                    <p className="text-[10px] font-black text-white uppercase italic leading-tight tracking-tight">
-                                                        Añade <span className="text-white decoration-primary/50 underline underline-offset-4">{(currentShipping.free_shipping_threshold - subtotal).toFixed(2)} €</span> y te lo enviamos gratis <br />
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
                                     <div className="flex justify-between text-[10px] font-bold uppercase tracking-[.2em]">
-                                        <span className="text-gray-500">IVA (21%)</span><span>{iva.toFixed(2)} €</span>
+                                        <span className="text-gray-500">IVA (21%)</span>
+                                        <span className="text-white font-bold">{iva.toFixed(2)} €</span>
                                     </div>
                                 </div>
                                 <div className="border-t border-white/10 pt-5 mb-7 relative z-10">
                                     <div className="flex justify-between items-end">
-                                        <span className="text-[9px] font-black uppercase tracking-[.3em] text-gray-500">Precio Total</span>
+                                        <span className="text-[9px] font-black uppercase tracking-[.3em] text-gray-500">
+                                            Total <span className="text-[7px] opacity-30 select-none">(IVA Incl.)</span>
+                                        </span>
                                         <div className="text-right">
-                                            <span className="text-4xl font-black italic tracking-tighter">{totalPrice.toFixed(2)}</span>
-                                            <span className="text-lg font-black italic ml-1">€</span>
+                                            <span className="text-4xl font-black italic tracking-tighter text-white">
+                                                {effectiveTotalPrice.toFixed(2)}
+                                            </span>
+                                            <span className="text-lg font-black italic ml-1 text-white">€</span>
                                         </div>
                                     </div>
                                 </div>
@@ -573,7 +637,7 @@ export default function Cart() {
                                     <button
                                         form="aio-form"
                                         type="submit"
-                                        disabled={loading || paymentloading || activeMethodsList.length === 0 || !formData.paymentMethod}
+                                        disabled={loading || paymentloading || activeMethodsList.length === 0 || !formData.paymentMethod || !formData.shippingMethod}
                                         className="w-full bg-white text-brand-carbon py-4 rounded-2xl font-black uppercase italic text-[11px] hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group relative z-10 mb-4"
                                     >
                                         {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : (

@@ -1,10 +1,15 @@
 import { X, ShoppingBag, Trash2, ArrowRight, Truck, Lock } from 'lucide-react';
 import { useCart } from '../../context/CartContext';
+import { useAuth } from '../../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
+import { IVA_RATE } from '../../lib/pricingUtils';
 
 export function MiniCart() {
     const { cart, removeFromCart, updateQuantity, subtotal, isSideCartOpen, setIsSideCartOpen, currentShipping, shippingCost, totalPrice } = useCart();
+    const { profile } = useAuth();
     const navigate = useNavigate();
+
+    const isB2B = profile?.user_type === 'profesional' || !!profile?.is_partner;
 
     if (!isSideCartOpen) return null;
 
@@ -90,7 +95,12 @@ export function MiniCart() {
                                                 </>
                                             )}
                                         </div>
-                                        <p className="text-sm font-black italic text-brand-carbon">{(item.price * item.quantity).toFixed(2)}€</p>
+                                        <div className="text-right flex flex-col items-end">
+                                            <p className="text-sm font-black italic text-brand-carbon">
+                                                {isB2B ? ((item.price / (1 + IVA_RATE)) * item.quantity).toFixed(2) : (item.price * item.quantity).toFixed(2)}€
+                                            </p>
+                                            {isB2B && <span className="text-[8px] font-black text-primary uppercase italic">+IVA</span>}
+                                        </div>
                                     </div>
                                 </div>
                                 {item.isMandatory ? (
@@ -114,23 +124,18 @@ export function MiniCart() {
                 {cart.length > 0 && (
                     <div className="p-8 bg-gray-50 border-t border-gray-200 space-y-6 shadow-[0_-20px_40px_rgba(0,0,0,0.02)]">
                         <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Subtotal Boutitque</span>
-                                <span className="text-sm font-black text-brand-carbon">{subtotal.toFixed(2)}€</span>
+                            <div className="flex justify-between items-center text-gray-500 italic">
+                                <span className="text-[10px] font-black uppercase tracking-widest">Subtotal boutique</span>
+                                <span className="text-sm font-bold">{subtotal.toFixed(2)}€</span>
                             </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                                    Gastos de Envío
-                                    <Truck className="w-3 h-3 text-primary" />
-                                </span>
-                                <span className={`text-sm font-black ${shippingCost === 0 ? 'text-green-600' : 'text-brand-carbon'}`}>
-                                    {shippingCost === 0 ? 'GRATIS' : `${shippingCost.toFixed(2)}€`}
-                                </span>
+                            <div className="flex justify-between items-center text-primary italic">
+                                <span className="text-[10px] font-black uppercase tracking-widest">Envío</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest">A elegir en carrito</span>
                             </div>
                             <div className="h-px bg-gray-200 my-2"></div>
                             <div className="flex justify-between items-center">
-                                <span className="text-sm font-black text-brand-carbon uppercase italic leading-none">Total Inversión</span>
-                                <span className="text-2xl font-black text-primary italic leading-none">{totalPrice.toFixed(2)}€</span>
+                                <span className="text-sm font-black text-brand-carbon uppercase italic leading-none">Total del Pedido</span>
+                                <span className="text-2xl font-black text-primary italic leading-none">{subtotal.toFixed(2)}€</span>
                             </div>
                         </div>
 

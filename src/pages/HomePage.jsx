@@ -8,9 +8,12 @@ import { WhyChooseUsSection } from '../components/home/WhyChooseUsSection';
 import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
 import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
+import { calculateProductPrice, IVA_RATE } from '../lib/pricingUtils';
+import { useAuth } from '../context/AuthContext';
 
 export default function HomePage() {
     const { addToCart } = useCart();
+    const { profile } = useAuth();
     const [featuredProducts, setFeaturedProducts] = useState([]);
     const [sliders, setSliders] = useState([]);
     const [sideBanners, setSideBanners] = useState([]);
@@ -253,121 +256,142 @@ export default function HomePage() {
                         {featuredProducts.length > 0 ? (
                             <>
                                 {/* MASTERPIECE */}
-                                <div className="lg:col-span-1 lg:row-span-2 group relative bg-white rounded-3xl overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100 flex flex-col p-8 min-h-[450px]">
-                                    <BadgeRenderer product={featuredProducts[0]} />
+                                {(() => {
+                                    const prod = featuredProducts[0];
+                                    const pricing = calculateProductPrice(prod, profile);
+                                    return (
+                                        <div className="lg:col-span-1 lg:row-span-2 group relative bg-white rounded-3xl overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100 flex flex-col p-8 min-h-[450px]">
+                                            <BadgeRenderer product={prod} />
 
-                                    <div className="z-10 relative mb-6">
-                                        <div className="mb-2">
-                                            <StarRating rating={featuredProducts[0].rating_avg} count={featuredProducts[0].reviews_count} />
-                                        </div>
-                                        <h3 className="text-xl font-black text-brand-carbon uppercase italic leading-tight mt-2 line-clamp-2">
-                                            {featuredProducts[0].name}
-                                        </h3>
-                                    </div>
-
-                                    <div className="flex-1 flex items-center justify-center p-6 relative">
-                                        {featuredProducts[0].image_url ? (
-                                            <img
-                                                src={featuredProducts[0].image_url}
-                                                alt={featuredProducts[0].name}
-                                                className="max-h-64 object-contain group-hover:scale-110 transition-transform duration-700"
-                                            />
-                                        ) : (
-                                            <div className="text-8xl opacity-10">💡</div>
-                                        )}
-
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 bg-white/10 backdrop-blur-[2px]">
-                                            <Link
-                                                to={`/product/${featuredProducts[0].slug || featuredProducts[0].id}`}
-                                                className="px-6 py-2 bg-brand-carbon text-white rounded-full font-black uppercase italic text-[9px] hover:bg-primary transition-all shadow-xl"
-                                            >
-                                                Ver Detalles
-                                            </Link>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-4 space-y-4">
-                                        <div className="flex items-baseline gap-2">
-                                            <p className="text-2xl font-black text-brand-carbon italic">{featuredProducts[0].price} €</p>
-                                            {featuredProducts[0].original_price > featuredProducts[0].price && (
-                                                <p className="text-sm text-gray-400 line-through font-bold">{featuredProducts[0].original_price} €</p>
-                                            )}
-                                        </div>
-
-                                        <button
-                                            onClick={() => addToCart(featuredProducts[0])}
-                                            disabled={featuredProducts[0].stock <= 0}
-                                            className={`
-                                                w-full rounded-2xl py-4 px-6 font-black uppercase italic text-[10px] transition-all shadow-xl flex items-center justify-center gap-3 group
-                                                ${featuredProducts[0].stock <= 0
-                                                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                                    : 'bg-brand-carbon text-white hover:bg-primary shadow-black/10 hover:shadow-primary/20 active:scale-95'
-                                                }
-                                            `}
-                                        >
-                                            <ShoppingBag className="w-4 h-4 transition-transform group-hover:scale-110" />
-                                            {featuredProducts[0].stock > 0 ? 'Añadir a la Cesta' : 'Agotado'}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* OTHERS */}
-                                {featuredProducts.slice(1, 7).map((prod) => (
-                                    <div key={prod.id} className="group relative bg-white rounded-3xl p-5 overflow-hidden shadow-sm hover:shadow-luxury transition-all duration-500 border border-gray-50 flex flex-col justify-between">
-                                        <BadgeRenderer product={prod} />
-
-                                        <div className="h-32 flex items-center justify-center p-2 mb-4 relative overflow-hidden">
-                                            {prod.image_url ? (
-                                                <img
-                                                    src={prod.image_url}
-                                                    alt={prod.name}
-                                                    className="max-h-full object-contain group-hover:scale-110 transition-transform duration-500"
-                                                />
-                                            ) : (
-                                                <div className="text-4xl opacity-10">💡</div>
-                                            )}
-                                        </div>
-
-                                        <div className="flex flex-col flex-1">
-                                            <div className="mb-2">
-                                                <StarRating rating={prod.rating_avg} count={prod.reviews_count} />
+                                            <div className="z-10 relative mb-6">
+                                                <div className="mb-2">
+                                                    <StarRating rating={prod.rating_avg} count={prod.reviews_count} />
+                                                </div>
+                                                <h3 className="text-xl font-black text-brand-carbon uppercase italic leading-tight mt-2 line-clamp-2">
+                                                    {prod.name}
+                                                </h3>
                                             </div>
-                                            <p className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-1">{prod.category || 'Iluminación'}</p>
-                                            <h3 className="text-[11px] font-black text-brand-carbon uppercase italic leading-tight mb-3 group-hover:text-primary transition-colors line-clamp-1">
-                                                <Link to={`/product/${prod.slug || prod.id}`}>{prod.name}</Link>
-                                            </h3>
 
-                                            <div className="mt-auto">
+                                            <div className="flex-1 flex items-center justify-center p-6 relative">
+                                                {prod.image_url ? (
+                                                    <img
+                                                        src={prod.image_url}
+                                                        alt={prod.name}
+                                                        className="max-h-64 object-contain group-hover:scale-110 transition-transform duration-700"
+                                                    />
+                                                ) : (
+                                                    <div className="text-8xl opacity-10">💡</div>
+                                                )}
+
+                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-500 bg-white/10 backdrop-blur-[2px]">
+                                                    <Link
+                                                        to={`/product/${prod.slug || prod.id}`}
+                                                        className="px-6 py-2 bg-brand-carbon text-white rounded-full font-black uppercase italic text-[9px] hover:bg-primary transition-all shadow-xl"
+                                                    >
+                                                        Ver Detalles
+                                                    </Link>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 space-y-4">
+                                                <div className="flex items-baseline gap-2">
+                                                    <p className="text-2xl font-black text-brand-carbon italic">
+                                                        {pricing.displayPrice.toFixed(2)} €
+                                                    </p>
+                                                    {pricing.showPriceWithoutVat && (
+                                                        <span className="text-[10px] font-black text-primary uppercase italic">+IVA</span>
+                                                    )}
+                                                    {pricing.originalPrice > pricing.finalPrice && (
+                                                        <p className="text-sm text-gray-400 line-through font-bold">
+                                                            {(pricing.showPriceWithoutVat ? pricing.originalPrice / (1 + IVA_RATE) : pricing.originalPrice).toFixed(2)} €
+                                                        </p>
+                                                    )}
+                                                </div>
+
                                                 <button
-                                                    onClick={(e) => {
-                                                        e.preventDefault();
-                                                        addToCart(prod);
-                                                    }}
+                                                    onClick={() => addToCart({ ...prod, price: pricing.finalPrice })}
                                                     disabled={prod.stock <= 0}
                                                     className={`
-                                                        w-full rounded-xl py-2.5 px-4 font-black uppercase italic text-[8px] transition-all flex items-center justify-between group/btn mb-3
+                                                        w-full rounded-2xl py-4 px-6 font-black uppercase italic text-[10px] transition-all shadow-xl flex items-center justify-center gap-3 group
                                                         ${prod.stock <= 0
-                                                            ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
-                                                            : 'bg-brand-carbon text-white hover:bg-primary shadow-lg shadow-black/5 active:scale-95'
+                                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                                            : 'bg-brand-carbon text-white hover:bg-primary shadow-black/10 hover:shadow-primary/20 active:scale-95'
                                                         }
                                                     `}
                                                 >
-                                                    <span className="flex items-center gap-2">
-                                                        <ShoppingBag className="w-3 h-3 group-hover/btn:scale-110 transition-transform" />
-                                                        {prod.stock > 0 ? 'Comprar' : 'Agotado'}
-                                                    </span>
-                                                    <span className="font-bold">{prod.price}€</span>
+                                                    <ShoppingBag className="w-4 h-4 transition-transform group-hover:scale-110" />
+                                                    {prod.stock > 0 ? 'Añadir a la Cesta' : 'Agotado'}
                                                 </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
 
-                                                <div className="flex items-center gap-2 opacity-60">
-                                                    {prod.original_price > prod.price && (
-                                                        <p className="text-[9px] text-gray-400 line-through font-bold">{prod.original_price} €</p>
-                                                    )}
+                                {/* OTHERS */}
+                                {featuredProducts.slice(1, 7).map((prod) => {
+                                    const pricing = calculateProductPrice(prod, profile);
+                                    return (
+                                        <div key={prod.id} className="group relative bg-white rounded-3xl p-5 overflow-hidden shadow-sm hover:shadow-luxury transition-all duration-500 border border-gray-50 flex flex-col justify-between">
+                                            <BadgeRenderer product={prod} />
+
+                                            <div className="h-32 flex items-center justify-center p-2 mb-4 relative overflow-hidden">
+                                                {prod.image_url ? (
+                                                    <img
+                                                        src={prod.image_url}
+                                                        alt={prod.name}
+                                                        className="max-h-full object-contain group-hover:scale-110 transition-transform duration-500"
+                                                    />
+                                                ) : (
+                                                    <div className="text-4xl opacity-10">💡</div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex flex-col flex-1">
+                                                <div className="mb-2">
+                                                    <StarRating rating={prod.rating_avg} count={prod.reviews_count} />
+                                                </div>
+                                                <p className="text-[7px] font-black text-gray-400 uppercase tracking-widest mb-1">{prod.category || 'Iluminación'}</p>
+                                                <h3 className="text-[11px] font-black text-brand-carbon uppercase italic leading-tight mb-3 group-hover:text-primary transition-colors line-clamp-1">
+                                                    <Link to={`/product/${prod.slug || prod.id}`}>{prod.name}</Link>
+                                                </h3>
+
+                                                <div className="mt-auto">
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            addToCart({ ...prod, price: pricing.finalPrice });
+                                                        }}
+                                                        disabled={prod.stock <= 0}
+                                                        className={`
+                                                            w-full rounded-xl py-2.5 px-4 font-black uppercase italic text-[8px] transition-all flex items-center justify-between group/btn mb-3
+                                                            ${prod.stock <= 0
+                                                                ? 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                                                                : 'bg-brand-carbon text-white hover:bg-primary shadow-lg shadow-black/5 active:scale-95'
+                                                            }
+                                                        `}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <ShoppingBag className="w-3 h-3 group-hover/btn:scale-110 transition-transform" />
+                                                            {prod.stock > 0 ? 'Comprar' : 'Agotado'}
+                                                        </span>
+                                                        <span className="font-bold">
+                                                            {pricing.displayPrice.toFixed(2)}€
+                                                            {pricing.showPriceWithoutVat && <span className="ml-1 text-[7px]">+IVA</span>}
+                                                        </span>
+                                                    </button>
+
+                                                    <div className="flex items-center gap-2 opacity-60">
+                                                        {pricing.originalPrice > pricing.finalPrice && (
+                                                            <p className="text-[9px] text-gray-400 line-through font-bold">
+                                                                {(pricing.showPriceWithoutVat ? pricing.originalPrice / (1 + IVA_RATE) : pricing.originalPrice).toFixed(2)} €
+                                                            </p>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </>
                         ) : (
                             <div className="lg:col-span-4 py-20 text-center glass rounded-3xl border-dashed border-2 border-gray-100">

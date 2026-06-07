@@ -2,11 +2,17 @@
  * Centralized pricing logic for Mil Luces Boutique
  */
 
+export const IVA_RATE = 0.21;
+
 export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     if (!product) {
         return {
             originalPrice: 0,
             finalPrice: 0,
+            basePrice: 0,
+            ivaAmount: 0,
+            displayPrice: 0,
+            showPriceWithoutVat: false,
             isShowingProDiscount: false,
             displayDiscountPercent: 0,
             hasAnyDiscount: false,
@@ -16,8 +22,6 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     }
 
     // 1. Base reference: Original Price (PVP) or standard Price
-    // We treat 'original_price' as the "Market/List Price" (tachado)
-    // and 'price' as the "Our Store Price" (B2C standard)
     const referencePrice = parseFloat(product.original_price || product.price || 0);
     const standardPrice = parseFloat(product.price || 0);
     const dbDiscountPrice = parseFloat(product.discount_price || 0);
@@ -29,43 +33,37 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     // User profile data
     const isPro = userProfile?.user_type === 'profesional';
     const isPartner = !!userProfile?.is_partner;
-    const proDiscountPercent = userProfile?.discount_percent || 0;
 
     // Base price for calculations (standard B2C)
-    let basePrice = hasDbDiscount ? dbDiscountPrice : standardPrice;
+    let basePriceFromDb = hasDbDiscount ? dbDiscountPrice : standardPrice;
     let isPartnerPrice = false;
     let isProPrice = false;
 
     // HIERARCHY OF PRICES
-    let finalPrice = basePrice;
+    let finalPrice = basePriceFromDb;
 
-    // 1. Partner (Socio) - Highest Priority
-    if (isPartner) {
-        if (partnerPrice > 0) {
-            finalPrice = partnerPrice;
-            isPartnerPrice = true;
-        } else {
-            // Fallback to standard base price if no specific partner price set
-            finalPrice = basePrice;
-            isPartnerPrice = false;
+    // Only apply B2B tier prices if NOT a measurement-based override
+    // (Measurements have absolute prices defined per size that apply to all roles)
+    const isMeasurementProduct = product.is_by_measurement || (product.selectedOptions && product.selectedOptions.measure);
+
+    if (!isMeasurementProduct) {
+        // 1. Partner (Socio) - Highest Priority
+        if (isPartner) {
+            if (partnerPrice > 0) {
+                finalPrice = partnerPrice;
+                isPartnerPrice = true;
+            }
         }
-    }
-    // 2. Professional - Second Priority (Professional Price ONLY, no fallback to % if user wants strict pricing)
-    else if (isPro) {
-        if (professionalPrice > 0) {
-            finalPrice = professionalPrice;
-            isProPrice = true;
-        } else {
-            // Updated logic: if no professional_price is defined, show standard price
-            // to avoid unintended losses from general discount_percent.
-            finalPrice = basePrice;
-            isProPrice = false;
+        // 2. Professional - Second Priority
+        else if (isPro) {
+            if (professionalPrice > 0) {
+                finalPrice = professionalPrice;
+                isProPrice = true;
+            }
         }
     }
 
     // VOLUME PRICING APPLICATION
-    // volume_pricing structure: { individual: [], profesional: [], partner: [] }
-    // each array: [{ qty: 10, price: 50 }, { qty: 20, price: 45 }]
     const volumeConfig = product.volume_pricing || {};
     let roleKey = 'individual';
     if (isPartner) roleKey = 'partner';
@@ -73,7 +71,6 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
 
     const scales = volumeConfig[roleKey] || [];
     if (scales.length > 0 && quantity > 1) {
-        // Find best volume price for current quantity
         const applicableScale = [...scales]
             .filter(s => quantity >= s.qty)
             .sort((a, b) => b.qty - a.qty)[0];
@@ -87,9 +84,20 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
         ? Math.round(((referencePrice - finalPrice) / referencePrice) * 100)
         : 0;
 
+    // VAT CALCULATIONS
+    // Prices in DB already include VAT (confirmed by USER)
+    const showPriceWithoutVat = isPro || isPartner;
+    const basePrice = finalPrice / (1 + IVA_RATE);
+    const ivaAmount = finalPrice - basePrice;
+    const displayPrice = showPriceWithoutVat ? basePrice : finalPrice;
+
     return {
         originalPrice: referencePrice,
-        finalPrice,
+        finalPrice, // This remains the total price with VAT (for checkout)
+        basePrice, // Tax base
+        ivaAmount, // Total VAT
+        displayPrice, // Price to show in UI
+        showPriceWithoutVat,
         isShowingProDiscount: isProPrice,
         isPartnerPrice,
         isProPrice,
