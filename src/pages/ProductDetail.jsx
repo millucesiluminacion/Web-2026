@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, AlertTriangle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown } from 'lucide-react';
+import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, AlertTriangle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown, Ruler } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -66,6 +66,7 @@ export default function ProductDetail() {
     });
     const [submittingReview, setSubmittingReview] = useState(false);
     const [pdfLoading, setPdfLoading] = useState(false);
+    const [selectedMeasurement, setSelectedMeasurement] = useState(null);
 
     // Selection state
     const [selectedAttributes, setSelectedAttributes] = useState({});
@@ -287,6 +288,11 @@ export default function ProductDetail() {
             setCurrentVariant(initialVariant);
             setSelectedAttributes(initialSelected);
 
+            // AUTO-SELECT first measurement if applicable
+            if (product.is_by_measurement && product.measurements?.length > 0) {
+                setSelectedMeasurement(product.measurements[0]);
+            }
+
             // Fetch related products (manual or category-based fallback)
             if (product.category_id) {
                 if (product.related_product_ids && product.related_product_ids.length > 0) {
@@ -404,16 +410,17 @@ export default function ProductDetail() {
         if (!productToAdd) return;
 
         // Build selected options label for cart
-        const selectedLabel = Object.entries(selectedAttributes)
-            .map(([k, v]) => `${k}: ${v}`)
-            .join(' | ');
+        const parts = [];
+        if (selectedMeasurement) parts.push(`Medida: ${selectedMeasurement.measure}`);
+        Object.entries(selectedAttributes).forEach(([k, v]) => parts.push(`${k}: ${v}`));
+        const selectedLabel = parts.join(' | ');
 
         addToCart({
             ...productToAdd,
             price: finalPrice, // Use the already computed best price
             original_price: originalPrice, // Keep original for reference in cart
             // Include selected options as extra info for the cart
-            selectedOptions: selectedAttributes,
+            selectedOptions: { ...selectedAttributes, measure: selectedMeasurement?.measure },
             cartLabel: selectedLabel || null
         }, qty);
     };
@@ -442,13 +449,16 @@ export default function ProductDetail() {
 
     // Compute prices using centralized utility
     const {
-        originalPrice,
-        finalPrice,
+        originalPrice: baseOriginalPrice,
+        finalPrice: baseFinalPrice,
         isShowingProDiscount,
         isPartnerPrice,
         displayDiscountPercent,
         hasAnyDiscount
     } = calculateProductPrice(displayProduct || parentProduct, profile);
+
+    const finalPrice = selectedMeasurement ? selectedMeasurement.price : baseFinalPrice;
+    const originalPrice = selectedMeasurement ? selectedMeasurement.price : baseOriginalPrice;
 
     // Gallery images: if product has extra_images array, use it; otherwise single image
     const productImages = displayProduct?.extra_images && Array.isArray(displayProduct.extra_images) && displayProduct.extra_images.length > 0
@@ -741,6 +751,39 @@ export default function ProductDetail() {
                                     <div className="hidden sm:block">
                                         <p className="text-[9px] font-black uppercase text-brand-carbon italic leading-none mb-1">Unidades</p>
                                         <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest leading-none">Añadir al pedido</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* VENTA POR MEDIDA SELECTOR */}
+                            {displayProduct?.is_by_measurement && displayProduct?.measurements?.length > 0 && (
+                                <div className="space-y-4 pt-4 border-t border-gray-50">
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500">
+                                            <Ruler className="w-4 h-4" />
+                                        </div>
+                                        <p className="text-[10px] font-black uppercase text-brand-carbon italic">Elegir Medida Especial</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {displayProduct.measurements.map((m, idx) => (
+                                            <button
+                                                key={idx}
+                                                onClick={() => setSelectedMeasurement(m)}
+                                                className={`
+                                                    px-4 py-3 rounded-xl border transition-all flex flex-col items-start gap-1
+                                                    ${selectedMeasurement?.measure === m.measure
+                                                        ? 'border-indigo-500 bg-indigo-50/30'
+                                                        : 'border-gray-100 hover:border-gray-300'}
+                                                `}
+                                            >
+                                                <span className={`text-[10px] font-black uppercase italic ${selectedMeasurement?.measure === m.measure ? 'text-indigo-600' : 'text-brand-carbon'}`}>
+                                                    {m.measure}
+                                                </span>
+                                                <span className="text-[9px] font-bold text-gray-400">
+                                                    {m.price.toFixed(2)}€
+                                                </span>
+                                            </button>
+                                        ))}
                                     </div>
                                 </div>
                             )}

@@ -218,6 +218,7 @@ export default function ProductListing() {
     const [brands, setBrands] = useState([]);
     const [professions, setProfessions] = useState([]);
     const [subcategories, setSubcategories] = useState([]);
+    const [relationships, setRelationships] = useState([]);
     const [activeCategory, setActiveCategory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [filtersOpen, setFiltersOpen] = useState(false);
@@ -258,13 +259,18 @@ export default function ProductListing() {
     useEffect(() => {
         async function init() {
             if (categories.length === 0) {
-                const [c, r, b, p] = await Promise.all([
+                const [c, r, b, p, rels] = await Promise.all([
                     supabase.from('categories').select('*').order('order_index'),
-                    supabase.from('rooms').select('*').order('name'),
-                    supabase.from('brands').select('*').order('name'),
-                    supabase.from('professions').select('*').order('order_index')
+                    supabase.from('rooms').select('*').order('order_index'),
+                    supabase.from('brands').select('*').order('order_index'),
+                    supabase.from('professions').select('*').order('order_index'),
+                    supabase.from('category_relationships').select('*')
                 ]);
-                setCategories(c.data || []); setRooms(r.data || []); setBrands(b.data || []); setProfessions(p.data || []);
+                setCategories(c.data || []);
+                setRooms(r.data || []);
+                setBrands(b.data || []);
+                setProfessions(p.data || []);
+                setRelationships(rels.data || []);
             }
         }
         init();
@@ -280,13 +286,17 @@ export default function ProductListing() {
             const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('*')).data || [];
             const currentCat = allCats.find(c => c.slug?.toLowerCase() === categoryQuery?.toLowerCase());
 
-            // 1. Gather all category IDs in scope
-            const gatherCatIds = (id, cats) => {
+            // 1. Gather all category IDs in scope (using many-to-many relationships)
+            const gatherCatIds = (id, cats, rels) => {
                 const ids = [id];
-                cats.filter(c => c.parent_id === id).forEach(child => ids.push(...gatherCatIds(child.id, cats)));
-                return ids;
+                // Find all children in relationships table
+                const childrenIds = rels.filter(r => r.parent_id === id).map(r => r.child_id);
+                childrenIds.forEach(childId => {
+                    ids.push(...gatherCatIds(childId, cats, rels));
+                });
+                return [...new Set(ids)]; // Prevent duplicates if any
             };
-            const scopedCatIds = currentCat ? gatherCatIds(currentCat.id, allCats) : [];
+            const scopedCatIds = currentCat ? gatherCatIds(currentCat.id, allCats, relationships.length > 0 ? relationships : (await supabase.from('category_relationships').select('*')).data || []) : [];
 
             // 2. Fetch Filter Config
             const { data: allF } = await supabase.from('dynamic_filters').select('*, associations:dynamic_filter_categories(category_id)').eq('is_active', true).order('order_index');
@@ -408,7 +418,11 @@ export default function ProductListing() {
             if (error) throw error;
             setProducts(data || []); setTotalResults(count || 0);
             setActiveCategory(currentCat);
-            setSubcategories(allCats.filter(c => c.parent_id === currentCat?.id));
+
+            // Subcategories are those that have currentCat as one of their parents in relationships
+            const rels = relationships.length > 0 ? relationships : (await supabase.from('category_relationships').select('*')).data || [];
+            const subIds = rels.filter(r => r.parent_id === currentCat?.id).map(r => r.child_id);
+            setSubcategories(allCats.filter(c => subIds.includes(c.id)));
 
         } catch (e) { console.error('Product Fetch Error:', e); } finally { setLoading(false); }
     }
@@ -544,7 +558,7 @@ export default function ProductListing() {
                                     className="w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase italic transition-all duration-200 text-gray-400 hover:bg-gray-50 hover:text-brand-carbon">
                                     Ver Todo
                                 </button>
-                                {categories.filter(c => !c.parent_id).map(cat => (
+                                {categories.filter(c => !relationships.some(r => r.child_id === c.id)).map(cat => (
                                     <button key={cat.id}
                                         onClick={() => navigate(`/catalogo?category=${cat.slug}`)}
                                         className={`w-full text-left px-3 py-2 rounded-xl text-[10px] font-black uppercase italic transition-all duration-200 ${categoryQuery === cat.slug ? 'bg-primary text-white shadow-md' : 'text-gray-400 hover:bg-gray-50 hover:text-brand-carbon'

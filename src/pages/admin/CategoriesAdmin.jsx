@@ -23,13 +23,13 @@ export default function CategoriesAdmin() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCategory, setEditingCategory] = useState(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [relationships, setRelationships] = useState([]);
 
-    // Form state
     const [formData, setFormData] = useState({
         name: '',
         slug: '',
         description: '',
-        parent_id: '',
+        parent_ids: [],
         icon_name: 'Tag',
         image_url: '',
         order_index: 0
@@ -46,13 +46,22 @@ export default function CategoriesAdmin() {
     async function fetchCategories() {
         try {
             setLoading(true);
-            const { data, error } = await supabase
+            const { data: catData, error: catError } = await supabase
                 .from('categories')
                 .select('*')
                 .order('order_index', { ascending: true });
 
-            if (error) throw error;
-            setCategories(data || []);
+            if (catError) throw catError;
+            setCategories(catData || []);
+
+            // Also fetch relationships
+            const { data: relData, error: relError } = await supabase
+                .from('category_relationships')
+                .select('*');
+
+            if (relError) throw relError;
+            setRelationships(relData || []);
+
         } catch (error) {
             console.error('Error fetching categories:', error);
         } finally {
@@ -71,25 +80,26 @@ export default function CategoriesAdmin() {
         setModalType(type);
         if (category) {
             setEditingCategory(category);
+            const catRels = relationships.filter(r => r.child_id === category.id).map(r => r.parent_id);
             setFormData({
                 name: category.name,
                 slug: category.slug,
                 description: category.description || '',
-                parent_id: category.parent_id || '',
+                parent_ids: catRels,
                 icon_name: category.icon_name || 'Tag',
                 image_url: category.image_url || '',
                 order_index: category.order_index || 0
             });
             setSelectedFile(null);
             // Auto-detect type based on parent_id presence
-            setModalType(category.parent_id ? 'sub' : 'main');
+            setModalType(catRels.length > 0 ? 'sub' : 'main');
         } else {
             setEditingCategory(null);
             setFormData({
                 name: '',
                 slug: '',
                 description: '',
-                parent_id: type === 'sub' ? (mainCategories[0]?.id || '') : '',
+                parent_ids: type === 'sub' ? [] : [],
                 icon_name: 'Tag',
                 image_url: '',
                 order_index: categories.length
@@ -129,8 +139,8 @@ export default function CategoriesAdmin() {
         e.preventDefault();
 
         // Validation: Subcategories MUST have a parent
-        if (modalType === 'sub' && !formData.parent_id) {
-            alert('Una subcategoría debe tener obligatoriamente una categoría padre.');
+        if (modalType === 'sub' && formData.parent_ids.length === 0) {
+            alert('Una subcategoría debe tener obligatoriamente al menos una categoría padre.');
             return;
         }
 
@@ -142,11 +152,15 @@ export default function CategoriesAdmin() {
                 imageUrl = await uploadImage(selectedFile);
             }
 
+            const { parent_ids, ...catData } = formData;
             const payload = {
-                ...formData,
-                image_url: imageUrl
+                ...catData,
+                image_url: imageUrl,
+                // Keep parent_id as the first parent for legacy/breadcrumbs
+                parent_id: parent_ids.length > 0 ? parent_ids[0] : null
             };
-            if (payload.parent_id === '') payload.parent_id = null;
+
+            let categoryId = editingCategory?.id;
 
             if (editingCategory) {
                 const { error } = await supabase
@@ -155,10 +169,33 @@ export default function CategoriesAdmin() {
                     .eq('id', editingCategory.id);
                 if (error) throw error;
             } else {
-                const { error } = await supabase
+                const { data, error } = await supabase
                     .from('categories')
-                    .insert([payload]);
+                    .insert([payload])
+                    .select();
                 if (error) throw error;
+                categoryId = data[0].id;
+            }
+
+            // Sync Relationships
+            if (categoryId) {
+                // Delete old
+                await supabase
+                    .from('category_relationships')
+                    .delete()
+                    .eq('child_id', categoryId);
+
+                // Insert new
+                if (parent_ids.length > 0) {
+                    const relPayload = parent_ids.map(pid => ({
+                        child_id: categoryId,
+                        parent_id: pid
+                    }));
+                    const { error: relErr } = await supabase
+                        .from('category_relationships')
+                        .insert(relPayload);
+                    if (relErr) throw relErr;
+                }
             }
 
             setIsModalOpen(false);
@@ -215,8 +252,11 @@ export default function CategoriesAdmin() {
         }
     };
 
-    const mainCategories = categories.filter(c => !c.parent_id).sort((a, b) => (a.order_index - b.order_index));
-    const getSubcategories = (parentId) => categories.filter(c => c.parent_id === parentId).sort((a, b) => (a.order_index - b.order_index));
+    const mainCategories = categories.filter(c => !relationships.some(r => r.child_id === c.id)).sort((a, b) => (a.order_index - b.order_index));
+    const getSubcategories = (parentId) => {
+        const childIds = relationships.filter(r => r.parent_id === parentId).map(r => r.child_id);
+        return categories.filter(c => childIds.includes(c.id)).sort((a, b) => (a.order_index - b.order_index));
+    };
 
     const getIcon = (category) => {
         if (category.image_url) {
@@ -459,26 +499,34 @@ export default function CategoriesAdmin() {
                                     />
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-4">
                                     <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">
-                                        {modalType === 'main' ? 'Asociación (Opcional)' : 'Vínculo Padre (OBLIGATORIO)'}
+                                        {modalType === 'main' ? 'Vínculos Superiores (Opcional)' : 'Vínculos Padre (Múltiple)'}
                                     </label>
-                                    <div className="relative">
-                                        <select
-                                            value={formData.parent_id}
-                                            required={modalType === 'sub'}
-                                            onChange={e => setFormData({ ...formData, parent_id: e.target.value })}
-                                            className={`w-full h-12 bg-gray-50 border border-gray-100 rounded-xl px-5 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all outline-none appearance-none ${modalType === 'sub' && !formData.parent_id ? 'ring-2 ring-red-100' : ''}`}
-                                        >
-                                            <option value="">-- Nodo Raíz (Principal) --</option>
+                                    <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 max-h-40 overflow-y-auto custom-scrollbar">
+                                        <div className="grid grid-cols-1 gap-2">
                                             {mainCategories.filter(c => c.id !== editingCategory?.id).map(c => (
-                                                <option key={c.id} value={c.id}>{c.name}</option>
+                                                <label key={c.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-xl transition-all cursor-pointer group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={formData.parent_ids?.includes(c.id)}
+                                                        onChange={(e) => {
+                                                            const newParents = e.target.checked
+                                                                ? [...(formData.parent_ids || []), c.id]
+                                                                : formData.parent_ids.filter(id => id !== c.id);
+                                                            setFormData({ ...formData, parent_ids: newParents });
+                                                        }}
+                                                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary/20"
+                                                    />
+                                                    <span className="text-[10px] font-black uppercase italic text-brand-carbon group-hover:text-primary transition-colors">
+                                                        {c.name}
+                                                    </span>
+                                                </label>
                                             ))}
-                                        </select>
-                                        <ChevronDown className="absolute right-5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 pointer-events-none" />
+                                        </div>
                                     </div>
-                                    {modalType === 'sub' && !formData.parent_id && (
-                                        <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mt-1.5 italic px-1">⚠️ Requiere categoría superior.</p>
+                                    {modalType === 'sub' && (!formData.parent_ids || formData.parent_ids.length === 0) && (
+                                        <p className="text-[8px] font-black text-red-400 uppercase tracking-widest mt-1.5 italic px-1">⚠️ Requiere al menos una categoría superior.</p>
                                     )}
                                 </div>
 
@@ -569,8 +617,9 @@ export default function CategoriesAdmin() {
                             </form>
                         </div>
                     </div>
-                </div>
-            )}
-        </div>
+                </div >
+            )
+            }
+        </div >
     );
 }
