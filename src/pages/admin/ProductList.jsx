@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Loader2, X, Package, Tag, Layers, Sofa, Award, Upload, Download, Copy, Save, CheckSquare, Square, ChevronDown, ChevronUp, Percent, AlertTriangle, BadgePercent, Activity, ChevronLeft, ChevronRight, Zap, Ruler } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useCart } from '../../context/CartContext';
 import ImageUpload from '../../components/admin/ImageUpload';
@@ -77,6 +77,8 @@ export default function ProductList() {
         min_meters: 1,
         max_meters: 100,
         meter_step: 1,
+        is_by_measurement: false,
+        measurements: [],
         mandatory_accessory_ids: [],
         attributes: {},
         extra_images: [], // gallery images
@@ -571,6 +573,8 @@ export default function ProductList() {
             min_meters: product.min_meters || 1,
             max_meters: product.max_meters || 100,
             meter_step: product.meter_step || 1,
+            is_by_measurement: product.is_by_measurement || false,
+            measurements: product.measurements || [],
             mandatory_accessory_ids: product.mandatory_accessory_ids || [],
             volume_pricing: product.volume_pricing || { individual: [], profesional: [], partner: [] },
             parent_id: product.parent_id,
@@ -717,6 +721,8 @@ export default function ProductList() {
                 min_meters: formData.min_meters,
                 max_meters: formData.max_meters,
                 meter_step: formData.meter_step,
+                is_by_measurement: formData.is_by_measurement,
+                measurements: formData.measurements || [],
                 mandatory_accessory_ids: formData.mandatory_accessory_ids || []
             };
 
@@ -1949,6 +1955,74 @@ export default function ProductList() {
                                                                     <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                                                                         <label className="block text-[8px] font-black text-gray-400 uppercase tracking-widest mb-2 text-center">Salto</label>
                                                                         <input type="number" step="0.1" className="w-full text-center text-sm font-black text-brand-carbon focus:outline-none" value={formData.meter_step} onChange={e => setFormData({ ...formData, meter_step: parseFloat(e.target.value) })} />
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+
+                                                        <div className="space-y-6">
+                                                            <div className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${formData.is_by_measurement ? 'bg-indigo-500/10 text-indigo-500' : 'bg-gray-50 text-gray-300'}`}>
+                                                                        <Ruler className="w-5 h-5" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-black uppercase text-brand-carbon italic">Venta por Medida</p>
+                                                                        <p className="text-[8px] text-gray-400 font-bold uppercase tracking-widest">Ej: 50cm, 100cm, etc.</p>
+                                                                    </div>
+                                                                </div>
+                                                                <label className="relative inline-flex items-center cursor-pointer">
+                                                                    <input type="checkbox" className="sr-only peer" checked={formData.is_by_measurement} onChange={e => setFormData({ ...formData, is_by_measurement: e.target.checked })} />
+                                                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
+                                                                </label>
+                                                            </div>
+
+                                                            {formData.is_by_measurement && (
+                                                                <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                                                                    <div className="flex gap-2">
+                                                                        <input placeholder="Medida (Ej: 50cm)" className="flex-1 bg-white border border-gray-100 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-indigo-500 transition-colors" id="new-measure-name" />
+                                                                        <input type="number" step="0.01" placeholder="Precio (€)" className="w-24 bg-white border border-gray-100 rounded-xl px-4 py-2 text-xs font-bold outline-none focus:border-indigo-500 transition-colors" id="new-measure-price" />
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                const name = document.getElementById('new-measure-name').value;
+                                                                                const price = document.getElementById('new-measure-price').value;
+                                                                                if (name && price) {
+                                                                                    setFormData(prev => ({
+                                                                                        ...prev,
+                                                                                        measurements: [...(prev.measurements || []), { measure: name, price: parseFloat(price) }]
+                                                                                    }));
+                                                                                    document.getElementById('new-measure-name').value = '';
+                                                                                    document.getElementById('new-measure-price').value = '';
+                                                                                }
+                                                                            }}
+                                                                            className="w-10 h-10 bg-indigo-500 text-white rounded-xl flex items-center justify-center hover:bg-indigo-600 transition-all"
+                                                                        >
+                                                                            <Plus className="w-4 h-4" />
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {(formData.measurements || []).map((m, idx) => (
+                                                                            <div key={idx} className="flex items-center gap-3 bg-white border border-gray-100 px-4 py-2 rounded-xl shadow-sm group/measure">
+                                                                                <span className="text-[10px] font-black text-brand-carbon uppercase italic">{m.measure}</span>
+                                                                                <span className="text-[10px] font-black text-indigo-500">{m.price}€</span>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    onClick={() => {
+                                                                                        setFormData(prev => ({
+                                                                                            ...prev,
+                                                                                            measurements: prev.measurements.filter((_, i) => i !== idx)
+                                                                                        }));
+                                                                                    }}
+                                                                                    className="text-gray-300 hover:text-red-500 transition-colors"
+                                                                                >
+                                                                                    <X className="w-3 h-3" />
+                                                                                </button>
+                                                                            </div>
+                                                                        ))}
+                                                                        {(!formData.measurements || formData.measurements.length === 0) && (
+                                                                            <p className="text-[8px] text-gray-400 italic">No hay medidas añadidas.</p>
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             )}
