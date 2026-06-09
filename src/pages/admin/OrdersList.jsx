@@ -416,6 +416,16 @@ export default function OrdersList() {
         }
     };
 
+    const formatPaymentMethod = (method) => {
+        if (!method) return 'N/A';
+        const m = method.toLowerCase();
+        if (m === 'stripe') return 'TARJETA (STRIPE)';
+        if (m === 'paypal') return 'PAYPAL';
+        if (m === 'transfer' || m === 'transferencia') return 'TRANSFERENCIA';
+        if (m === 'in_store') return 'PAGO EN TIENDA';
+        return method.toUpperCase();
+    };
+
     const filteredOrders = orders; // Ahora el filtrado es servidor, así que usamos el estado directo
 
     return (
@@ -640,7 +650,7 @@ export default function OrdersList() {
                                     <td className="p-7">
                                         <div className="flex items-center gap-2">
                                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-                                            <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{order.payment_method}</span>
+                                            <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{formatPaymentMethod(order.payment_method)}</span>
                                         </div>
                                     </td>
                                     <td className="p-7 text-right">
@@ -851,7 +861,7 @@ export default function OrdersList() {
                                             <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit">Transacción</h3>
                                         </div>
                                         <div className="bg-brand-carbon p-8 rounded-[2rem] text-white shadow- luxury">
-                                            <p className="text-[10px] font-black text-primary uppercase italic mb-1.5 font-outfit tracking-widest">{selectedOrder.payment_method}</p>
+                                            <p className="text-[10px] font-black text-primary uppercase italic mb-1.5 font-outfit tracking-widest">{formatPaymentMethod(selectedOrder.payment_method)}</p>
                                             <p className="text-[9px] font-bold text-white/40 uppercase tracking-[.3em] font-outfit">ID: {selectedOrder.payment_id || 'PROCESO_MANUAL'}</p>
                                         </div>
                                     </section>
@@ -1174,8 +1184,9 @@ export default function OrdersList() {
                         </div>
                         <div className="text-right">
                             <h2 className="text-xl font-black uppercase italic mb-1">Orden de Pedido</h2>
-                            <p className="text-xs font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
+                            <p className="text-xl font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+                            <p className="text-[10px] font-black text-primary uppercase italic mt-1">{formatPaymentMethod(selectedOrder.payment_method)}</p>
                         </div>
                     </div>
 

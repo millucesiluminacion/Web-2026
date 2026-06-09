@@ -63,11 +63,11 @@ export default function AccountPage() {
         if (!user) return;
         setIsDataLoading(true);
         try {
-            // Fetch Orders
+            // Fetch Orders (By user_id OR email for redundancy)
             const { data: ordersData } = await supabase
                 .from('orders')
                 .select('*, order_items(*)')
-                .eq('customer_email', user.email)
+                .or(`user_id.eq.${user.id},customer_email.eq.${user.email}`)
                 .order('created_at', { ascending: false });
 
             // Fetch Favorites
@@ -242,6 +242,132 @@ export default function AccountPage() {
 
                 {/* Área de contenido central */}
                 <div className="lg:col-span-9 space-y-8 animate-in fade-in slide-in-from-right-4 duration-700">
+                    {activeTab === 'favoritos' && (
+                        <div className="space-y-8">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-4">
+                                    <Heart className="w-6 h-6 text-primary" />
+                                    <h3 className="text-xl font-black text-brand-carbon uppercase italic">Mis Productos Favoritos</h3>
+                                </div>
+                                <span className="text-[10px] font-black uppercase text-gray-400">{favorites.length} Guardados</span>
+                            </div>
+
+                            {favorites.length === 0 ? (
+                                <div className="bg-white rounded-[3rem] p-20 border border-gray-100 shadow-luxury text-center">
+                                    <Heart className="w-16 h-16 text-gray-100 mx-auto mb-6" />
+                                    <p className="text-sm font-black uppercase text-gray-400 italic">No tienes productos en favoritos aún</p>
+                                    <Link to="/productos" className="mt-8 inline-flex px-10 py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-xs hover:bg-primary transition-all">Explorar Catálogo</Link>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {favorites.map(product => (
+                                        <div key={product.id} className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-luxury flex items-center gap-6 group hover:border-primary/20 transition-all">
+                                            <div className="w-24 h-24 rounded-2xl overflow-hidden bg-gray-50 flex-shrink-0">
+                                                <img src={product.image_url} alt={product.name} className="w-full h-full object-cover group-hover:scale-110 transition-all duration-700" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-xs font-black uppercase truncate text-brand-carbon mb-1">{product.name}</h4>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">{product.category}</p>
+                                                <div className="flex items-center justify-between">
+                                                    <Link to={`/producto/${product.slug}`} className="text-[10px] font-black text-primary uppercase italic hover:underline">Ver Producto</Link>
+                                                    <button
+                                                        onClick={() => handleRemoveFavorite(product.id)}
+                                                        className="p-2 text-gray-300 hover:text-red-500 transition-all"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {activeTab === 'pedidos' && (
+                        <div className="space-y-8">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-4">
+                                    <ShoppingBag className="w-6 h-6 text-primary" />
+                                    <h3 className="text-xl font-black text-brand-carbon uppercase italic">Historial de Pedidos</h3>
+                                </div>
+                                <span className="text-[10px] font-black uppercase text-gray-400">{orders.length} Realizados</span>
+                            </div>
+
+                            {isDataLoading ? (
+                                <div className="flex justify-center p-20">
+                                    <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                                </div>
+                            ) : orders.length === 0 ? (
+                                <div className="bg-white rounded-[3rem] p-20 border border-gray-100 shadow-luxury text-center">
+                                    <ShoppingBag className="w-16 h-16 text-gray-100 mx-auto mb-6" />
+                                    <p className="text-sm font-black uppercase text-gray-400 italic">Aún no has realizado ningún pedido</p>
+                                    <Link to="/productos" className="mt-8 inline-flex px-10 py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-xs hover:bg-primary transition-all">Empezar a Comprar</Link>
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    {orders.map(order => (
+                                        <div key={order.id} className="bg-white rounded-[3rem] border border-gray-100 shadow-luxury overflow-hidden group hover:border-primary/20 transition-all">
+                                            <div className="p-8 lg:p-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+                                                <div className="flex items-center gap-8">
+                                                    <div className="w-16 h-16 rounded-[1.5rem] bg-gray-50 flex items-center justify-center text-brand-carbon group-hover:bg-primary/10 group-hover:text-primary transition-all">
+                                                        <ShoppingBag className="w-6 h-6" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="flex items-center gap-3 mb-2">
+                                                            <span className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400">Ref: #{order.id.slice(0, 8).toUpperCase()}</span>
+                                                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${order.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                                                                order.status === 'SHIPPED' ? 'bg-blue-100 text-blue-700' :
+                                                                    'bg-amber-100 text-amber-700'
+                                                                }`}>
+                                                                {order.status === 'PENDING' ? 'Pendiente' :
+                                                                    order.status === 'PROCESSING' ? 'En Preparación' :
+                                                                        order.status === 'SHIPPED' ? 'Enviado' :
+                                                                            order.status === 'COMPLETED' ? 'Entregado' : order.status}
+                                                            </span>
+                                                        </div>
+                                                        <p className="text-lg font-black uppercase italic text-brand-carbon tracking-tight">
+                                                            {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-10">
+                                                    <div className="text-right hidden sm:block">
+                                                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Método</p>
+                                                        <p className="text-[11px] font-black text-brand-carbon uppercase italic">
+                                                            {order.shipping_method === 'pickup' ? 'Recogida Tienda' : 'Envío Domicilio'}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Inversión Total</p>
+                                                        <p className="text-2xl font-black italic text-brand-carbon">{order.total.toFixed(2)}€</p>
+                                                    </div>
+                                                    <div className="w-12 h-12 rounded-full border border-gray-100 flex items-center justify-center group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all cursor-pointer">
+                                                        <ArrowRight className="w-5 h-5" />
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Order Mini Items List */}
+                                            <div className="px-10 pb-8 flex gap-4 overflow-x-auto scrollbar-hide">
+                                                {order.order_items?.map((item, idx) => (
+                                                    <div key={idx} className="flex-shrink-0 flex items-center gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
+                                                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[10px] font-black">
+                                                            {item.quantity}x
+                                                        </div>
+                                                        <p className="text-[10px] font-bold text-gray-500 uppercase truncate max-w-[120px]">{item.product_name}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {activeTab === 'perfil' && (
                         <div className="space-y-8">
                             {/* Datos Personales */}
@@ -494,6 +620,6 @@ export default function AccountPage() {
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     );
 }

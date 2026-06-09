@@ -702,7 +702,7 @@ export default function ProductDetail() {
                         <div className="bg-white p-8 rounded-[2.5rem] shadow-luxury border border-gray-100 flex flex-col gap-6 mb-10 overflow-hidden relative group/action">
                             <div className="absolute top-0 left-0 w-2 h-full bg-primary opacity-0 group-hover/action:opacity-100 transition-opacity"></div>
 
-                            {displayProduct?.is_by_meter ? (
+                            {(displayProduct?.is_by_meter || parentProduct?.is_by_meter) ? (
                                 <div className="space-y-6">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-3">
@@ -724,17 +724,17 @@ export default function ProductDetail() {
                                         {/* Custom Range Slider */}
                                         <input
                                             type="range"
-                                            min={displayProduct.min_meters || 1}
-                                            max={displayProduct.max_meters || 100}
-                                            step={displayProduct.meter_step || 1}
+                                            min={displayProduct.min_meters || parentProduct.min_meters || 1}
+                                            max={displayProduct.max_meters || parentProduct.max_meters || 100}
+                                            step={displayProduct.meter_step || parentProduct.meter_step || 1}
                                             value={qty}
                                             onChange={(e) => setQty(parseFloat(e.target.value))}
                                             className="w-full h-2 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-primary"
                                         />
                                         <div className="flex justify-between mt-2 px-1">
                                             {[...Array(6)].map((_, i) => {
-                                                const min = displayProduct.min_meters || 1;
-                                                const max = displayProduct.max_meters || 100;
+                                                const min = displayProduct.min_meters || parentProduct.min_meters || 1;
+                                                const max = displayProduct.max_meters || parentProduct.max_meters || 100;
                                                 const val = Math.round(min + (max - min) * (i / 5));
                                                 return <span key={i} className="text-[8px] font-black text-gray-300 uppercase italic">{val}m</span>
                                             })}

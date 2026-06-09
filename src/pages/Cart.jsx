@@ -128,7 +128,18 @@ export default function Cart() {
     }, [formData.zip, formData.country, setShippingZone, shippingZone]);
 
     const handleChange = (e) => {
-        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        const { name, value } = e.target;
+        setFormData(prev => {
+            const next = { ...prev, [name]: value };
+
+            // Si cambiamos a envío a domicilio y el método era pago en tienda, lo reseteamos
+            if (name === 'shippingMethod' && value === 'delivery' && prev.paymentMethod === 'in_store') {
+                const firstActive = paymentMethods.stripe ? 'stripe' : paymentMethods.paypal ? 'paypal' : paymentMethods.transfer ? 'transfer' : '';
+                next.paymentMethod = firstActive;
+            }
+
+            return next;
+        });
     };
 
     // Guardar pedido en Supabase
@@ -166,14 +177,69 @@ export default function Cart() {
 
         // Trigger Order Confirmation Email
         try {
-            const emailKey = import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026';
+            // Build detailed HTML for both Customer and Admin
+            const itemsHtml = cart.map(item => `
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="padding: 12px 0; font-size: 14px;">
+                        <div style="font-weight: bold; color: #111827;">${item.name}</div>
+                        <div style="font-size: 12px; color: #6b7280;">Boutique Ref: ${item.id.slice(0, 8).toUpperCase()}</div>
+                    </td>
+                    <td style="padding: 12px 10px; font-size: 14px; text-align: center; color: #374151;">${item.quantity}</td>
+                    <td style="padding: 12px 0; font-size: 14px; text-align: right; font-weight: bold; color: #111827;">${item.price.toFixed(2)}€</td>
+                </tr>
+            `).join('');
+
+            const ivaAmount = effectiveTotalPrice * 0.17355; // 21% inclusive is approx 17.355% of total
+            const basePrice = effectiveTotalPrice - ivaAmount;
+
+            const orderDetailsHtml = `
+                <div style="margin-top: 30px; border: 1px solid #f0f0f0; border-radius: 16px; overflow: hidden;">
+                    <div style="background-color: #fafafa; padding: 15px 20px; border-bottom: 1px solid #f0f0f0;">
+                        <h3 style="margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #111827; font-style: italic;">Detalles del Pedido</h3>
+                    </div>
+                    <div style="padding: 20px;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid #111827;">
+                                    <th style="text-align: left; padding-bottom: 10px; font-size: 10px; text-transform: uppercase; color: #6b7280;">Producto</th>
+                                    <th style="text-align: center; padding-bottom: 10px; font-size: 10px; text-transform: uppercase; color: #6b7280;">Cant.</th>
+                                    <th style="text-align: right; padding-bottom: 10px; font-size: 10px; text-transform: uppercase; color: #6b7280;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${itemsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="background-color: #fafafa; padding: 20px; border-top: 1px solid #f0f0f0;">
+                        <table style="width: 100%;">
+                            <tr>
+                                <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Base Imponible:</td>
+                                <td style="text-align: right; font-size: 14px; font-weight: bold;">${basePrice.toFixed(2)}€</td>
+                            </tr>
+                            <tr>
+                                <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">IVA (21%):</td>
+                                <td style="text-align: right; font-size: 14px; font-weight: bold;">${ivaAmount.toFixed(2)}€</td>
+                            </tr>
+                            <tr style="border-top: 1px solid #e5e7eb;">
+                                <td style="padding-top: 10px; font-size: 14px; font-weight: 900; color: #111827; text-transform: uppercase; font-style: italic;">Total del Pedido:</td>
+                                <td style="padding-top: 10px; text-align: right; font-size: 20px; font-weight: 900; color: #111827;">${effectiveTotalPrice.toFixed(2)}€</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; padding: 15px; background-color: #f0fdf4; border-radius: 12px; border: 1px solid #dcfce7; color: #166534; font-size: 13px; font-weight: bold; text-align: center;">
+                    Método de entrega: ${formData.shippingMethod === 'pickup' ? 'RECOGIDA EN TIENDA (0€)' : 'ENVÍO A DOMICILIO'} <br/>
+                    Método de pago: ${formData.paymentMethod === 'stripe' ? 'TARJETA' : formData.paymentMethod === 'paypal' ? 'PAYPAL' : formData.paymentMethod === 'transfer' ? 'TRANSFERENCIA' : 'PAGO EN TIENDA'}
+                </div>
+            `;
 
             // 1. Send to Customer
             const customerResp = await fetch('/api/send-email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': emailKey
+                    'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026'
                 },
                 body: JSON.stringify({
                     to: formData.email,
@@ -181,18 +247,14 @@ export default function Cart() {
                     variables: {
                         name: formData.name,
                         order_id: order.id.slice(0, 8).toUpperCase(),
-                        site_name: 'Mil Luces Iluminación'
+                        site_name: 'Mil Luces Iluminación',
+                        body: `Gracias por confiar en nosotros. Hemos recibido tu pedido y ya estamos trabajando en él. Aquí tienes los detalles:<br/>${orderDetailsHtml}`
                     }
                 })
             });
             console.log('[Cart] Customer Email Status:', customerResp.status);
-            if (!customerResp.ok) {
-                const errData = await customerResp.json().catch(() => ({}));
-                console.error('[Cart] Customer Email Error:', errData);
-            }
 
             // 2. Send to Admin (Notification of New Order)
-            // Fetch admin email from branding settings if possible, otherwise use fallback
             let adminEmail = 'milluces@millucesiluminacion.com';
             try {
                 const { data: brandData } = await supabase.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
@@ -203,33 +265,32 @@ export default function Cart() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'x-api-key': emailKey
+                    'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026'
                 },
                 body: JSON.stringify({
                     to: adminEmail,
-                    subject: `[NUEVO PEDIDO] #${order.id.slice(0, 8).toUpperCase()} - ${formData.name}`,
-                    html: `
-                        <div style="font-family: sans-serif; padding: 20px; color: #111827;">
-                            <h1 style="font-style: italic; text-transform: uppercase; font-weight: 900; border-bottom: 2px solid #111827; padding-bottom: 10px;">Nuevo Pedido Recibido</h1>
-                            <p style="font-size: 14px; margin-top: 20px;">Se ha registrado un nuevo pedido en la web:</p>
-                            <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; margin: 20px 0;">
-                                <p><b>ID Pedido:</b> #${order.id.slice(0, 8).toUpperCase()}</p>
-                                <p><b>Cliente:</b> ${formData.name}</p>
-                                <p><b>Email:</b> ${formData.email}</p>
-                                <p><b>Teléfono:</b> ${formData.phone || 'No facilitado'}</p>
-                                <p><b>Total:</b> ${effectiveTotalPrice.toFixed(2)}€</p>
-                                <p><b>Método:</b> ${formData.shippingMethod === 'pickup' ? 'Recogida en Tienda' : 'Envio a Domicilio'}</p>
+                    templateKey: 'master_layout',
+                    variables: {
+                        site_name: 'Mil Luces Iluminación',
+                        body: `
+                            <div style="font-family: sans-serif; color: #111827;">
+                                <h1 style="font-style: italic; text-transform: uppercase; font-weight: 900; border-bottom: 2px solid #111827; padding-bottom: 10px; font-size: 24px;">Nuevo Pedido Recibido</h1>
+                                <p style="font-size: 14px; margin-top: 20px;">Se ha registrado un nuevo pedido en la web:</p>
+                                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; border: 1px solid #f0f0f0;">
+                                    <p style="margin: 5px 0;"><b>ID Pedido:</b> #${order.id.slice(0, 8).toUpperCase()}</p>
+                                    <p style="margin: 5px 0;"><b>Cliente:</b> ${formData.name}</p>
+                                    <p style="margin: 5px 0;"><b>Email:</b> ${formData.email}</p>
+                                    <p style="margin: 5px 0;"><b>Teléfono:</b> ${formData.phone || 'No facilitado'}</p>
+                                    <p style="margin: 5px 0;"><b>Dirección:</b> ${formData.shippingMethod === 'pickup' ? 'RECOGIDA EN TIENDA' : `${formData.address}, ${formData.city} (${formData.zip})`}</p>
+                                </div>
+                                ${orderDetailsHtml}
+                                <p style="margin-top: 30px; font-size: 12px; color: #6b7280; text-align: center; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em;">Gestiona este pedido desde el Panel Admin</p>
                             </div>
-                            <p style="font-size: 12px; color: #6b7280;">Puedes gestionar este pedido desde el panel de administración.</p>
-                        </div>
-                    `
+                        `
+                    }
                 })
             });
             console.log('[Cart] Admin Notification Status:', adminResp.status);
-            if (!adminResp.ok) {
-                const errData = await adminResp.json().catch(() => ({}));
-                console.error('[Cart] Admin Notification Error:', errData);
-            }
         } catch (emailErr) {
             console.error('Error triggering order confirmation emails:', emailErr);
         }
@@ -273,7 +334,7 @@ export default function Cart() {
                 return;
             }
 
-            if (formData.paymentMethod === 'transfer') {
+            if (formData.paymentMethod === 'transfer' || formData.paymentMethod === 'in_store') {
                 setOrderRef(order.id.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
                 clearCart();
@@ -311,6 +372,13 @@ export default function Cart() {
                             {transferInfo.banco && <div><span className="text-[9px] font-black text-gray-400 uppercase block">Banco</span><span className="text-sm font-bold text-brand-carbon">{transferInfo.banco}</span></div>}
                             <div><span className="text-[9px] font-black text-gray-400 uppercase block">Concepto</span><span className="text-sm font-black text-primary">#{orderRef}</span></div>
                             <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest pt-2 border-t border-gray-50">Tu pedido se procesará en cuanto recibamos la transferencia.</p>
+                        </div>
+                    )}
+                    {formData.paymentMethod === 'in_store' && (
+                        <div className="bg-white rounded-3xl p-6 text-left mb-8 shadow-luxury border border-gray-100 space-y-3">
+                            <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-4">Instrucciones de Pago</p>
+                            <p className="text-sm font-bold text-brand-carbon italic">Puedes realizar el pago en efectivo o con tarjeta físicamente al recoger tu pedido en nuestra tienda.</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest pt-2 border-t border-gray-50">Te avisaremos cuando tu pedido esté listo para ser recogido.</p>
                         </div>
                     )}
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-12 max-w-xs mx-auto">
@@ -352,6 +420,7 @@ export default function Cart() {
         paymentMethods.stripe && { value: 'stripe', label: 'Tarjeta de Crédito / Débito', sub: 'Visa, Mastercard, Apple Pay (procesado por Stripe)', icon: '💳' },
         paymentMethods.paypal && { value: 'paypal', label: 'PayPal', sub: 'Paga con tu cuenta PayPal de forma segura', icon: '🅿️' },
         paymentMethods.transfer && { value: 'transfer', label: 'Transferencia Bancaria', sub: 'Recibirás los datos bancarios al confirmar', icon: '🏦' },
+        formData.shippingMethod === 'pickup' && { value: 'in_store', label: 'Pago en Tienda', sub: 'Efectivo o tarjeta al recoger tu pedido', icon: '🏪' },
     ].filter(Boolean);
 
     // ── Checkout All-In-One ───────────────────────────────────────────

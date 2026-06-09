@@ -492,7 +492,7 @@ export default function CustomersList() {
                                         </div>
                                     </div>
                                     <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">Fidelización Premium</p>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">CRM - Clientes</p>
                                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">
                                             Mostrando <span className="text-primary">{customers.length}</span> de <span className="text-brand-carbon">{totalCount}</span> clientes
                                         </p>
@@ -544,7 +544,7 @@ export default function CustomersList() {
                             <Star className="w-7 h-7" />
                         </div>
                         <div>
-                            <p className="text-xs font-black uppercase italic tracking-widest font-outfit">Programa de Lealtad Activo</p>
+                            <p className="text-xs font-black uppercase italic tracking-widest font-outfit">Programa de Fidelizacion Activo</p>
                             <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest mt-1 leading-relaxed font-outfit max-w-xl">
                                 Visualización en tiempo real de los usuarios integrados con tu base de datos central de Supabase.
                             </p>

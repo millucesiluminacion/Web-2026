@@ -335,61 +335,109 @@ export default function ProductListing() {
             };
 
             // 4. Meta Data for Filters and Availability
-            const { data: metaData, error: metaErr } = await buildQ(true).limit(5000);
-            if (metaErr) console.error('Meta Query Error:', metaErr);
+            let newAttrFilters = {};
+            let newIdMap = {};
+            let availableGroups = { inStock: new Set(), onOffer: new Set(), isNew: new Set() };
+            let minP = 0;
+            let maxP = MAX_P_FALLBACK;
 
-            const newAttrFilters = {}; const newIdMap = {};
-            let minP = Infinity; let maxP = -Infinity;
-            const availableGroups = { inStock: new Set(), onOffer: new Set(), isNew: new Set() };
+            const { data: rpcData, error: rpcErr } = await supabase.rpc('get_catalog_metadata', {
+                p_category_id: currentCat?.id,
+                p_room_id: roomId,
+                p_brand_id: brandQuery ? brands.find(b => b.slug === brandQuery)?.id : null,
+                p_profession_id: professionSlug ? professions.find(p => p.slug === professionSlug)?.id : null,
+                p_search_query: searchQuery
+            });
 
-            if (metaData) {
+            if (!rpcErr && rpcData) {
+                // SUCCESS: Use server-side data for UI immediate update
                 let filterableKeys = catF.length > 0 ? catF.map(f => f.attribute_key) : ['Potencia', 'Color', 'Voltaje', 'Medida', 'Material', 'Protección IP', 'CASQUILLO', 'Longitud', 'IP'];
 
-                const thirtyDaysAgo = new Date();
-                thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+                Object.entries(rpcData.attributes || {}).forEach(([k, vals]) => {
+                    const kLower = k.toLowerCase();
+                    const matchingKey = filterableKeys.find(fk => fk.toLowerCase() === kLower || (ATTRIBUTE_ALIASES[fk] || []).includes(kLower));
+                    if (!matchingKey) return;
 
-                metaData.forEach(p => {
-                    const targetId = p.parent_id || p.id;
-                    const price = parseFloat(p.price || 0);
-                    const salePrice = parseFloat(p.discount_price || 0);
-                    const stock = parseInt(p.stock || 0);
-
-                    if (price < minP) minP = price;
-                    if (price > 0 && price <= MAX_P_FALLBACK && price > maxP) maxP = price;
-
-                    if (stock > 0) availableGroups.inStock.add(targetId);
-                    if (salePrice > 0 && salePrice < price) availableGroups.onOffer.add(targetId);
-                    if (p.created_at && new Date(p.created_at) > thirtyDaysAgo) availableGroups.isNew.add(targetId);
-
-                    // Attributes
-                    const attrs = p.attributes || {};
-                    Object.entries(attrs).forEach(([k, v]) => {
-                        const kLower = k.toLowerCase();
-                        const matchingKey = filterableKeys.find(fk => fk.toLowerCase() === kLower || (ATTRIBUTE_ALIASES[fk] || []).includes(kLower));
-                        if (!matchingKey) return;
-
-                        if (!newAttrFilters[matchingKey]) newAttrFilters[matchingKey] = new Set();
-                        if (!newIdMap[matchingKey]) newIdMap[matchingKey] = {};
-
-                        const proc = (val) => {
-                            const norm = normalizeFilterValue(String(val).trim());
-                            if (!norm || norm.toLowerCase() === 'n/a') return;
-                            newAttrFilters[matchingKey].add(norm);
-                            if (!newIdMap[matchingKey][norm]) newIdMap[matchingKey][norm] = new Set();
-                            newIdMap[matchingKey][norm].add(targetId);
-                        };
-                        if (Array.isArray(v)) v.forEach(proc); else if (v) proc(v);
-                    });
+                    if (!newAttrFilters[matchingKey]) newAttrFilters[matchingKey] = new Set();
+                    if (Array.isArray(vals)) {
+                        vals.forEach(v => {
+                            const norm = normalizeFilterValue(String(v).trim());
+                            if (norm && norm.toLowerCase() !== 'n/a') newAttrFilters[matchingKey].add(norm);
+                        });
+                    }
                 });
-
-                if (maxP === -Infinity) maxP = MAX_P_FALLBACK;
                 setAvailableDynamicFilters(newAttrFilters);
-                setFilterIdMap(newIdMap);
-                setAvailabilityCounts({ inStock: availableGroups.inStock.size, onOffer: availableGroups.onOffer.size, isNew: availableGroups.isNew.size });
-                setPriceLimits([minP === Infinity ? 0 : Math.floor(minP), Math.ceil(maxP)]);
+                setAvailabilityCounts(rpcData.availability);
+                setPriceLimits([Math.floor(rpcData.min_price), Math.ceil(rpcData.max_price)]);
+                minP = Math.floor(rpcData.min_price);
+                maxP = Math.ceil(rpcData.max_price);
             }
 
-            // 5. Intersect Filter Results
+            // 5. Populate ID Maps (Needed for client-side filtering intersection)
+            // Even if RPC worked, we still need the list of IDs for each filter if the user has active filters.
+            // In a future phase, we will move the intersection to the server too.
+            const needsMetaData = rpcErr || !rpcData || Object.keys(selectedDynamicFilters).length > 0 || availability.inStock || availability.onOffer || availability.isNew;
+
+            if (needsMetaData) {
+                const { data: metaData, error: metaErr } = await buildQ(true).limit(5000);
+                if (!metaErr && metaData) {
+                    let filterableKeys = catF.length > 0 ? catF.map(f => f.attribute_key) : ['Potencia', 'Color', 'Voltaje', 'Medida', 'Material', 'Protección IP', 'CASQUILLO', 'Longitud', 'IP'];
+                    const thirtyDaysAgo = new Date();
+                    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+                    metaData.forEach(p => {
+                        const targetId = p.parent_id || p.id;
+                        const price = parseFloat(p.price || 0);
+                        const salePrice = parseFloat(p.discount_price || 0);
+                        const stock = parseInt(p.stock || 0);
+
+                        if (rpcErr || !rpcData) {
+                            if (price < minP) minP = price;
+                            if (price > 0 && price <= MAX_P_FALLBACK && price > maxP) maxP = price;
+                            if (stock > 0) availableGroups.inStock.add(targetId);
+                            if (salePrice > 0 && salePrice < price) availableGroups.onOffer.add(targetId);
+                            if (p.created_at && new Date(p.created_at) > thirtyDaysAgo) availableGroups.isNew.add(targetId);
+                        } else {
+                            // If RPC already gave us counts, we only need ID lists for active filters
+                            if (stock > 0) availableGroups.inStock.add(targetId);
+                            if (salePrice > 0 && salePrice < price) availableGroups.onOffer.add(targetId);
+                            if (p.created_at && new Date(p.created_at) > thirtyDaysAgo) availableGroups.isNew.add(targetId);
+                        }
+
+                        // Attributes Mapping
+                        const attrs = p.attributes || {};
+                        Object.entries(attrs).forEach(([k, v]) => {
+                            const kLower = k.toLowerCase();
+                            const matchingKey = filterableKeys.find(fk => fk.toLowerCase() === kLower || (ATTRIBUTE_ALIASES[fk] || []).includes(kLower));
+                            if (!matchingKey) return;
+
+                            if (!newAttrFilters[matchingKey]) newAttrFilters[matchingKey] = new Set();
+                            if (!newIdMap[matchingKey]) newIdMap[matchingKey] = {};
+
+                            const proc = (val) => {
+                                const norm = normalizeFilterValue(String(val).trim());
+                                if (!norm || norm.toLowerCase() === 'n/a') return;
+                                newAttrFilters[matchingKey].add(norm);
+                                if (!newIdMap[matchingKey][norm]) newIdMap[matchingKey][norm] = new Set();
+                                newIdMap[matchingKey][norm].add(targetId);
+                            };
+                            if (Array.isArray(v)) v.forEach(proc); else if (v) proc(v);
+                        });
+                    });
+
+                    if (rpcErr || !rpcData) {
+                        if (maxP === -Infinity) maxP = MAX_P_FALLBACK;
+                        setAvailableDynamicFilters(newAttrFilters);
+                        setFilterIdMap(newIdMap);
+                        setAvailabilityCounts({ inStock: availableGroups.inStock.size, onOffer: availableGroups.onOffer.size, isNew: availableGroups.isNew.size });
+                        setPriceLimits([minP === Infinity ? 0 : Math.floor(minP), Math.ceil(maxP)]);
+                    } else {
+                        setFilterIdMap(newIdMap); // Support intersection even when RPC is main source
+                    }
+                }
+            }
+
+            // 6. Intersect Filter Results
             let combinedIds = null;
             if (availability.inStock) combinedIds = new Set(availableGroups.inStock);
             if (availability.onOffer) combinedIds = combinedIds ? new Set([...combinedIds].filter(id => availableGroups.onOffer.has(id))) : new Set(availableGroups.onOffer);
