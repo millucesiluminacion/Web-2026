@@ -96,9 +96,11 @@ export default function SEOAdmin() {
         try {
             setLoading(true);
             let table = tab === 'blog' ? 'blog_posts' : tab;
+            // Include focus_keywords for tables that support it (products, categories, rooms)
+            const supportsKeywords = ['products', 'categories', 'rooms'].includes(tab);
             let select = (tab === 'blog' || tab === 'cms_pages')
                 ? 'id, title, slug, meta_title, meta_description'
-                : 'id, name, slug, meta_title, meta_description';
+                : `id, name, slug, meta_title, meta_description${supportsKeywords ? ', focus_keywords' : ''}`;
 
             if (tab === 'cms_pages') table = 'cms_pages';
 
@@ -120,10 +122,12 @@ export default function SEOAdmin() {
     const handleSaveRow = async (item) => {
         try {
             setSavingId(item.id);
+            const supportsKeywords = ['products', 'categories', 'rooms'].includes(activeTab);
             const updates = {
                 slug: item.slug,
                 meta_title: item.meta_title,
                 meta_description: item.meta_description,
+                ...(supportsKeywords && { focus_keywords: item.focus_keywords || '' }),
             };
 
             if (activeTab === 'pages') {
@@ -175,6 +179,15 @@ export default function SEOAdmin() {
     };
 
     const getHealthScore = (item) => {
+        const supportsKeywords = ['products', 'categories', 'rooms'].includes(activeTab);
+        if (supportsKeywords) {
+            let s = 0;
+            if (item.slug) s += 25;
+            if (item.meta_title) s += 25;
+            if (item.meta_description) s += 25;
+            if (item.focus_keywords) s += 25;
+            return s;
+        }
         let s = 0;
         if (item.slug) s += 33;
         if (item.meta_title) s += 33;
@@ -438,24 +451,46 @@ export default function SEOAdmin() {
                                             </div>
                                         </div>
 
-                                        {/* Expanded: Meta Description */}
+                                        {/* Expanded: Meta Description + Keywords */}
                                         {isOpen && (
                                             <div className="px-6 pb-5 animate-in slide-in-from-top-2 duration-200">
-                                                <div className="ml-11 bg-gray-50 rounded-2xl p-4 border border-gray-100">
-                                                    <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2 block">Meta Descripción (120-160 caracteres)</label>
-                                                    <textarea rows="3"
-                                                        placeholder="Breve descripción persuasiva para Google..."
-                                                        className="w-full bg-white border border-gray-100 rounded-xl p-3 text-[11px] font-medium text-gray-600 focus:ring-2 focus:ring-primary/10 resize-none focus:outline-none"
-                                                        value={item.meta_description || ''}
-                                                        onChange={e => updateItem(item.id, 'meta_description', e.target.value)}
-                                                    />
-                                                    <div className="flex items-center justify-between mt-2">
-                                                        <p className={`text-[9px] font-bold uppercase tracking-widest ${(item.meta_description || '').length > 160 ? 'text-red-400' : 'text-gray-300'}`}>
+                                                <div className="ml-11 bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-4">
+                                                    {/* Meta Description */}
+                                                    <div>
+                                                        <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-2 block">Meta Descripción (120-160 caracteres)</label>
+                                                        <textarea rows="3"
+                                                            placeholder="Breve descripción persuasiva para Google..."
+                                                            className="w-full bg-white border border-gray-100 rounded-xl p-3 text-[11px] font-medium text-gray-600 focus:ring-2 focus:ring-primary/10 resize-none focus:outline-none"
+                                                            value={item.meta_description || ''}
+                                                            onChange={e => updateItem(item.id, 'meta_description', e.target.value)}
+                                                        />
+                                                        <p className={`text-[9px] mt-1 font-bold uppercase tracking-widest ${(item.meta_description || '').length > 160 ? 'text-red-400' : 'text-gray-300'}`}>
                                                             {(item.meta_description || '').length} / 160 caracteres
                                                         </p>
+                                                    </div>
+
+                                                    {/* Focus Keywords — only for products, categories, rooms */}
+                                                    {'focus_keywords' in item && (
+                                                        <div>
+                                                            <label className="text-[9px] font-black uppercase text-amber-500 tracking-widest mb-2 flex items-center gap-1.5">
+                                                                <Tag className="w-3 h-3" /> Palabras Clave Objetivo
+                                                            </label>
+                                                            <input
+                                                                placeholder="Ej: tira led, iluminación cocina, luz led 220v..."
+                                                                className="w-full bg-white border border-amber-100 rounded-xl p-3 text-[11px] font-medium text-gray-700 focus:ring-2 focus:ring-amber-300/30 focus:outline-none"
+                                                                value={item.focus_keywords || ''}
+                                                                onChange={e => updateItem(item.id, 'focus_keywords', e.target.value)}
+                                                            />
+                                                            <p className="text-[9px] mt-1 text-gray-300 font-bold uppercase tracking-widest">
+                                                                Separadas por coma · {(item.focus_keywords || '').split(',').filter(k => k.trim()).length} palabra(s) clave
+                                                            </p>
+                                                        </div>
+                                                    )}
+
+                                                    <div className="flex justify-end">
                                                         <button onClick={() => { handleSaveRow(item); setExpandedId(null); }}
                                                             className="px-4 py-2 bg-brand-carbon text-white rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-primary transition-all flex items-center gap-2">
-                                                            <Save className="w-3 h-3" /> Guardar Descripción
+                                                            <Save className="w-3 h-3" /> Guardar
                                                         </button>
                                                     </div>
                                                 </div>
@@ -486,7 +521,7 @@ export default function SEOAdmin() {
                         <AlertCircle className="w-4 h-4" /> Boutique SEO Intelligence
                     </h4>
                     <p className="text-xs leading-relaxed font-medium">
-                        Los campos se guardan automáticamente al perder el foco o con el botón 💾. Usa el botón <strong>↓</strong> para expandir y editar la <strong>meta descripción</strong>. Los slugs deben ser únicos, en minúsculas y sin acentos.
+                        Los campos se guardan automáticamente al perder el foco o con el botón 💾. Usa el botón <strong>↓</strong> para expandir y editar la <strong>meta descripción</strong> y las <strong>palabras clave objetivo</strong> (productos, categorías y estancias). Los slugs deben ser únicos, en minúsculas y sin acentos.
                     </p>
                 </div>
                 <div className="flex gap-4 relative z-10 flex-shrink-0">
