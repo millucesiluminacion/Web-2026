@@ -530,6 +530,8 @@ export default function ProductDetail() {
                                 <img
                                     src={productImages[activeImageIndex]}
                                     alt={displayProduct?.name}
+                                    fetchpriority="high"
+                                    decoding="async"
                                     className="w-full h-full object-contain transition-transform duration-1000 group-hover:scale-110"
                                 />
                             ) : (

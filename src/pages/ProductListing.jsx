@@ -158,7 +158,16 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                 <div className="absolute inset-0 bg-gray-50/20 opacity-0 group-hover/img:opacity-100 transition-opacity" />
                 <BadgeRenderer product={product} />
                 <div className="w-full h-full relative">
-                    <img src={displayImage} alt={product.name} loading={isLCP ? "eager" : "lazy"} width={400} height={400} className="absolute inset-0 w-full h-full object-contain transition-all duration-700 group-hover/img:scale-110" />
+                    <img
+                        src={displayImage}
+                        alt={product.name}
+                        loading={isLCP ? "eager" : "lazy"}
+                        fetchpriority={isLCP ? "high" : "auto"}
+                        decoding="async"
+                        width={400}
+                        height={400}
+                        className="absolute inset-0 w-full h-full object-contain transition-all duration-700 group-hover/img:scale-110"
+                    />
                 </div>
             </Link>
             <div className="p-8 pt-0 flex-1 flex flex-col">
