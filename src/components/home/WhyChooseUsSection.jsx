@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import { Loader2 } from 'lucide-react';
+import { optimizeImage } from '../../lib/imageUtils';
 
 const STATIC_REASONS = [
     {
@@ -72,7 +73,7 @@ export function WhyChooseUsSection() {
                             <li key={i} className="relative flex md:items-center rounded-md overflow-hidden duration-500 bg-white shadow-sm hover:shadow-md transition-shadow">
                                 <div className="max-md:p-4 max-md:pr-0 flex-shrink-0">
                                     <img
-                                        src={item.image_url || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=150&h=150&fit=crop'}
+                                        src={optimizeImage(item.image_url || 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7', 240)}
                                         alt={item.title}
                                         className="w-[85px] h-[85px] md:w-[120px] md:h-[120px] object-cover max-w-max rounded"
                                         loading="lazy"

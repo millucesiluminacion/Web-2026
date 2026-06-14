@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Save, Loader2, Plus, Pencil, Trash2, X, Image, Type, AlignLeft, Hash, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Save, Loader2, Plus, Pencil, Trash2, X, Image as ImageIcon, Upload, Type, AlignLeft, Hash, CheckCircle, AlertTriangle } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { optimizeImage } from '../../lib/imageUtils';
 
 const EMPTY_REASON = { title: '', description: '', image_url: '', order_index: 0 };
 
@@ -14,6 +15,8 @@ export default function WhyChooseUsAdmin() {
     // Modal state
     const [modalOpen, setModalOpen] = useState(false);
     const [editing, setEditing] = useState(null); // null = new, else reason obj
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [uploading, setUploading] = useState(false);
 
     const showToast = (type, msg) => {
         setToast({ type, msg });
@@ -48,19 +51,51 @@ export default function WhyChooseUsAdmin() {
         }
     }
 
-    const openCreate = () => { setEditing({ ...EMPTY_REASON }); setModalOpen(true); };
-    const openEdit = (reason) => { setEditing({ ...reason }); setModalOpen(true); };
-    const closeModal = () => { setModalOpen(false); setEditing(null); };
+    const openCreate = () => { setEditing({ ...EMPTY_REASON }); setSelectedFile(null); setModalOpen(true); };
+    const openEdit = (reason) => { setEditing({ ...reason }); setSelectedFile(null); setModalOpen(true); };
+    const closeModal = () => { setModalOpen(false); setEditing(null); setSelectedFile(null); };
+
+    async function uploadImage(file) {
+        try {
+            setUploading(true);
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random()}.${fileExt}`;
+            const filePath = `why-choose-us/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('images')
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('images')
+                .getPublicUrl(filePath);
+
+            return publicUrl;
+        } catch (err) {
+            console.error('Error uploading image:', err);
+            throw err;
+        } finally {
+            setUploading(false);
+        }
+    }
 
     async function handleSave() {
         if (!editing.title.trim()) return;
         try {
             setIsSaving(true);
             const isNew = !editing.id;
+
+            let imageUrl = editing.image_url;
+            if (selectedFile) {
+                imageUrl = await uploadImage(selectedFile);
+            }
+
             const payload = {
                 title: editing.title,
                 description: editing.description,
-                image_url: editing.image_url,
+                image_url: imageUrl,
                 order_index: Number(editing.order_index),
             };
             if (!isNew) payload.id = editing.id;
@@ -243,7 +278,7 @@ export default function WhyChooseUsAdmin() {
                             </div>
 
                             {/* Grid: Order + Image URL */}
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-3 gap-6 items-end">
                                 <div className="space-y-2">
                                     <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
                                         <Hash className="w-3 h-3" /> Orden
@@ -255,26 +290,45 @@ export default function WhyChooseUsAdmin() {
                                         className="w-full h-12 bg-gray-50 border-none rounded-2xl px-4 text-sm font-bold text-center focus:ring-4 focus:ring-primary/10 transition-all focus:outline-none"
                                     />
                                 </div>
-                                <div className="col-span-2 space-y-2">
-                                    <label className="flex items-center gap-2 text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                                        <Image className="w-3 h-3" /> URL Icono / Imagen
-                                    </label>
+                                <div className="col-span-2">
+                                    <div
+                                        className={`relative w-full h-24 bg-gray-50 border-2 border-dashed rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-gray-100 ${selectedFile || editing.image_url ? 'border-primary/50 bg-primary/5' : 'border-gray-100'}`}
+                                        onClick={() => document.getElementById('reason-image-upload').click()}
+                                    >
+                                        {selectedFile || editing.image_url ? (
+                                            <>
+                                                <img
+                                                    src={selectedFile ? URL.createObjectURL(selectedFile) : optimizeImage(editing.image_url, 300)}
+                                                    className="w-full h-full object-contain p-3 rounded-2xl"
+                                                    alt="Preview"
+                                                />
+                                                <div className="absolute inset-0 bg-brand-carbon/20 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center rounded-[1.4rem]">
+                                                    <Upload className="w-6 h-6 text-white" />
+                                                </div>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ImageIcon className="w-6 h-6 text-gray-200 mb-1" />
+                                                <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Subir Imagen</span>
+                                            </>
+                                        )}
+                                        <input
+                                            id="reason-image-upload"
+                                            type="file"
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={(e) => setSelectedFile(e.target.files[0])}
+                                        />
+                                    </div>
                                     <input
                                         type="text"
                                         value={editing.image_url}
                                         onChange={(e) => setEditing(prev => ({ ...prev, image_url: e.target.value }))}
-                                        placeholder="https://…/icon.svg"
-                                        className="w-full h-12 bg-gray-50 border-none rounded-2xl px-5 text-xs font-mono focus:ring-4 focus:ring-primary/10 transition-all focus:outline-none placeholder:text-gray-300"
+                                        placeholder="O pega una URL..."
+                                        className="w-full h-8 bg-transparent border-none px-2 text-[8px] font-mono text-gray-300 focus:outline-none text-center"
                                     />
                                 </div>
                             </div>
-
-                            {/* Image Preview */}
-                            {editing.image_url && (
-                                <div className="p-4 bg-gray-50 rounded-2xl flex justify-center border border-gray-100 animate-in fade-in">
-                                    <img src={editing.image_url} alt="Preview" className="h-14 w-auto object-contain" />
-                                </div>
-                            )}
                         </div>
 
                         {/* Modal Footer */}

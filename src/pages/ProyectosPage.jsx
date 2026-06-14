@@ -168,7 +168,7 @@ export default function ProyectosPage() {
                                     {project.hotspots?.length > 0 && (
                                         <div className="w-full space-y-6 pt-10 border-t border-gray-100">
                                             <h3 className="text-[10px] font-black uppercase tracking-[.4em] text-brand-carbon flex items-center gap-3">
-                                                <ShoppingCart className="w-4 h-4 text-primary" /> Shop The Scene
+                                                <ShoppingCart className="w-4 h-4 text-primary" /> Productos de la Imagen
                                             </h3>
                                             <div className="flex flex-wrap gap-4">
                                                 {project.hotspots.map((hs, idx) => (
