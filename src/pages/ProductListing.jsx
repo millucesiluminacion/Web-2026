@@ -351,7 +351,7 @@ export default function ProductListing() {
     async function fetchProducts() {
         try {
             setLoading(true);
-            const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('*')).data || [];
+            const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('*').order('order_index')).data || [];
             const currentCat = allCats.find(c => c.slug?.toLowerCase() === categoryQuery?.toLowerCase());
 
             // 1. Gather all category IDs in scope (using many-to-many relationships)
@@ -538,7 +538,8 @@ export default function ProductListing() {
             // Subcategories are those that have currentCat as one of their parents in relationships
             const rels = relationships.length > 0 ? relationships : (await supabase.from('category_relationships').select('*')).data || [];
             const subIds = rels.filter(r => r.parent_id === currentCat?.id).map(r => r.child_id);
-            setSubcategories(allCats.filter(c => subIds.includes(c.id)));
+            const subs = allCats.filter(c => subIds.includes(c.id)).sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+            setSubcategories(subs);
 
         } catch (e) { console.error('Product Fetch Error:', e); } finally { setLoading(false); }
     }
