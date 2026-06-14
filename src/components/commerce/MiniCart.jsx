@@ -85,7 +85,15 @@ export function MiniCart() {
                                                     >
                                                         -
                                                     </button>
-                                                    <span className="text-[10px] font-black italic text-brand-carbon w-4 text-center">{item.quantity}</span>
+                                                    <input
+                                                        type="number"
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            const val = parseInt(e.target.value);
+                                                            if (!isNaN(val) && val >= 1) updateQuantity(item.id, val);
+                                                        }}
+                                                        className="w-10 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                    />
                                                     <button
                                                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
                                                         className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"

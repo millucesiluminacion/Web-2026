@@ -151,6 +151,8 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
         return optimizeImage(rawImg, 400, 400);
     }, [images, currentImgIndex, activeVariantImg]);
 
+    const [localQty, setLocalQty] = useState(1);
+
     return (
         <div onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}
             className="group relative bg-white rounded-[2.5rem] overflow-hidden shadow-luxury hover:shadow-luxury-hover transition-all duration-700 border border-gray-100/50 flex flex-col">
@@ -194,25 +196,77 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                         {variantOptions.map(opt => <span key={opt} className="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-md text-[7px] font-black uppercase text-gray-500">{opt}</span>)}
                     </div>
                 )}
-                <div className="mt-auto flex items-center justify-between border-t border-gray-50 pt-6">
-                    <div className="flex flex-col">
-                        <span className={`text-[10px] font-black uppercase mb-1 ${pricing.isPartnerPrice ? 'text-yellow-500' : pricing.isProPrice ? 'text-primary' : 'text-gray-300'}`}>
-                            {pricing.isPartnerPrice ? '★ Socio VIP' : pricing.isProPrice ? '✦ Precio Pro' : 'Precio'}
-                        </span>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-xl font-black italic text-brand-carbon">{pricing.displayPrice.toFixed(2)}€</span>
-                            {pricing.showPriceWithoutVat && (
-                                <span className="text-[10px] font-black text-primary uppercase italic">+IVA</span>
+                <div className="mt-auto border-t border-gray-50 pt-6">
+                    <div className="relative flex items-center justify-between h-12 lg:h-14">
+                        {/* Price Section - Fades on hover to make room for absolute buy-bar */}
+                        <div className="flex flex-col transition-all duration-300 group-hover:opacity-0 lg:group-hover:opacity-0 pointer-events-none group-hover:translate-x-[-10px]">
+                            <span className={`text-[10px] font-black uppercase mb-1 ${pricing.isPartnerPrice ? 'text-yellow-500' : pricing.isProPrice ? 'text-primary' : 'text-gray-300'}`}>
+                                {pricing.isPartnerPrice ? '★ Socio VIP' : pricing.isProPrice ? '✦ Precio Pro' : 'Precio'}
+                            </span>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-xl font-black italic text-brand-carbon">{pricing.displayPrice.toFixed(2)}€</span>
+                                {pricing.showPriceWithoutVat && (
+                                    <span className="text-[10px] font-black text-primary uppercase italic">+IVA</span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Buy Action Container */}
+                        <div className="flex items-center ml-auto">
+                            {/* Determine if product needs configuration before purchase */}
+                            {product.is_by_meter || product.is_by_measurement || product.mandatory_accessory_ids?.length > 0 ? (
+                                <button
+                                    onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }); }}
+                                    className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 transition-all"
+                                >
+                                    <ShoppingCart className="w-5 h-5" />
+                                </button>
+                            ) : (
+                                <div className="absolute right-0 flex items-center bg-gray-50 rounded-2xl border border-gray-100 transition-all hover:border-primary/20 p-1 group/buy shadow-sm">
+                                    {/* Quantity Selector - Hidden on desktop until hover (or always visible on mobile) */}
+                                    <div className="flex items-center overflow-hidden transition-all duration-300 lg:w-0 lg:opacity-0 group-hover:lg:w-32 group-hover:lg:opacity-100 lg:px-0 group-hover:lg:px-2 flex-grow sm:flex-grow-0 whitespace-nowrap">
+                                        <button
+                                            onClick={(e) => { e.preventDefault(); setLocalQty(Math.max(1, localQty - 1)); }}
+                                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black transition-colors"
+                                        >
+                                            -
+                                        </button>
+                                        <input
+                                            type="number"
+                                            value={localQty}
+                                            onChange={(e) => {
+                                                const val = parseInt(e.target.value);
+                                                if (!isNaN(val) && val >= 1) setLocalQty(val);
+                                                else if (e.target.value === '') setLocalQty('');
+                                            }}
+                                            onBlur={() => {
+                                                if (localQty === '' || localQty < 1) setLocalQty(1);
+                                            }}
+                                            onClick={(e) => e.preventDefault()}
+                                            className="w-10 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
+                                        <button
+                                            onClick={(e) => { e.preventDefault(); setLocalQty((prev) => (prev === '' ? 1 : prev + 1)); }}
+                                            className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black transition-colors"
+                                        >
+                                            +
+                                        </button>
+                                        <div className="w-px h-5 bg-gray-200 mx-2 hidden lg:block" />
+                                    </div>
+
+                                    <button
+                                        onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }, localQty || 1); }}
+                                        className="w-10 h-10 lg:w-11 lg:h-11 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all flex-shrink-0"
+                                    >
+                                        <ShoppingCart className="w-4 h-4 lg:w-5 lg:h-5" />
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
-                    <button onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }); }}
-                        className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 transition-all">
-                        <ShoppingCart className="w-5 h-5" />
-                    </button>
                 </div>
             </div>
-        </div>
+        </div >
     );
 });
 
@@ -675,7 +729,7 @@ export default function ProductListing() {
                                 </div>
                                 <div className="flex items-center gap-3">
                                     {PAGE_SIZE_OPTIONS.map(n => (
-                                        <button key={n} onClick={() => setItemsPerPage(n)} className={`w-8 h-8 rounded-lg text-[9px] font-black border transition-all ${itemsPerPage === n ? 'bg-brand-carbon text-white' : 'bg-white text-gray-400'}`}>{n}</button>
+                                        <button key={n} onClick={() => { setItemsPerPage(n); setCurrentPage(1); }} className={`w-8 h-8 rounded-lg text-[9px] font-black border transition-all ${itemsPerPage === n ? 'bg-brand-carbon text-white' : 'bg-white text-gray-400'}`}>{n}</button>
                                     ))}
                                     <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-gray-50 border-none rounded-xl text-[10px] font-black uppercase italic px-4 py-2">
                                         {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

@@ -752,9 +752,21 @@ export default function ProductDetail() {
                                         >
                                             -
                                         </button>
-                                        <span className="text-sm font-black italic text-brand-carbon">{qty}</span>
+                                        <input
+                                            type="number"
+                                            value={qty}
+                                            onChange={(e) => {
+                                                const val = parseInt(e.target.value);
+                                                if (!isNaN(val) && val >= 1) setQty(val);
+                                                else if (e.target.value === '') setQty(''); // Allow clearing to type
+                                            }}
+                                            onBlur={() => {
+                                                if (qty === '' || qty < 1) setQty(1);
+                                            }}
+                                            className="w-12 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                        />
                                         <button
-                                            onClick={() => setQty(qty + 1)}
+                                            onClick={() => setQty((prev) => (prev === '' ? 1 : prev + 1))}
                                             className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-brand-carbon font-black text-xl transition-colors"
                                         >
                                             +

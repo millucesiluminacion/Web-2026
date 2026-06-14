@@ -238,7 +238,7 @@ export default function HomePage() {
             <section className="mb-12 max-w-[1600px] mx-auto px-6">
                 <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
                     <div>
-                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Premium Selection</span>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Ultimas Llegadas</span>
                         <h2 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Novedades <span className="text-primary/60">Destacadas</span></h2>
                     </div>
                     <Link to="/catalogo" className="text-[10px] font-black text-brand-carbon uppercase italic tracking-widest hover:text-primary transition-all flex items-center gap-2 border-b-2 border-brand-carbon pb-1 group">
@@ -249,7 +249,7 @@ export default function HomePage() {
                 {loading ? (
                     <div className="h-96 flex flex-col items-center justify-center text-gray-400 glass rounded-[3rem]">
                         <Loader2 className="w-10 h-10 animate-spin mb-4 text-primary" />
-                        <p className="text-[10px] font-black uppercase tracking-widest">Sincronizando Boutique...</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest">Sincronizando Tienda...</p>
                     </div>
                 ) : (
                     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
