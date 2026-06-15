@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { ArrowRight, CheckCircle2, Building2, Percent, Headphones, Truck, ShieldCheck, Zap, Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
+import { useAuth } from '../context/AuthContext';
+
 
 const ICON_MAP = {
     Percent: <Percent className="w-6 h-6" />,
@@ -22,6 +24,8 @@ export default function ProfessionalsPage() {
     const [benefits, setBenefits] = useState([]);
     const [cmsData, setCmsData] = useState(null);
     const [loading, setLoading] = useState(true);
+    const { userTier } = useAuth();
+
 
     useEffect(() => {
         async function loadProData() {
@@ -65,7 +69,7 @@ export default function ProfessionalsPage() {
                 {/* Hero Section */}
                 <header className="mb-24 text-center">
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-6 block animate-in fade-in slide-in-from-bottom-2 duration-700">
-                        {cmsData?.content?.header_subtitle || 'Service for Architects & Contractors'}
+                        {cmsData?.content?.header_subtitle || 'Servicio para Instaladores y Profesionales'}
                     </span>
                     <h1 className="text-5xl md:text-7xl lg:text-8xl font-black text-brand-carbon uppercase italic leading-[0.85] tracking-tighter mb-10 animate-in fade-in slide-in-from-bottom-4 duration-1000">
                         {cmsData?.content?.header_title || (

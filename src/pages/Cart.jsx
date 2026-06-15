@@ -7,7 +7,7 @@ import {
     Trash, CreditCard, Truck, ShieldCheck,
     CheckCircle2, Loader2, Lock, Package,
     ChevronDown, ChevronUp, ArrowRight, Sparkles,
-    AlertCircle, Minus, Plus
+    AlertCircle, Minus, Plus, X
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -35,6 +35,10 @@ export default function Cart() {
     const [payError, setPayError] = useState('');
     const [transferInfo, setTransferInfo] = useState(null);
     const [stripePromise, setStripePromise] = useState(null);
+    const [couponCode, setCouponCode] = useState('');
+    const [appliedCoupon, setAppliedCoupon] = useState(null);
+    const [couponError, setCouponError] = useState('');
+    const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
     const [formData, setFormData] = useState({
         name: profile?.full_name || '',
@@ -54,7 +58,8 @@ export default function Cart() {
     // Explicit shipping cost calculation based on method choice
     const effectiveShippingCost = formData.shippingMethod === 'pickup' ? 0 : (formData.shippingMethod === 'delivery' ? shippingCost : 0);
 
-    const effectiveTotalPrice = subtotal + effectiveShippingCost;
+    const couponDiscount = appliedCoupon ? (subtotal * (appliedCoupon.discount_percentage / 100)) : 0;
+    const effectiveTotalPrice = subtotal + effectiveShippingCost - couponDiscount;
     const baseImponible = effectiveTotalPrice / (1 + IVA_RATE);
     const iva = effectiveTotalPrice - baseImponible;
 
@@ -153,7 +158,9 @@ export default function Cart() {
                 shipping_address: formData.address,
                 shipping_city: formData.city,
                 shipping_zip: formData.zip,
-                notes: formData.notes,
+                notes: appliedCoupon
+                    ? `${formData.notes}${formData.notes ? ' | ' : ''}CUPÓN: ${appliedCoupon.code} (-${appliedCoupon.discount_percentage}%)`
+                    : formData.notes,
                 total: effectiveTotalPrice,
                 payment_method: formData.paymentMethod,
                 shipping_method: formData.shippingMethod || 'delivery',
@@ -221,6 +228,12 @@ export default function Cart() {
                                 <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">IVA (21%):</td>
                                 <td style="text-align: right; font-size: 14px; font-weight: bold;">${ivaAmount.toFixed(2)}€</td>
                             </tr>
+                            ${appliedCoupon ? `
+                            <tr>
+                                <td style="font-size: 12px; color: #16a34a; text-transform: uppercase; font-weight: bold;">Descuento Cupón (${appliedCoupon.code}):</td>
+                                <td style="text-align: right; font-size: 14px; font-weight: bold; color: #16a34a;">-${couponDiscount.toFixed(2)}€</td>
+                            </tr>
+                            ` : ''}
                             <tr style="border-top: 1px solid #e5e7eb;">
                                 <td style="padding-top: 10px; font-size: 14px; font-weight: 900; color: #111827; text-transform: uppercase; font-style: italic;">Total del Pedido:</td>
                                 <td style="padding-top: 10px; text-align: right; font-size: 20px; font-weight: 900; color: #111827;">${effectiveTotalPrice.toFixed(2)}€</td>
@@ -347,6 +360,43 @@ export default function Cart() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleApplyCoupon = async () => {
+        if (!couponCode.trim()) return;
+        setIsValidatingCoupon(true);
+        setCouponError('');
+        try {
+            const { data, error } = await supabase
+                .from('offers')
+                .select('*')
+                .eq('code', couponCode.toUpperCase())
+                .eq('is_active', true)
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (!data) {
+                setCouponError('Código no válido');
+                setAppliedCoupon(null);
+            } else if (data.expiry_date && new Date(data.expiry_date) < new Date()) {
+                setCouponError('El cupón ha expirado');
+                setAppliedCoupon(null);
+            } else {
+                setAppliedCoupon(data);
+                setCouponCode('');
+            }
+        } catch (err) {
+            console.error('Error validando cupón:', err);
+            setCouponError('Error al validar cupón');
+        } finally {
+            setIsValidatingCoupon(false);
+        }
+    };
+
+    const removeCoupon = () => {
+        setAppliedCoupon(null);
+        setCouponError('');
     };
 
     // ── Pantalla de confirmación ──────────────────────────────────────
@@ -747,7 +797,52 @@ export default function Cart() {
                                         <span className="text-gray-500">IVA (21%)</span>
                                         <span className="text-white font-bold">{iva.toFixed(2)} €</span>
                                     </div>
+                                    {appliedCoupon && (
+                                        <div className="flex justify-between text-[10px] font-black uppercase tracking-[.2em] text-primary italic border-t border-white/5 pt-3 mt-1">
+                                            <span>Cupón: {appliedCoupon.code} (−{appliedCoupon.discount_percentage}%)</span>
+                                            <span>−{couponDiscount.toFixed(2)} €</span>
+                                        </div>
+                                    )}
                                 </div>
+
+                                {/* Coupon Input */}
+                                {!appliedCoupon ? (
+                                    <div className="mb-6 relative z-10">
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="CÓDIGO DE CUPÓN"
+                                                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[10px] font-bold uppercase tracking-widest focus:outline-none focus:border-primary/50 transition-all placeholder:text-white/20 select-none no-drag"
+                                                value={couponCode}
+                                                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                                onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleApplyCoupon())}
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleApplyCoupon}
+                                                disabled={isValidatingCoupon || !couponCode.trim()}
+                                                className="bg-white/10 hover:bg-primary text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase italic transition-all disabled:opacity-30 flex items-center justify-center min-w-[70px]"
+                                            >
+                                                {isValidatingCoupon ? <Loader2 className="w-3 h-3 animate-spin" /> : 'APLICAR'}
+                                            </button>
+                                        </div>
+                                        {couponError && <p className="text-[9px] font-bold text-red-400 mt-2 ml-1 uppercase tracking-tighter">{couponError}</p>}
+                                    </div>
+                                ) : (
+                                    <div className="mb-6 relative z-10 flex items-center justify-between bg-primary/10 border border-primary/20 rounded-xl px-4 py-2 animate-in fade-in zoom-in-95 duration-300">
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles className="w-3 h-3 text-primary" />
+                                            <span className="text-[10px] font-black uppercase italic text-primary">Cupón Aplicado</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={removeCoupon}
+                                            className="text-white/40 hover:text-white transition-colors"
+                                        >
+                                            <X className="w-3 h-3" />
+                                        </button>
+                                    </div>
+                                )}
                                 <div className="border-t border-white/10 pt-5 mb-7 relative z-10">
                                     <div className="flex justify-between items-end">
                                         <span className="text-[9px] font-black uppercase tracking-[.3em] text-gray-500">

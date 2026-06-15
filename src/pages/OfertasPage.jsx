@@ -45,11 +45,11 @@ const OfertasPage = () => {
             <div className="container mx-auto px-6 max-w-[1400px]">
                 <header className="mb-12 text-center relative group">
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
-                        {cmsData?.content?.header_subtitle || 'Mil Luces Outlet'}
+                        {cmsData?.content?.header_subtitle || 'Ofertas Especiales de Mil Luces'}
                     </span>
                     <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter animate-reveal-up drop-shadow-sm">
                         {cmsData?.content?.header_title || (
-                            <>Oportunidades <span className="text-primary/40">Exclusivas</span></>
+                            <>Mira lo que tenemos <span className="text-primary/40">para ti</span></>
                         )}
                     </h1>
                     <div className="w-20 h-1 bg-primary/20 mx-auto mt-8 rounded-full"></div>
