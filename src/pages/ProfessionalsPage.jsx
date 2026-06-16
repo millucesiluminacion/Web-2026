@@ -82,10 +82,10 @@ export default function ProfessionalsPage() {
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-6 animate-in fade-in slide-in-from-bottom-8 duration-1000">
                         {userTier !== 'normal' ? (
                             <Link
-                                to="/catalogo"
+                                to="/register-pro"
                                 className="w-full sm:w-auto px-12 py-6 bg-primary text-white rounded-2xl font-black uppercase italic text-xs hover:bg-brand-carbon transition-all shadow-2xl shadow-primary/30 group"
                             >
-                                Explorar Catálogo Pro <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                                Unete a MilPro <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                             </Link>
                         ) : (
                             <Link
@@ -95,12 +95,12 @@ export default function ProfessionalsPage() {
                                 Alta Gratuita Profesional <ArrowRight className="inline-block ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                             </Link>
                         )}
-                        <a
-                            href="mailto:pro@milluces.com"
+                        <Link
+                            to="/contacto"
                             className="w-full sm:w-auto px-12 py-6 border-2 border-brand-carbon/10 text-brand-carbon rounded-2xl font-black uppercase italic text-xs hover:bg-gray-50 transition-all font-black"
                         >
-                            Contactar con Asesor
-                        </a>
+                            Contactar con Nosotros
+                        </Link>
                     </div>
                 </header>
 
