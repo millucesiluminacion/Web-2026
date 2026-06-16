@@ -14,7 +14,7 @@ const getBase64ImageFromURL = (url) => {
             canvas.height = img.height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0);
-            const dataURL = canvas.toDataURL('image/jpeg');
+            const dataURL = canvas.toDataURL('image/png');
             resolve(dataURL);
         };
         img.onerror = (error) => {
@@ -49,9 +49,9 @@ export const generateProductPDF = async (product, variant, logoUrl = '/logo.jpg'
         doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(180, 180, 180);
-        doc.text('DOCUMENTACIÓN TÉCNICA', 190, currentY + 5, { align: 'right' });
+        doc.text('FICHA TÉCNICA', 190, currentY + 5, { align: 'right' });
         doc.setFont('helvetica', 'normal');
-        doc.text(`Generado: ${new Date().toLocaleDateString('es-ES')}`, 190, currentY + 10, { align: 'right' });
+        doc.text(`Generada: ${new Date().toLocaleDateString('es-ES')}`, 190, currentY + 10, { align: 'right' });
 
         currentY += 20;
         doc.setDrawColor(240, 240, 240);
@@ -89,10 +89,46 @@ export const generateProductPDF = async (product, variant, logoUrl = '/logo.jpg'
         // Category Badge
         doc.setFontSize(7);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(189, 151, 88); // Primary Gold
+        doc.setTextColor(27, 62, 188); // Primary Gold
         doc.text((product.categories?.name || 'BOUTIQUE SELECTION').toUpperCase() + ' // REF: ' + (displayProduct.reference || 'N/A'), col2X, infoCurrentY);
 
         infoCurrentY += 12;
+
+        let sealX = col2X;
+        // Render Energy Label
+        if (product.energy_labels) {
+            try {
+                if (product.energy_labels.image_url) {
+                    const elImg = await getBase64ImageFromURL(product.energy_labels.image_url);
+                    doc.addImage(elImg, 'PNG', sealX, infoCurrentY, 12, 12);
+                    sealX += 15;
+                } else {
+                    doc.setFontSize(7);
+                    doc.setTextColor(255, 255, 255);
+                    doc.setFillColor(product.energy_labels.color || '#000');
+                    doc.rect(sealX, infoCurrentY, 10, 10, 'F');
+                    doc.text(product.energy_labels.name, sealX + 5, infoCurrentY + 6.5, { align: 'center' });
+                    sealX += 15;
+                }
+            } catch (e) { console.warn("Error adding energy label to PDF", e); }
+        }
+
+        // Render Quality Seals
+        if (product.product_quality_seals && product.product_quality_seals.length > 0) {
+            for (const pqs of product.product_quality_seals) {
+                if (pqs.quality_seals?.image_url) {
+                    try {
+                        const sealImg = await getBase64ImageFromURL(pqs.quality_seals.image_url);
+                        doc.addImage(sealImg, 'PNG', sealX, infoCurrentY, 10, 10);
+                        sealX += 13;
+                    } catch (e) { console.warn("Error adding quality seal to PDF", e); }
+                }
+            }
+        }
+
+        if (product.energy_labels || (product.product_quality_seals && product.product_quality_seals.length > 0)) {
+            infoCurrentY += 15;
+        }
 
         // Description
         doc.setFontSize(10);
@@ -146,10 +182,10 @@ export const generateProductPDF = async (product, variant, logoUrl = '/logo.jpg'
         const footerY = 280;
         doc.setFontSize(8);
         doc.setTextColor(180, 180, 180);
-        doc.text('MIL LUCES BOUTIQUE // ILUMINACIÓN TÉCNICA Y DECORATIVA EXCLUSIVA', margin, footerY);
+        doc.text('TU TIENDA ESPECIALIZADA EN ILUMINACION LINEAL Y LED', margin, footerY);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(189, 151, 88);
-        doc.text('WWW.MIL-LUCES.COM', 190, footerY, { align: 'right' });
+        doc.setTextColor(27, 62, 188);
+        doc.text('WWW.MILLUCESILUMINACION.COM', 190, footerY, { align: 'right' });
 
         // OPEN IN NEW TAB
         const string = doc.output('bloburl');
