@@ -2,7 +2,7 @@ import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
     LayoutDashboard, Package, ShoppingCart, Users, Settings, LogOut, Menu, Tag, Award,
     CheckSquare, Sofa, Image as ImageIcon, CreditCard, BookOpen, Briefcase, UserPlus, Star,
-    Search, ShieldCheck, Mail, FileText as CMSIcon, Sliders
+    Search, ShieldCheck, Mail, FileText as CMSIcon, Sliders, Zap
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
@@ -97,6 +97,8 @@ export function AdminLayout() {
                 { icon: Star, label: 'Sectores PRO', path: '/admin/professions' },
                 { icon: Award, label: 'Contenido PRO', path: '/admin/professionals' },
                 { icon: ShieldCheck, label: 'Sellos de Confianza', path: '/admin/trust-badges' },
+                { icon: ShieldCheck, label: 'Sellos de Calidad', path: '/admin/quality-seals' },
+                { icon: Zap, label: 'Eficiencia Energética', path: '/admin/energy-labels' },
                 { icon: CheckSquare, label: 'Por qué elegirnos', path: '/admin/why-us' },
                 { icon: CMSIcon, label: 'Páginas CMS', path: '/admin/pages' },
             ]

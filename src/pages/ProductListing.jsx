@@ -151,7 +151,7 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
         return optimizeImage(rawImg, 400, 400);
     }, [images, currentImgIndex, activeVariantImg]);
 
-    const [localQty, setLocalQty] = useState(1);
+    const [localQty, setLocalQty] = useState(product.is_by_meter ? (product.min_meters || 1) : 1);
 
     return (
         <div onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}
@@ -196,6 +196,32 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                         {variantOptions.map(opt => <span key={opt} className="px-2 py-0.5 bg-gray-50 border border-gray-100 rounded-md text-[7px] font-black uppercase text-gray-500">{opt}</span>)}
                     </div>
                 )}
+
+                {/* Sellos & Eficiencia */}
+                {(product.energy_labels || (product.product_quality_seals && product.product_quality_seals.length > 0)) && (
+                    <div className="flex items-center flex-wrap gap-3 mb-4">
+                        {product.energy_labels && (
+                            <div className="h-6 flex items-center">
+                                {product.energy_labels.image_url ? (
+                                    <img src={product.energy_labels.image_url} alt={product.energy_labels.name} className="h-full object-contain" title={`Etiqueta Energética: ${product.energy_labels.name}`} />
+                                ) : (
+                                    <span className="px-2 h-full flex items-center justify-center rounded text-[8px] font-black text-white" style={{ backgroundColor: product.energy_labels.color }}>
+                                        {product.energy_labels.name}
+                                    </span>
+                                )}
+                            </div>
+                        )}
+                        {product.product_quality_seals?.map((pqs, idx) => (
+                            <img
+                                key={idx}
+                                src={pqs.quality_seals.image_url}
+                                alt={pqs.quality_seals.name}
+                                className="h-5 object-contain grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all"
+                                title={pqs.quality_seals.name}
+                            />
+                        ))}
+                    </div>
+                )}
                 <div className="mt-auto border-t border-gray-50 pt-6">
                     <div className="relative flex items-center justify-between h-12 lg:h-14">
                         {/* Price Section - Fades on hover to make room for absolute buy-bar */}
@@ -211,19 +237,55 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                             </div>
                         </div>
 
-                        {/* Buy Action Container */}
                         <div className="flex items-center ml-auto">
-                            {/* Determine if product needs configuration before purchase */}
-                            {product.is_by_meter || product.is_by_measurement || product.mandatory_accessory_ids?.length > 0 ? (
+                            {/* Special configuration products (except by-meter which we now handle) */}
+                            {(!product.is_by_meter && (product.is_by_measurement || (product.mandatory_accessory_ids && product.mandatory_accessory_ids.length > 0))) ? (
                                 <button
-                                    onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }); }}
+                                    onClick={(e) => { e.preventDefault(); navigate(`/product/${product.slug || product.id}`); }}
                                     className="w-12 h-12 bg-primary text-white rounded-2xl flex items-center justify-center shadow-xl shadow-primary/20 hover:scale-110 transition-all"
+                                    title="Personalizar Producto"
                                 >
                                     <ShoppingCart className="w-5 h-5" />
                                 </button>
+                            ) : product.is_by_meter ? (
+                                <div className="absolute right-0 flex items-center bg-gray-50 rounded-2xl border border-gray-100 transition-all hover:border-primary/20 p-1 group/buy shadow-sm max-w-full">
+                                    {/* Meter Slider UI - Expanding on hover */}
+                                    <div className="flex items-center overflow-hidden transition-all duration-300 lg:w-0 lg:opacity-0 group-hover:lg:w-40 group-hover:lg:opacity-100 lg:px-0 group-hover:lg:px-3 flex-grow sm:flex-grow-0 whitespace-nowrap">
+                                        <div className="flex flex-col justify-center min-w-[120px]">
+                                            <div className="flex justify-between items-center mb-0.5">
+                                                <span className="text-[7px] font-black uppercase text-gray-400 italic">Metros</span>
+                                                <span className="text-[10px] font-black text-primary italic leading-none">{localQty}m</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min={product.min_meters || 1}
+                                                max={product.max_meters || 100}
+                                                step={product.meter_step || 1}
+                                                value={localQty}
+                                                onChange={(e) => {
+                                                    e.preventDefault();
+                                                    setLocalQty(parseFloat(e.target.value));
+                                                }}
+                                                onClick={(e) => e.preventDefault()}
+                                                className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-primary"
+                                            />
+                                        </div>
+                                        <div className="w-px h-5 bg-gray-200 mx-2 hidden lg:block" />
+                                    </div>
+
+                                    <button
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            addToCart({ ...product, price: pricing.finalPrice }, localQty || 1);
+                                        }}
+                                        className="w-10 h-10 lg:w-11 lg:h-11 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all flex-shrink-0"
+                                    >
+                                        <ShoppingCart className="w-4 h-4 lg:w-5 lg:h-5" />
+                                    </button>
+                                </div>
                             ) : (
                                 <div className="absolute right-0 flex items-center bg-gray-50 rounded-2xl border border-gray-100 transition-all hover:border-primary/20 p-1 group/buy shadow-sm">
-                                    {/* Quantity Selector - Hidden on desktop until hover (or always visible on mobile) */}
+                                    {/* Quantity Stepper */}
                                     <div className="flex items-center overflow-hidden transition-all duration-300 lg:w-0 lg:opacity-0 group-hover:lg:w-32 group-hover:lg:opacity-100 lg:px-0 group-hover:lg:px-2 flex-grow sm:flex-grow-0 whitespace-nowrap">
                                         <button
                                             onClick={(e) => { e.preventDefault(); setLocalQty(Math.max(1, localQty - 1)); }}
@@ -253,7 +315,6 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                                         </button>
                                         <div className="w-px h-5 bg-gray-200 mx-2 hidden lg:block" />
                                     </div>
-
                                     <button
                                         onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }, localQty || 1); }}
                                         className="w-10 h-10 lg:w-11 lg:h-11 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all flex-shrink-0"
@@ -313,9 +374,10 @@ export default function ProductListing() {
     useEffect(() => {
         setSelectedDynamicFilters({});
         setAvailability({ inStock: false, onOffer: false, isNew: false });
-        setPriceRange([0, 2000]);
         setCurrentPage(1);
-    }, [categoryQuery, roomId, brandQuery, professionSlug, searchQuery]);
+        setProducts([]);
+        setLoading(true);
+    }, [categoryQuery, subcategoryQuery, roomId, brandQuery, professionSlug, searchQuery]);
 
     // Sync price slider to real product limits when they load
     useEffect(() => {
@@ -375,8 +437,8 @@ export default function ProductListing() {
             setDynamicFiltersConfig(catF);
 
             // 3. Build Query
-            let qSelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))';
-            if (roomId) qSelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*))';
+            let qSelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
+            if (roomId) qSelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
 
             let buildQ = (isMeta = false) => {
                 let q = supabase.from('products').select(isMeta ? 'id, attributes, price, discount_price, created_at, parent_id, stock' : qSelect, { count: 'exact' });
@@ -401,8 +463,8 @@ export default function ProductListing() {
             let newAttrFilters = {};
             let newIdMap = {};
             let availableGroups = { inStock: new Set(), onOffer: new Set(), isNew: new Set() };
-            let minP = 0;
-            let maxP = MAX_P_FALLBACK;
+            let minP = Infinity;
+            let maxP = 0;
 
             const { data: rpcData, error: rpcErr } = await supabase.rpc('get_catalog_metadata', {
                 p_category_id: currentCat?.id,
@@ -455,8 +517,8 @@ export default function ProductListing() {
                         const stock = parseInt(p.stock || 0);
 
                         if (rpcErr || !rpcData) {
-                            if (price < minP) minP = price;
-                            if (price > 0 && price <= MAX_P_FALLBACK && price > maxP) maxP = price;
+                            if (price > 0 && price < minP) minP = price;
+                            if (price > maxP) maxP = price;
                             if (stock > 0) availableGroups.inStock.add(targetId);
                             if (salePrice > 0 && salePrice < price) availableGroups.onOffer.add(targetId);
                             if (p.created_at && new Date(p.created_at) > thirtyDaysAgo) availableGroups.isNew.add(targetId);
@@ -489,11 +551,12 @@ export default function ProductListing() {
                     });
 
                     if (rpcErr || !rpcData) {
-                        if (maxP === -Infinity) maxP = MAX_P_FALLBACK;
+                        const finalMax = maxP > 0 ? Math.ceil(maxP) : MAX_P_FALLBACK;
+                        const finalMin = minP !== Infinity ? Math.floor(minP) : 0;
                         setAvailableDynamicFilters(newAttrFilters);
                         setFilterIdMap(newIdMap);
                         setAvailabilityCounts({ inStock: availableGroups.inStock.size, onOffer: availableGroups.onOffer.size, isNew: availableGroups.isNew.size });
-                        setPriceLimits([minP === Infinity ? 0 : Math.floor(minP), Math.ceil(maxP)]);
+                        setPriceLimits([finalMin, finalMax]);
                     } else {
                         setFilterIdMap(newIdMap); // Support intersection even when RPC is main source
                     }

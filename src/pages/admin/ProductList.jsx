@@ -29,6 +29,8 @@ export default function ProductList() {
     const [rooms, setRooms] = useState([]);
     const [professions, setProfessions] = useState([]);
     const [allBadges, setAllBadges] = useState([]);
+    const [allSeals, setAllSeals] = useState([]);
+    const [allEnergyLabels, setAllEnergyLabels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
@@ -87,6 +89,8 @@ export default function ProductList() {
         original_price: '', // PVP for discount calculation
         badge_tags: [], // Manual badges
         badge_ids: [], // IDs of dynamic badges
+        seal_ids: [], // IDs of quality seals
+        energy_label_id: '', // ID of energy efficiency label
         is_active: true // Product visibility
     });
 
@@ -126,15 +130,20 @@ export default function ProductList() {
             setLoading(true);
 
             // Fetch metadata first
-            const [catRes, brandRes, roomRes, profRes] = await Promise.all([
+            const [catRes, brandRes, roomRes, profRes, sealsRes, energyRes] = await Promise.all([
                 supabase.from('categories').select('id, name, parent_id, slug').order('name'),
                 supabase.from('brands').select('id, name').order('name'),
                 supabase.from('rooms').select('id, name').order('name'),
-                supabase.from('professions').select('id, name').order('name')
+                supabase.from('professions').select('id, name').order('name'),
+                supabase.from('quality_seals').select('id, name, image_url').order('name'),
+                supabase.from('energy_labels').select('id, name, color, image_url').order('name')
             ]);
 
+            setAllSeals(sealsRes.data || []);
+            setAllEnergyLabels(energyRes.data || []);
+
             let prodQuery = supabase.from('products')
-                .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*))', { count: 'exact' });
+                .select('*, categories(name), brands(name), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*)), product_quality_seals(seal_id)', { count: 'exact' });
 
             // Apply Filters at Server Level
             const search = searchQuery?.trim();
@@ -584,7 +593,9 @@ export default function ProductList() {
             long_description: product.long_description || '',
             original_price: product.original_price || '',
             badge_tags: product.badge_tags || [],
-            badge_ids: []
+            badge_ids: [],
+            seal_ids: product.product_quality_seals?.map(s => s.seal_id) || [],
+            energy_label_id: product.energy_label_id || ''
         });
 
 
@@ -644,9 +655,10 @@ export default function ProductList() {
 
     async function loadProductRelations(productId) {
         try {
-            const [roomsData, profsData] = await Promise.all([
+            const [roomsData, profsData, sealsData] = await Promise.all([
                 supabase.from('product_rooms').select('room_id').eq('product_id', productId),
-                supabase.from('product_professions').select('profession_id').eq('product_id', productId)
+                supabase.from('product_professions').select('profession_id').eq('product_id', productId),
+                supabase.from('product_quality_seals').select('seal_id').eq('product_id', productId)
             ]);
 
             // Try loading badges separately (table may not exist)
@@ -660,7 +672,8 @@ export default function ProductList() {
                 ...prev,
                 room_ids: roomsData.data?.map(r => r.room_id) || [],
                 profession_ids: profsData.data?.map(p => p.profession_id) || [],
-                badge_ids: badgeIds
+                badge_ids: badgeIds,
+                seal_ids: sealsData.data?.map(s => s.seal_id) || []
             }));
         } catch (error) {
             console.error("Error loading relations:", error);
@@ -679,6 +692,8 @@ export default function ProductList() {
             parent_id: null, attributes: {}, extra_images: [],
             related_product_ids: [], long_description: '', original_price: '',
             badge_tags: [], badge_ids: [],
+            seal_ids: [],
+            energy_label_id: '',
             is_active: true,
             is_by_meter: false,
             min_meters: 1,
@@ -723,7 +738,8 @@ export default function ProductList() {
                 meter_step: formData.meter_step,
                 is_by_measurement: formData.is_by_measurement,
                 measurements: formData.measurements || [],
-                mandatory_accessory_ids: formData.mandatory_accessory_ids || []
+                mandatory_accessory_ids: formData.mandatory_accessory_ids || [],
+                energy_label_id: formData.energy_label_id || null
             };
 
 
@@ -778,6 +794,16 @@ export default function ProductList() {
                         badge_id: badgeId
                     }));
                     await supabase.from('product_badges').insert(badgeInserts);
+                }
+
+                // Save Quality Seals
+                await supabase.from('product_quality_seals').delete().eq('product_id', productId);
+                if (formData.seal_ids && formData.seal_ids.length > 0) {
+                    const sealInserts = formData.seal_ids.map(sealId => ({
+                        product_id: productId,
+                        seal_id: sealId
+                    }));
+                    await supabase.from('product_quality_seals').insert(sealInserts);
                 }
             }
 
@@ -2138,6 +2164,68 @@ export default function ProductList() {
                                                                 <input list="attr-values" placeholder="Valor" className="flex-1 text-[10px] font-bold p-2 bg-transparent border-none focus:ring-0" value={newAttrValue} onChange={e => setNewAttrValue(e.target.value)} />
                                                                 <datalist id="attr-values">{(PREDEFINED_ATTRIBUTES[newAttrKey] || []).map(v => <option key={v} value={v} />)}</datalist>
                                                                 <button type="button" onClick={addAttribute} className="w-10 h-10 rounded-xl bg-brand-carbon text-white flex items-center justify-center hover:bg-primary transition-all"><Plus className="w-4 h-4" /></button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="bg-white rounded-[2rem] border border-gray-100 p-8 shadow-sm">
+                                                        <h3 className="text-[11px] font-black uppercase italic text-brand-carbon mb-6 flex items-center gap-2">
+                                                            <Award className="w-4 h-4 text-amber-500" /> Sellos & Eficiencia
+                                                        </h3>
+                                                        <div className="space-y-6">
+                                                            {/* Eficiencia Energética */}
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Etiqueta Energética</label>
+                                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                                                    {allEnergyLabels.map(label => (
+                                                                        <button
+                                                                            key={label.id}
+                                                                            type="button"
+                                                                            onClick={() => setFormData(prev => ({ ...prev, energy_label_id: prev.energy_label_id === label.id ? '' : label.id }))}
+                                                                            className={`p-3 rounded-2xl border transition-all flex flex-col items-center gap-2 ${formData.energy_label_id === label.id
+                                                                                ? 'bg-primary/5 border-primary shadow-sm'
+                                                                                : 'bg-gray-50 border-gray-100 opacity-60 hover:opacity-100'}`}
+                                                                        >
+                                                                            {label.image_url ? (
+                                                                                <img src={label.image_url} alt={label.name} className="h-8 object-contain" />
+                                                                            ) : (
+                                                                                <div className="h-8 w-8 rounded-lg flex items-center justify-center text-[10px] font-black text-white" style={{ backgroundColor: label.color || '#ccc' }}>
+                                                                                    {label.name}
+                                                                                </div>
+                                                                            )}
+                                                                            <span className="text-[8px] font-black uppercase">{label.name}</span>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Sellos de Calidad */}
+                                                            <div>
+                                                                <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Sellos de Calidad / Certificaciones</label>
+                                                                <div className="flex flex-wrap gap-2">
+                                                                    {allSeals.map(seal => {
+                                                                        const isSelected = formData.seal_ids?.includes(seal.id);
+                                                                        return (
+                                                                            <button
+                                                                                key={seal.id}
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setFormData(prev => ({
+                                                                                        ...prev,
+                                                                                        seal_ids: isSelected
+                                                                                            ? prev.seal_ids.filter(id => id !== seal.id)
+                                                                                            : [...(prev.seal_ids || []), seal.id]
+                                                                                    }));
+                                                                                }}
+                                                                                className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${isSelected
+                                                                                    ? 'bg-amber-50 border-amber-200 text-amber-700'
+                                                                                    : 'bg-gray-50 border-gray-100 text-gray-400 opacity-60 hover:opacity-100'}`}
+                                                                            >
+                                                                                {seal.image_url && <img src={seal.image_url} alt={seal.name} className="w-5 h-5 object-contain" />}
+                                                                                <span className="text-[9px] font-black uppercase">{seal.name}</span>
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                             </div>
                                                         </div>
                                                     </div>

@@ -44,6 +44,8 @@ import ProfessionsAdmin from './pages/admin/ProfessionsAdmin';
 import CategoriesAdmin from './pages/admin/CategoriesAdmin';
 import SEOAdmin from './pages/admin/SEOAdmin';
 import TrustBadgesAdmin from './pages/admin/TrustBadgesAdmin';
+import QualitySealsAdmin from './pages/admin/QualitySealsAdmin';
+import EnergyLabelsAdmin from './pages/admin/EnergyLabelsAdmin';
 import PagesAdmin from './pages/admin/PagesAdmin';
 import CMSPage from './pages/CMSPage';
 import CookieBanner from './components/common/CookieBanner';
@@ -105,6 +107,8 @@ function App() {
               <Route path="seo" element={<SEOAdmin />} />
               <Route path="pages" element={<PagesAdmin />} />
               <Route path="trust-badges" element={<TrustBadgesAdmin />} />
+              <Route path="quality-seals" element={<QualitySealsAdmin />} />
+              <Route path="energy-labels" element={<EnergyLabelsAdmin />} />
               <Route path="reviews" element={<ReviewsAdmin />} />
               <Route path="badges" element={<BadgesAdmin />} />
               <Route path="newsletter" element={<NewsletterAdmin />} />

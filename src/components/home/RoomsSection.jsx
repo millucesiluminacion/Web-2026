@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const STATIC_ROOMS = [
@@ -13,7 +13,9 @@ const STATIC_ROOMS = [
 
 export function RoomsSection() {
     const [rooms, setRooms] = useState([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
     useEffect(() => {
         async function fetchRooms() {
@@ -48,25 +50,75 @@ export function RoomsSection() {
         fetchRooms();
     }, []);
 
+    const nextRoom = useCallback(() => {
+        if (rooms.length > 5) {
+            setCurrentIndex((prev) => (prev + 1) % rooms.length);
+        }
+    }, [rooms.length]);
+
+    const prevRoom = useCallback(() => {
+        if (rooms.length > 5) {
+            setCurrentIndex((prev) => (prev - 1 + rooms.length) % rooms.length);
+        }
+    }, [rooms.length]);
+
+    // Rotation effect
+    useEffect(() => {
+        if (rooms.length <= 5 || !isAutoPlaying) return;
+        const interval = setInterval(nextRoom, 6000);
+        return () => clearInterval(interval);
+    }, [rooms.length, isAutoPlaying, nextRoom]);
+
+    const handleManualAction = (action) => {
+        setIsAutoPlaying(false);
+        action();
+        // Resume autoplay after 10 seconds of inactivity
+        setTimeout(() => setIsAutoPlaying(true), 10000);
+    };
+
+    const displayedRooms = rooms.length > 5
+        ? [...rooms, ...rooms].slice(currentIndex, currentIndex + 5)
+        : rooms;
+
     return (
         <section className="mb-12 max-w-[1440px] mx-auto px-4" style={{ width: 'calc(100% - 60px)' }}>
             <div className="flex justify-between mb-6 items-center">
-                <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Iluminación por estancias</h2>
-                <Link to="/estancias" className="text-base font-medium text-blue-600 hover:underline">
-                    Ver estancias
-                </Link>
+                <div>
+                    <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Iluminación por estancias</h2>
+                    <p className="mt-2 text-sm text-gray-500 hidden md:block">Descubre luminarias perfectas para cada rincón de tu hogar.</p>
+                </div>
+                <div className="flex items-center gap-4">
+                    {rooms.length > 5 && (
+                        <div className="flex items-center gap-2 mr-4">
+                            <button
+                                onClick={() => handleManualAction(prevRoom)}
+                                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleManualAction(nextRoom)}
+                                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
+                    <Link to="/estancias" className="text-base font-medium text-blue-600 hover:underline">
+                        Ver estancias
+                    </Link>
+                </div>
             </div>
-            <p className="mb-6">Ilumina cada espacio con soluciones funcionales y elegantes para espacios industriales, comerciales y del hogar.</p>
 
             {loading ? (
                 <div className="flex justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 </div>
             ) : (
-                <ul className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 lg:grid-cols-5 xl:gap-x-7">
-                    {rooms.map((room, i) => (
-                        <li key={i}>
-                            <div className="rounded-lg overflow-hidden relative group h-80">
+                <ul className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5 xl:gap-x-7 transition-all duration-500">
+                    {displayedRooms.map((room, i) => (
+                        <li key={`${room.id || room.name}-${currentIndex}-${i}`} className="animate-in fade-in duration-700 slide-in-from-right-4">
+                            <div className="rounded-lg overflow-hidden relative group h-80 shadow-md transition-shadow hover:shadow-xl">
                                 <div className="h-full">
                                     <Link to={`/catalogo?room=${room.id || room.slug}`} className="block h-full">
                                         <img
@@ -78,7 +130,7 @@ export function RoomsSection() {
                                     </Link>
                                 </div>
                                 <div className="duration-500 xl:group-hover:-translate-y-[15px] w-full absolute bottom-7 text-center pb-5 px-3 text-white">
-                                    <p className="font-medium text-lg xl:text-xl">{room.name}</p>
+                                    <p className="font-medium text-lg xl:text-xl drop-shadow-lg">{room.name}</p>
                                     <p className="absolute left-1/2 duration-500 opacity-0 -translate-x-1/2 translate-y-[20px] xl:group-hover:opacity-100 xl:group-hover:translate-y-[5px] text-sm font-semibold text-center w-full">
                                         Ver todo
                                     </p>

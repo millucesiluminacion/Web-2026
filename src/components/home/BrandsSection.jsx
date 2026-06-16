@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 const STATIC_BRANDS = [
@@ -13,7 +13,9 @@ const STATIC_BRANDS = [
 
 export function BrandsSection() {
     const [brands, setBrands] = useState([]);
+    const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
+    const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
     useEffect(() => {
         async function fetchBrands() {
@@ -47,46 +49,98 @@ export function BrandsSection() {
         fetchBrands();
     }, []);
 
+    const nextBrand = useCallback(() => {
+        if (brands.length > 5) {
+            setCurrentIndex((prev) => (prev + 1) % brands.length);
+        }
+    }, [brands.length]);
+
+    const prevBrand = useCallback(() => {
+        if (brands.length > 5) {
+            setCurrentIndex((prev) => (prev - 1 + brands.length) % brands.length);
+        }
+    }, [brands.length]);
+
+    // Rotation effect
+    useEffect(() => {
+        if (brands.length <= 5 || !isAutoPlaying) return;
+        const interval = setInterval(nextBrand, 5000);
+        return () => clearInterval(interval);
+    }, [brands.length, isAutoPlaying, nextBrand]);
+
+    const handleManualAction = (action) => {
+        setIsAutoPlaying(false);
+        action();
+        // Resume autoplay after 10 seconds of inactivity
+        setTimeout(() => setIsAutoPlaying(true), 10000);
+    };
+
+    const displayedBrands = brands.length > 5
+        ? [...brands, ...brands].slice(currentIndex, currentIndex + 5)
+        : brands;
+
     return (
-        <section className="mb-12 max-w-[1440px] mx-auto px-4" style={{ width: 'calc(100% - 60px)' }}>
+        <section className="mb-12 max-w-[1440px] mx-auto px-4 group/section" style={{ width: 'calc(100% - 60px)' }}>
             <div className="flex justify-between mb-6 items-center">
-                <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Compra por marcas</h2>
-                <Link to="/marcas" className="text-base font-medium text-blue-600 hover:underline">
-                    Ver marcas
-                </Link>
+                <div>
+                    <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Compra por marcas</h2>
+                    <p className="mt-2 text-sm text-gray-500 hidden md:block">Luminarias de calidad y eficiencia de marcas líderes.</p>
+                </div>
+                <div className="flex items-center gap-4">
+                    {brands.length > 5 && (
+                        <div className="flex items-center gap-2 mr-4">
+                            <button
+                                onClick={() => handleManualAction(prevBrand)}
+                                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm"
+                            >
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                            <button
+                                onClick={() => handleManualAction(nextBrand)}
+                                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm"
+                            >
+                                <ChevronRight className="w-4 h-4" />
+                            </button>
+                        </div>
+                    )}
+                    <Link to="/marcas" className="text-base font-medium text-blue-600 hover:underline">
+                        Ver marcas
+                    </Link>
+                </div>
             </div>
-            <p className="mb-6">Luminarias de calidad y eficiencia de marcas líderes en iluminación profesional y decorativa.</p>
 
             {loading ? (
                 <div className="flex justify-center py-20">
                     <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 </div>
             ) : (
-                <ul className="grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(250px,1fr))] xl:gap-7">
-                    {brands.map((brand, i) => (
-                        <li key={i} className="group relative rounded-md overflow-hidden border w-full text-center">
-                            <div className="relative h-[80px] md:h-[150px] overflow-hidden">
-                                <img
-                                    src={brand.bg}
-                                    alt={brand.name}
-                                    className="w-full h-full object-cover group-hover:scale-110 duration-300"
-                                    loading="lazy"
-                                />
-                                <div className="absolute bottom-0 text-white bg-gradient-to-b from-transparent to-gray-950 w-full h-16"></div>
-                            </div>
-                            <div className="flex p-4 pt-14 md:pt-16 justify-center">
-                                <div className="rounded-full w-[80px] h-[80px] md:w-[100px] md:h-[100px] absolute top-[40px] md:top-[100px] left-1/2 -translate-x-1/2 bg-blue-50 flex items-center justify-center border-2 border-gray-300 overflow-hidden">
-                                    <div className="w-16 h-16 md:w-20 md:h-20 flex items-center justify-center p-2">
-                                        <img src={brand.img} alt={brand.name} className="max-w-full max-h-full object-contain" />
-                                    </div>
+                <div className="relative">
+                    <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:gap-7 transition-all duration-500">
+                        {displayedBrands.map((brand, i) => (
+                            <li key={`${brand.name}-${currentIndex}-${i}`} className="group relative rounded-md overflow-hidden border w-full text-center animate-in fade-in duration-700 slide-in-from-right-4">
+                                <div className="relative h-[80px] md:h-[150px] overflow-hidden">
+                                    <img
+                                        src={brand.bg}
+                                        alt={brand.name}
+                                        className="w-full h-full object-cover group-hover:scale-110 duration-300"
+                                        loading="lazy"
+                                    />
+                                    <div className="absolute bottom-0 text-white bg-gradient-to-b from-transparent to-gray-950 w-full h-16"></div>
                                 </div>
-                                <Link to={`/catalogo?brand=${brand.name.toLowerCase()}`} className="self-end text-md md:text-xl font-medium mt-4">
-                                    {brand.name}
-                                </Link>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                                <div className="flex p-4 pt-14 md:pt-16 justify-center">
+                                    <div className="rounded-full w-[80px] h-[80px] md:w-[100px] md:h-[100px] absolute top-[40px] md:top-[100px] left-1/2 -translate-x-1/2 bg-blue-50 flex items-center justify-center border-2 border-gray-300 overflow-hidden shadow-md">
+                                        <div className="w-16 h-16 md:w-20 md:h-20 flex items-center justify-center p-2">
+                                            <img src={brand.img} alt={brand.name} className="max-w-full max-h-full object-contain" />
+                                        </div>
+                                    </div>
+                                    <Link to={`/catalogo?brand=${brand.name.toLowerCase()}`} className="self-end text-sm md:text-lg font-medium mt-4 line-clamp-1">
+                                        {brand.name}
+                                    </Link>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
             )}
         </section>
     );

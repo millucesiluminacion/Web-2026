@@ -143,7 +143,7 @@ export default function ProductDetail() {
             setLoading(true);
 
             // 1. Fetch Main Product (Trial 1: By Slug)
-            const selectWithBadges = '*, categories(name, slug), product_badges(badges(*))';
+            const selectWithBadges = '*, categories(name, slug), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
             const selectWithout = '*, categories(name, slug)';
 
             let { data: product, error } = await supabase
@@ -601,6 +601,46 @@ export default function ProductDetail() {
                                 {displayProduct?.description || parentProduct.description || 'Esta pieza de iluminación boutique ha sido seleccionada por su excelencia técnica y estética.'}
                             </p>
                         </div>
+
+                        {/* Sellos & Eficiencia Energética */}
+                        {(parentProduct?.energy_labels || (parentProduct?.product_quality_seals && parentProduct.product_quality_seals.length > 0)) && (
+                            <div className="flex items-center flex-wrap gap-5 mb-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
+                                {parentProduct.energy_labels && (
+                                    <div className="group/energy relative">
+                                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-brand-carbon text-white text-[8px] font-black uppercase tracking-widest rounded-lg opacity-0 group-hover/energy:opacity-100 transition-all pointer-events-none whitespace-nowrap z-20">
+                                            Eficiencia Energética: {parentProduct.energy_labels.name}
+                                        </div>
+                                        {parentProduct.energy_labels.image_url ? (
+                                            <img
+                                                src={parentProduct.energy_labels.image_url}
+                                                alt={`Energía ${parentProduct.energy_labels.name}`}
+                                                className="h-10 object-contain hover:scale-110 transition-transform duration-500"
+                                            />
+                                        ) : (
+                                            <div
+                                                className="h-10 px-4 rounded-xl flex items-center justify-center text-[11px] font-black text-white shadow-xl shadow-brand-carbon/5"
+                                                style={{ backgroundColor: parentProduct.energy_labels.color || '#ccc' }}
+                                            >
+                                                {parentProduct.energy_labels.name}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {parentProduct.product_quality_seals?.map((pqs, i) => (
+                                    <div key={i} className="group/seal relative">
+                                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-brand-carbon text-white text-[8px] font-black uppercase tracking-widest rounded-lg opacity-0 group-hover/seal:opacity-100 transition-all pointer-events-none whitespace-nowrap z-20">
+                                            {pqs.quality_seals.name}
+                                        </div>
+                                        <img
+                                            src={pqs.quality_seals.image_url}
+                                            alt={pqs.quality_seals.name}
+                                            className="h-9 object-contain grayscale hover:grayscale-0 hover:scale-110 transition-all duration-500 opacity-70 hover:opacity-100"
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Recovered Price Block */}
                         <div className="mb-10">
