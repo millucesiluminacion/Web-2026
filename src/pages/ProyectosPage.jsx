@@ -82,19 +82,17 @@ export default function ProyectosPage() {
     return (
         <div className="bg-[#FDFDFD] min-h-screen pt-8 pb-32 font-outfit" onClick={() => setActiveHotspot({ projectId: null, hotspotIndex: null })}>
             <div className="container mx-auto px-6 max-w-[1400px]">
-                <header className="mb-32 text-center relative">
-                    <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/5 rounded-full mb-8">
-                        <Sparkles className="w-3.5 h-3.5 text-primary" />
-                        <span className="text-xs font-black text-primary uppercase tracking-[.5em]">
-                            {cmsData?.content?.header_subtitle || 'Boutique Lookbook'}
-                        </span>
-                    </div>
-                    <h1 className="text-6xl lg:text-9xl font-black text-brand-carbon uppercase italic leading-[.85] tracking-tighter drop-shadow-sm mb-10">
+                <header className="mb-12 text-center relative group">
+                    <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
+                        {cmsData?.content?.header_subtitle || 'Boutique Lookbook'}
+                    </span>
+                    <h1 className="text-5xl lg:text-7xl font-black text-brand-carbon uppercase italic leading-tight tracking-tighter animate-reveal-up drop-shadow-sm">
                         {cmsData?.content?.header_title || (
                             <>Inspírate <br /> <span className="text-primary/40 italic">Para Tu</span> <span className="text-brand-carbon">Hogar</span></>
                         )}
                     </h1>
-                    <p className="max-w-2xl mx-auto text-gray-500 text-sm font-medium uppercase tracking-[.25em] leading-relaxed">
+                    <div className="w-20 h-1 bg-primary/20 mx-auto mt-8 rounded-full"></div>
+                    <p className="max-w-2xl mx-auto text-gray-500 text-[10px] font-black uppercase tracking-[.3em] leading-relaxed mt-8 animate-reveal-up">
                         Explora ambientes exclusivos y <span className="text-brand-carbon font-black">compra el look</span> directamente desde la escena.
                     </p>
                 </header>

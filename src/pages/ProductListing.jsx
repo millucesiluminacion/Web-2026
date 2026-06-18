@@ -96,12 +96,27 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
 
     const variantOptions = useMemo(() => {
         const options = new Set();
+        // 1. From variants
         if (product.variants) product.variants.forEach(v => {
             const tone = v.attributes?.['Tono'] || v.attributes?.['Luz'] || v.attributes?.['Color'] || v.attributes?.['Temperatura'];
             if (tone) options.add(String(tone).trim());
         });
+        // 2. From parent product (specifically for CCT/Temperature tags when no variants exist)
+        const parentAttributes = product.attributes || {};
+        const toneKeys = ['Tono', 'Luz', 'Color', 'Temperatura'];
+        toneKeys.forEach(key => {
+            const val = parentAttributes[key];
+            if (val) {
+                const vals = Array.isArray(val) ? val : [val];
+                vals.forEach(v => {
+                    const sVal = String(v).trim();
+                    if (sVal) options.add(sVal);
+                });
+            }
+        });
+
         return Array.from(options).sort();
-    }, [product.variants]);
+    }, [product.variants, product.attributes]);
 
     const techSpecs = useMemo(() => {
         const attrs = product.attributes || {};

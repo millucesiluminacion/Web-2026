@@ -39,7 +39,10 @@ const COLOR_MAP = {
     "Blanco frío": "#EEF4FF",
     "Blanco Frío": "#EEF4FF",
     "Blanco frio": "#EEF4FF",
-    "Blanco Frio": "#EEF4FF"
+    "Blanco Frio": "#EEF4FF",
+    "CCT": "linear-gradient(135deg, #FFF1DC 0%, #F3F4F6 50%, #EEF4FF 100%)",
+    "CCT (Tricolor)": "linear-gradient(135deg, #FFF1DC 0%, #F3F4F6 50%, #EEF4FF 100%)",
+    "Tricolor": "linear-gradient(135deg, #FFF1DC 0%, #F3F4F6 50%, #EEF4FF 100%)"
 };
 
 export default function ProductDetail() {
@@ -266,8 +269,9 @@ export default function ProductDetail() {
 
             const initialSelected = {};
             Object.entries(initialOptions).forEach(([k, v]) => {
-                if (v.length > 1) {
-                    initialSelected[k] = v[0]; // Select the first available option for selectables
+                const isColor = ['color', 'acabado', 'temperatura', 'temperatura de color', 'tono de luz', 'tono', 'luz'].includes(k.toLowerCase());
+                if (v.length > 1 || isColor) {
+                    initialSelected[k] = v[0]; // Select the first available option for selectables and color swatches
                 }
             });
 
@@ -440,9 +444,15 @@ export default function ProductDetail() {
     // Derived values for display
     const displayProduct = currentVariant || parentProduct;
     const availableOptions = getAvailableOptions();
-    const selectableOptions = Object.entries(availableOptions).filter(([k, v]) => v.length > 1);
+    const selectableOptions = Object.entries(availableOptions).filter(([k, v]) => {
+        const isColor = ['color', 'acabado', 'temperatura', 'temperatura de color', 'tono de luz', 'tono', 'luz'].includes(k.toLowerCase());
+        return v.length > 1 || isColor;
+    });
     const hasSelectableOptions = selectableOptions.length > 0;
-    const staticSpecs = Object.entries(availableOptions).filter(([k, v]) => v.length === 1);
+    const staticSpecs = Object.entries(availableOptions).filter(([k, v]) => {
+        const isColor = ['color', 'acabado', 'temperatura', 'temperatura de color', 'tono de luz', 'tono', 'luz'].includes(k.toLowerCase());
+        return v.length === 1 && !isColor;
+    });
     const hasStaticSpecs = staticSpecs.length > 0;
 
     const { profile } = useAuth();
@@ -902,7 +912,7 @@ export default function ProductDetail() {
 
                                                 // Render Color or Temperature Swatches
                                                 const lowerAttrName = attrName.toLowerCase();
-                                                const isColorSwatch = ['color', 'acabado', 'temperatura', 'temperatura de color', 'tono de luz'].includes(lowerAttrName);
+                                                const isColorSwatch = ['color', 'acabado', 'temperatura', 'temperatura de color', 'tono de luz', 'tono', 'luz'].includes(lowerAttrName);
 
                                                 if (isColorSwatch) {
                                                     const normalizedVal = val.toLowerCase().trim();
@@ -929,13 +939,13 @@ export default function ProductDetail() {
                                                                 }
                                                                 `}
                                                             style={{
-                                                                backgroundColor: colorCode,
+                                                                background: colorCode,
                                                                 boxShadow: isSelected ? `0 0 20px ${colorCode}` : `0 4px 14px ${colorCode}60`
                                                             }}
                                                         >
-                                                            {isLightTemp ? (
+                                                            {isLightTemp || normalizedVal.includes('cct') ? (
                                                                 <span className="text-[9px] font-black uppercase tracking-tighter text-gray-800/70 text-center leading-none px-0.5">
-                                                                    {displayLabel}
+                                                                    {normalizedVal.includes('cct') ? 'CCT' : displayLabel}
                                                                 </span>
                                                             ) : (
                                                                 isSelected && (
