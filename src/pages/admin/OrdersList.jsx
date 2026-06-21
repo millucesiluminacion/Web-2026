@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
+import { calculateProductPrice } from '../../lib/pricingUtils';
 
 export default function OrdersList() {
     const [orders, setOrders] = useState([]);
@@ -36,7 +37,10 @@ export default function OrdersList() {
     const [orderForm, setOrderForm] = useState({
         status: 'PENDING',
         payment_method: 'TRANSFERENCIA',
+        shipping_method: 'pickup'
     });
+    const [productSearch, setProductSearch] = useState('');
+    const [customerSearch, setCustomerSearch] = useState('');
 
     useEffect(() => {
         fetchOrders();
@@ -112,17 +116,29 @@ export default function OrdersList() {
         setStep(1);
         setSelectedCustomer(null);
         setCart([]);
-        setOrderForm({ status: 'PENDING', payment_method: 'TRANSFERENCIA' });
+        setOrderForm({ status: 'PENDING', payment_method: 'TRANSFERENCIA', shipping_method: 'pickup' });
+        setProductSearch('');
+        setCustomerSearch('');
         setIsCreateModalOpen(true);
         fetchCreateData();
     };
 
     const addToCart = (product) => {
+        const pricing = calculateProductPrice(product, selectedCustomer);
+        const productWithPrice = {
+            ...product,
+            price: pricing.finalPrice,
+            displayPrice: pricing.displayPrice,
+            isProPrice: pricing.isProPrice,
+            isPartnerPrice: pricing.isPartnerPrice,
+            showPriceWithoutVat: pricing.showPriceWithoutVat
+        };
+
         const existing = cart.find(item => item.id === product.id);
         if (existing) {
             setCart(cart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
         } else {
-            setCart([...cart, { ...product, quantity: 1 }]);
+            setCart([...cart, { ...productWithPrice, quantity: 1 }]);
         }
     };
 
@@ -130,11 +146,58 @@ export default function OrdersList() {
         setCart(cart.map(item => {
             if (item.id === id) {
                 const newQty = Math.max(1, item.quantity + delta);
-                return { ...item, quantity: newQty };
+                const pricing = calculateProductPrice(item, selectedCustomer, newQty);
+                return {
+                    ...item,
+                    quantity: newQty,
+                    price: pricing.finalPrice,
+                    displayPrice: pricing.displayPrice,
+                    isProPrice: pricing.isProPrice,
+                    isPartnerPrice: pricing.isPartnerPrice,
+                    showPriceWithoutVat: pricing.showPriceWithoutVat
+                };
             }
             return item;
         }));
     };
+
+    const setQuantity = (id, value) => {
+        const qty = parseInt(value);
+        if (isNaN(qty)) return;
+        const finalQty = Math.max(1, qty);
+        setCart(cart.map(item => {
+            if (item.id === id) {
+                const pricing = calculateProductPrice(item, selectedCustomer, finalQty);
+                return {
+                    ...item,
+                    quantity: finalQty,
+                    price: pricing.finalPrice,
+                    displayPrice: pricing.displayPrice,
+                    isProPrice: pricing.isProPrice,
+                    isPartnerPrice: pricing.isPartnerPrice,
+                    showPriceWithoutVat: pricing.showPriceWithoutVat
+                };
+            }
+            return item;
+        }));
+    };
+
+    // Recalculate cart prices if customer changes (e.g. going back to Step 1)
+    useEffect(() => {
+        if (cart.length > 0) {
+            setCart(prevCart => prevCart.map(item => {
+                const pricing = calculateProductPrice(item, selectedCustomer, item.quantity);
+                return {
+                    ...item,
+                    price: pricing.finalPrice,
+                    displayPrice: pricing.displayPrice,
+                    isProPrice: pricing.isProPrice,
+                    isPartnerPrice: pricing.isPartnerPrice,
+                    showPriceWithoutVat: pricing.showPriceWithoutVat
+                };
+            }));
+        }
+    }, [selectedCustomer]);
 
     const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
@@ -158,6 +221,7 @@ export default function OrdersList() {
                     total: total,
                     status: orderForm.status,
                     payment_method: orderForm.payment_method,
+                    shipping_method: orderForm.shipping_method,
                     payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
                 }])
                 .select()
@@ -210,6 +274,34 @@ export default function OrdersList() {
         setSelectedOrder(order);
         setAdminNotes(order.admin_notes || '');
         fetchOrderItems(order.id);
+    };
+
+    const handlePrintOrder = async (order) => {
+        setSelectedOrder(order);
+        try {
+            setFetchingItems(true);
+            const { data, error } = await supabase
+                .from('order_items')
+                .select('*')
+                .eq('order_id', order.id);
+
+            if (error) throw error;
+            setOrderItems(data || []);
+
+            // Critical: Add the 'is-printing' class to force print layout and visibility
+            document.body.classList.add('is-printing');
+
+            // Wait for React to render the hidden print template with all items
+            setTimeout(() => {
+                window.print();
+                document.body.classList.remove('is-printing');
+            }, 800); // Increased timeout to ensure full render
+        } catch (error) {
+            console.error('Error printing order:', error.message);
+            alert('Error al generar la factura para imprimir');
+        } finally {
+            setFetchingItems(false);
+        }
     };
 
     async function saveAdminNotes() {
@@ -400,6 +492,24 @@ export default function OrdersList() {
         }
     }
 
+    async function updateShippingMethod(id, newMethod) {
+        try {
+            const { error } = await supabase
+                .from('orders')
+                .update({ shipping_method: newMethod })
+                .eq('id', id);
+
+            if (error) throw error;
+            setOrders(orders.map(o => o.id === id ? { ...o, shipping_method: newMethod } : o));
+            if (selectedOrder?.id === id) {
+                setSelectedOrder({ ...selectedOrder, shipping_method: newMethod });
+            }
+        } catch (error) {
+            console.error('Error updating shipping method:', error.message);
+            alert('Error al actualizar el método de entrega');
+        }
+    }
+
     const getStatusStyles = (status) => {
         switch (status?.toUpperCase()) {
             case 'PAID': return 'bg-emerald-100 text-emerald-700';
@@ -423,6 +533,8 @@ export default function OrdersList() {
         if (m === 'paypal') return 'PAYPAL';
         if (m === 'transfer' || m === 'transferencia') return 'TRANSFERENCIA';
         if (m === 'in_store') return 'PAGO EN TIENDA';
+        if (m === 'efectivo_tienda') return 'EFECTIVO EN TIENDA';
+        if (m === 'tarjeta_tienda') return 'TARJETA EN TIENDA';
         return method.toUpperCase();
     };
 
@@ -638,14 +750,18 @@ export default function OrdersList() {
                                         </select>
                                     </td>
                                     <td className="p-7">
-                                        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg w-fit ${order.shipping_method === 'pickup' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100'
-                                            }`}>
+                                        <button
+                                            onClick={() => updateShippingMethod(order.id, order.shipping_method === 'pickup' ? 'delivery' : 'pickup')}
+                                            title="Cambiar Método de Entrega"
+                                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg w-fit transition-all hover:scale-105 active:scale-95 ${order.shipping_method === 'pickup' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100' : 'bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100'
+                                                }`}
+                                        >
                                             {order.shipping_method === 'pickup' ? (
-                                                <><Package className="w-3 h-3 hover:rotate-0" /> <span className="text-[8px] font-black uppercase">Recogida</span></>
+                                                <><Package className="w-3 h-3" /> <span className="text-[8px] font-black uppercase">Recogida</span></>
                                             ) : (
-                                                <><Truck className="w-3 h-3" /> <span className="text-[8px] font-black uppercase">Envio</span></>
+                                                <><Truck className="w-3 h-3" /> <span className="text-[8px] font-black uppercase">Envío</span></>
                                             )}
-                                        </div>
+                                        </button>
                                     </td>
                                     <td className="p-7">
                                         <div className="flex items-center gap-2">
@@ -661,6 +777,13 @@ export default function OrdersList() {
                                                 className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-blue-600 hover:border-blue-100 hover:bg-blue-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
                                             >
                                                 <Eye className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handlePrintOrder(order)}
+                                                title="Reimprimir Recibo/Factura"
+                                                className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-emerald-600 hover:border-emerald-100 hover:bg-emerald-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                            >
+                                                <Printer className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={() => handleDeleteSingle(order.id)}
@@ -974,32 +1097,49 @@ export default function OrdersList() {
                         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                             {step === 1 && (
                                 <div className="space-y-8 animate-in slide-in-from-right-10 duration-500">
+                                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-4">
+                                        <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Listado de Clientes</h3>
+                                        <div className="relative w-full md:w-96">
+                                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="BUSCAR POR NOMBRE O EMAIL..."
+                                                value={customerSearch}
+                                                onChange={(e) => setCustomerSearch(e.target.value)}
+                                                className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300 font-outfit"
+                                            />
+                                        </div>
+                                    </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {customers.map(c => (
-                                            <button
-                                                key={c.id}
-                                                onClick={() => { setSelectedCustomer(c); setStep(2); }}
-                                                className={`p-8 rounded-[2.5rem] border text-left transition-all group ${selectedCustomer?.id === c.id ? 'bg-brand-carbon text-white border-brand-carbon shadow-2xl scale-105' : 'bg-white border-gray-100 hover:border-primary/30 hover:shadow-xl'}`}
-                                            >
-                                                <div className="flex items-center gap-5 mb-6">
-                                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black italic shadow-inner ${selectedCustomer?.id === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
-                                                        {c.full_name.charAt(0)}
+                                        {customers
+                                            .filter(c => !customerSearch ||
+                                                c.full_name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                                                c.email?.toLowerCase().includes(customerSearch.toLowerCase()))
+                                            .map(c => (
+                                                <button
+                                                    key={c.id}
+                                                    onClick={() => { setSelectedCustomer(c); setStep(2); }}
+                                                    className={`p-8 rounded-[2.5rem] border text-left transition-all group ${selectedCustomer?.id === c.id ? 'bg-brand-carbon text-white border-brand-carbon shadow-2xl scale-105' : 'bg-white border-gray-100 hover:border-primary/30 hover:shadow-xl'}`}
+                                                >
+                                                    <div className="flex items-center gap-5 mb-6">
+                                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black italic shadow-inner ${selectedCustomer?.id === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                                                            {c.full_name?.charAt(0) || '?'}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-black uppercase italic tracking-tighter line-clamp-1">{c.full_name}</p>
+                                                            <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedCustomer?.id === c.id ? 'text-white/40' : 'text-gray-300'}`}>ID: {c.id.slice(0, 8)}</p>
+                                                        </div>
                                                     </div>
-                                                    <div>
-                                                        <p className="font-black uppercase italic tracking-tighter line-clamp-1">{c.full_name}</p>
-                                                        <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedCustomer?.id === c.id ? 'text-white/40' : 'text-gray-300'}`}>ID: {c.id.slice(0, 8)}</p>
+                                                    <div className="space-y-2">
+                                                        <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
+                                                            <Mail className="w-3.5 h-3.5" /> {c.email}
+                                                        </p>
+                                                        <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
+                                                            <MapPin className="w-3.5 h-3.5" /> {c.address || 'Sin dirección'}
+                                                        </p>
                                                     </div>
-                                                </div>
-                                                <div className="space-y-2">
-                                                    <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
-                                                        <Mail className="w-3.5 h-3.5" /> {c.email}
-                                                    </p>
-                                                    <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
-                                                        <MapPin className="w-3.5 h-3.5" /> {c.address || 'Sin dirección'}
-                                                    </p>
-                                                </div>
-                                            </button>
-                                        ))}
+                                                </button>
+                                            ))}
                                     </div>
                                 </div>
                             )}
@@ -1008,33 +1148,89 @@ export default function OrdersList() {
                                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 animate-in slide-in-from-right-10 duration-500">
                                     {/* Catalogo */}
                                     <div className="lg:col-span-12 space-y-8">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Productos de la Boutique</h3>
-                                            <span className="text-[10px] font-bold text-gray-300 uppercase italic">{products.length} Disponibles</span>
+                                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+                                            <div>
+                                                <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Productos de la Boutique</h3>
+                                                <span className="text-[10px] font-bold text-gray-300 uppercase italic">{products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length} Disponibles</span>
+                                            </div>
+                                            <div className="relative w-full md:w-96">
+                                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="BUSCAR PRODUCTO..."
+                                                    value={productSearch}
+                                                    onChange={(e) => setProductSearch(e.target.value)}
+                                                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-100 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300 font-outfit"
+                                                />
+                                            </div>
                                         </div>
                                         <div className="flex gap-6 overflow-x-auto pb-8 custom-scrollbar">
-                                            {products.map(p => (
-                                                <button
-                                                    key={p.id}
-                                                    onClick={() => addToCart(p)}
-                                                    className="min-w-[280px] bg-white border border-gray-100 p-6 rounded-[2rem] hover:shadow-2xl hover:border-primary/20 transition-all text-left flex flex-col gap-4 group"
-                                                >
-                                                    <div className="aspect-square bg-gray-50 rounded-2xl flex items-center justify-center p-4">
-                                                        {p.image_url ? (
-                                                            <img src={p.image_url} className="w-full h-full object-contain group-hover:scale-110 transition-transform" alt="" />
-                                                        ) : (
-                                                            <Package className="w-12 h-12 text-gray-200" />
-                                                        )}
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[11px] font-black text-brand-carbon uppercase italic leading-tight mb-2 h-8 line-clamp-2">{p.name}</p>
-                                                        <p className="text-xl font-black text-primary italic leading-none">{p.price} €</p>
-                                                    </div>
-                                                    <div className="h-10 bg-gray-50 rounded-xl flex items-center justify-center text-[9px] font-black uppercase text-gray-400 tracking-widest group-hover:bg-primary group-hover:text-white transition-all">
-                                                        Añadir al Carrito
-                                                    </div>
-                                                </button>
-                                            ))}
+                                            {products
+                                                .filter(p => !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase()))
+                                                .map(p => (
+                                                    <button
+                                                        key={p.id}
+                                                        onClick={() => addToCart(p)}
+                                                        className="min-w-[200px] max-w-[200px] bg-white border border-gray-100 p-4 rounded-[1.5rem] hover:shadow-2xl hover:border-primary/20 transition-all text-left flex flex-col gap-3 group relative overflow-hidden"
+                                                    >
+                                                        <div className="aspect-square bg-gray-50 rounded-xl flex items-center justify-center p-3 relative">
+                                                            {p.image_url ? (
+                                                                <img src={p.image_url} className="w-full h-full object-contain group-hover:scale-110 transition-transform" alt="" />
+                                                            ) : (
+                                                                <Package className="w-10 h-10 text-gray-200" />
+                                                            )}
+                                                            <div className={`absolute top-2 right-2 px-2 py-0.5 rounded-md text-[8px] font-black uppercase ${p.stock > 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                                                                {p.stock > 0 ? `Stock: ${p.stock}` : 'Sin Stock'}
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <p className="text-[10px] font-black text-brand-carbon uppercase italic leading-tight line-clamp-2 h-7">{p.name}</p>
+                                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                                {(() => {
+                                                                    const attrs = p.attributes || {};
+                                                                    const tone = attrs.Temperatura || attrs.Tono || attrs.Luz || attrs.Color || attrs.temperatura || attrs.tono || attrs.luz || attrs.color;
+                                                                    const power = attrs.Potencia || attrs.Power || attrs.Watios || attrs.potencia || attrs.power || attrs.watios;
+                                                                    const voltage = attrs.Voltaje || attrs.Voltage || attrs.voltaje || attrs.voltage;
+
+                                                                    return (
+                                                                        <>
+                                                                            {tone && (
+                                                                                <span className="text-[7px] font-black bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded uppercase">{tone}</span>
+                                                                            )}
+                                                                            {power && (
+                                                                                <span className="text-[7px] font-black bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded uppercase">{power}</span>
+                                                                            )}
+                                                                            {voltage && (
+                                                                                <span className="text-[7px] font-black bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded uppercase">{voltage}</span>
+                                                                            )}
+                                                                        </>
+                                                                    );
+                                                                })()}
+                                                            </div>
+                                                            {(() => {
+                                                                const pricing = calculateProductPrice(p, selectedCustomer);
+                                                                return (
+                                                                    <div className="flex flex-col">
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <p className="text-sm font-black text-primary italic leading-none">{pricing.displayPrice.toFixed(2)} €</p>
+                                                                            {pricing.showPriceWithoutVat && (
+                                                                                <span className="text-[8px] font-black text-primary uppercase italic">+IVA</span>
+                                                                            )}
+                                                                        </div>
+                                                                        {(pricing.isProPrice || pricing.isPartnerPrice) && (
+                                                                            <span className="text-[7px] font-black text-emerald-500 uppercase italic mt-0.5">
+                                                                                {pricing.isPartnerPrice ? 'Precio Especial Socio' : 'Tarifa Profesional'}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                        <div className="h-8 bg-gray-50 rounded-lg flex items-center justify-center text-[8px] font-black uppercase text-gray-400 tracking-widest group-hover:bg-primary group-hover:text-white transition-all">
+                                                            Seleccionar
+                                                        </div>
+                                                    </button>
+                                                ))}
                                         </div>
                                     </div>
 
@@ -1063,11 +1259,27 @@ export default function OrdersList() {
                                                             <div className="flex items-center gap-12">
                                                                 <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-xl">
                                                                     <button onClick={() => updateQuantity(item.id, -1)} className="font-black text-gray-400 p-2 hover:text-brand-carbon">-</button>
-                                                                    <span className="text-xs font-black text-brand-carbon w-8 text-center">{item.quantity}</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        value={item.quantity}
+                                                                        onChange={(e) => setQuantity(item.id, e.target.value)}
+                                                                        className="text-xs font-black text-brand-carbon w-12 text-center bg-transparent border-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                        min="1"
+                                                                    />
                                                                     <button onClick={() => updateQuantity(item.id, 1)} className="font-black text-gray-400 p-2 hover:text-primary">+</button>
                                                                 </div>
-                                                                <div className="text-right w-24">
-                                                                    <p className="text-sm font-black text-brand-carbon italic">{(item.price * item.quantity).toFixed(2)} €</p>
+                                                                <div className="text-right w-32">
+                                                                    <div className="flex flex-col items-end">
+                                                                        <div className="flex items-center gap-1 justify-end">
+                                                                            <p className="text-sm font-black text-brand-carbon italic">{(item.displayPrice * item.quantity).toFixed(2)} €</p>
+                                                                            {item.showPriceWithoutVat && (
+                                                                                <span className="text-[8px] font-black text-primary uppercase italic">+IVA</span>
+                                                                            )}
+                                                                        </div>
+                                                                        {item.showPriceWithoutVat && (
+                                                                            <p className="text-[9px] font-bold text-gray-300">Total con IVA: {(item.price * item.quantity).toFixed(2)} €</p>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                                 <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors p-2">
                                                                     <Trash2 className="w-5 h-5" />
@@ -1104,15 +1316,33 @@ export default function OrdersList() {
                                             </select>
                                         </div>
                                         <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase tracking-[.4em] text-gray-400">Método de Entrega</label>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                {[
+                                                    { id: 'pickup', label: 'Recogida en Tienda', icon: Package },
+                                                    { id: 'delivery', label: 'Envío a Domicilio', icon: Truck }
+                                                ].map(method => (
+                                                    <button
+                                                        key={method.id}
+                                                        onClick={() => setOrderForm({ ...orderForm, shipping_method: method.id })}
+                                                        className={`p-6 rounded-3xl border-2 flex flex-col items-center gap-3 transition-all ${orderForm.shipping_method === method.id ? 'border-primary bg-primary/5 text-primary shadow-lg scale-105' : 'border-gray-100 text-gray-400 hover:border-gray-200'}`}
+                                                    >
+                                                        <method.icon className="w-6 h-6" />
+                                                        <span className="text-[10px] font-black uppercase italic tracking-widest">{method.label}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className="space-y-4">
                                             <label className="text-[10px] font-black uppercase tracking-[.4em] text-gray-400">Método de Pago</label>
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                {['TRANSFERENCIA', 'CONTRAREEMBOLSO', 'PAYPAL', 'STRIPE'].map(method => (
+                                                {['TRANSFERENCIA', 'EFECTIVO_TIENDA', 'TARJETA_TIENDA', 'PAYPAL', 'STRIPE'].map(method => (
                                                     <button
                                                         key={method}
                                                         onClick={() => setOrderForm({ ...orderForm, payment_method: method })}
                                                         className={`p-6 rounded-3xl border-2 text-[10px] font-black uppercase italic tracking-widest transition-all ${orderForm.payment_method === method ? 'border-primary bg-primary/5 text-primary shadow-lg scale-105' : 'border-gray-100 text-gray-400 hover:border-gray-200'}`}
                                                     >
-                                                        {method}
+                                                        {method.replace('_', ' ')}
                                                     </button>
                                                 ))}
                                             </div>
