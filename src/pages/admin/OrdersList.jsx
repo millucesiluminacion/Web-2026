@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag, Edit3 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
 
@@ -37,8 +37,15 @@ export default function OrdersList() {
     const [orderForm, setOrderForm] = useState({
         status: 'PENDING',
         payment_method: 'TRANSFERENCIA',
-        shipping_method: 'pickup'
+        shipping_method: 'pickup',
+        created_at: new Date().toISOString().slice(0, 16)
     });
+    const [shippingConfig, setShippingConfig] = useState({
+        tiers: {
+            b2c: { zones: { peninsula: { base_cost: 5.95, free_shipping_threshold: 150 } } }
+        }
+    });
+    const [editingOrder, setEditingOrder] = useState(null);
     const [productSearch, setProductSearch] = useState('');
     const [customerSearch, setCustomerSearch] = useState('');
 
@@ -108,19 +115,79 @@ export default function OrdersList() {
     async function fetchCreateData() {
         const { data: custData } = await supabase.from('customers').select('*').order('full_name');
         const { data: prodData } = await supabase.from('products').select('*').order('name');
+        const { data: shipData } = await supabase.from('app_settings').select('value').eq('key', 'shipping_config').maybeSingle();
+
         setCustomers(custData || []);
         setProducts(prodData || []);
+        if (shipData?.value) setShippingConfig(shipData.value);
     }
 
     const openCreateModal = () => {
+        setEditingOrder(null);
         setStep(1);
         setSelectedCustomer(null);
         setCart([]);
-        setOrderForm({ status: 'PENDING', payment_method: 'TRANSFERENCIA', shipping_method: 'pickup' });
+        setOrderForm({ status: 'PENDING', payment_method: 'TRANSFERENCIA', shipping_method: 'pickup', created_at: new Date().toISOString().slice(0, 16) });
         setProductSearch('');
         setCustomerSearch('');
         setIsCreateModalOpen(true);
         fetchCreateData();
+    };
+
+    const handleEditOrder = async (order) => {
+        try {
+            setLoading(true);
+            setEditingOrder(order);
+
+            // 1. Set Customer
+            const orderCustomer = customers.find(c => c.id === order.customer_id) || {
+                id: order.customer_id,
+                full_name: order.customer_name,
+                email: order.customer_email,
+                phone: order.customer_phone,
+                address: order.shipping_address
+            };
+            setSelectedCustomer(orderCustomer);
+
+            // 2. Fetch Order Items and map to cart
+            const { data: items, error } = await supabase
+                .from('order_items')
+                .select('*, products(image_url, category, attributes, stock)')
+                .eq('order_id', order.id);
+
+            if (error) throw error;
+
+            const cartItems = items.map(item => ({
+                id: item.product_id,
+                name: item.product_name,
+                price: item.unit_price,
+                quantity: item.quantity,
+                image_url: item.products?.image_url,
+                category: item.products?.category,
+                attributes: item.products?.attributes,
+                stock: item.products?.stock
+            }));
+
+            setCart(cartItems);
+
+            // 3. Ensure we have data (especially shipping config)
+            fetchCreateData();
+
+            // 4. Set Form
+            setOrderForm({
+                status: order.status,
+                payment_method: order.payment_method,
+                shipping_method: order.shipping_method,
+                created_at: new Date(order.created_at).toISOString().slice(0, 16)
+            });
+
+            setStep(2); // Start at products step to allow modifications
+            setIsCreateModalOpen(true);
+        } catch (err) {
+            alert("Error al cargar pedido para editar: " + err.message);
+        } finally {
+            setLoading(false);
+        }
     };
 
     const addToCart = (product) => {
@@ -201,37 +268,96 @@ export default function OrdersList() {
 
     const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
-    const calculateTotal = () => cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    const calculateShippingCost = () => {
+        if (orderForm.shipping_method === 'pickup') return 0;
+
+        const tier = selectedCustomer?.user_type === 'profesional' ? 'b2b' : (selectedCustomer?.is_partner ? 'socio' : 'b2c');
+
+        // Robust fallbacks if config is missing or incomplete
+        const tierConfig = shippingConfig?.tiers?.[tier] || shippingConfig?.tiers?.['b2c'];
+        const zoneConfig = tierConfig?.zones?.['peninsula'] || { base_cost: 5.95, free_shipping_threshold: 150 };
+
+        const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+        const base_cost = zoneConfig.base_cost !== undefined ? Number(zoneConfig.base_cost) : 5.95;
+        const threshold = zoneConfig.free_shipping_threshold !== undefined ? Number(zoneConfig.free_shipping_threshold) : 150;
+
+        if (subtotal > 0) {
+            if (threshold === 0 || subtotal >= threshold) {
+                return 0;
+            }
+        }
+        return base_cost;
+    };
+
+    const calculateTotal = () => {
+        const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        const shipping = calculateShippingCost();
+        return {
+            subtotal,
+            shipping,
+            total: subtotal + shipping
+        };
+    };
 
     async function handleCreateOrder() {
         if (!selectedCustomer || cart.length === 0) return;
         try {
             setIsCreating(true);
-            const total = calculateTotal();
+            const { subtotal, shipping, total } = calculateTotal();
 
-            // 1. Create Order
-            const { data: order, error: orderError } = await supabase
-                .from('orders')
-                .insert([{
-                    customer_id: selectedCustomer.id,
-                    customer_name: selectedCustomer.full_name,
-                    customer_email: selectedCustomer.email,
-                    customer_phone: selectedCustomer.phone,
-                    shipping_address: selectedCustomer.address,
-                    total: total,
-                    status: orderForm.status,
-                    payment_method: orderForm.payment_method,
-                    shipping_method: orderForm.shipping_method,
-                    payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
-                }])
-                .select()
-                .maybeSingle();
+            let orderId = editingOrder?.id;
 
-            if (orderError) throw orderError;
+            if (editingOrder) {
+                // UPDATE
+                const { error: updateError } = await supabase
+                    .from('orders')
+                    .update({
+                        total: total,
+                        status: orderForm.status,
+                        payment_method: orderForm.payment_method,
+                        shipping_method: orderForm.shipping_method,
+                        created_at: new Date(orderForm.created_at).toISOString(),
+                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
+                    })
+                    .eq('id', editingOrder.id);
+
+                if (updateError) throw updateError;
+
+                // Replace items (Delete old -> Insert new)
+                const { error: deleteError } = await supabase
+                    .from('order_items')
+                    .delete()
+                    .eq('order_id', editingOrder.id);
+
+                if (deleteError) throw deleteError;
+            } else {
+                // INSERT
+                const { data: order, error: orderError } = await supabase
+                    .from('orders')
+                    .insert([{
+                        customer_id: selectedCustomer.id,
+                        customer_name: selectedCustomer.full_name,
+                        customer_email: selectedCustomer.email,
+                        customer_phone: selectedCustomer.phone,
+                        shipping_address: selectedCustomer.address,
+                        total: total,
+                        status: orderForm.status,
+                        payment_method: orderForm.payment_method,
+                        shipping_method: orderForm.shipping_method,
+                        created_at: new Date(orderForm.created_at).toISOString(),
+                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
+                    }])
+                    .select()
+                    .maybeSingle();
+
+                if (orderError) throw orderError;
+                orderId = order.id;
+            }
 
             // 2. Create Order Items
             const itemsToInsert = cart.map(item => ({
-                order_id: order.id,
+                order_id: orderId,
                 product_id: item.id,
                 product_name: item.name,
                 quantity: item.quantity,
@@ -247,7 +373,7 @@ export default function OrdersList() {
             setIsCreateModalOpen(false);
             fetchOrders();
         } catch (error) {
-            alert('Error al crear pedido: ' + error.message);
+            alert('Error al gestionar pedido: ' + error.message);
         } finally {
             setIsCreating(false);
         }
@@ -778,6 +904,15 @@ export default function OrdersList() {
                                             >
                                                 <Eye className="w-4 h-4" />
                                             </button>
+                                            {order.status !== 'COMPLETED' && (
+                                                <button
+                                                    onClick={() => handleEditOrder(order)}
+                                                    title="Editar Pedido"
+                                                    className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-primary hover:border-primary/20 hover:bg-primary/5 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                                >
+                                                    <Edit3 className="w-4 h-4" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => handlePrintOrder(order)}
                                                 title="Reimprimir Recibo/Factura"
@@ -1084,8 +1219,18 @@ export default function OrdersList() {
                         <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                             <div>
                                 <span className="text-[10px] font-black text-primary uppercase tracking-[.5em] mb-2 block">Paso {step} de 3</span>
-                                <h2 className="text-3xl font-black text-brand-carbon uppercase italic leading-none">
-                                    {step === 1 ? 'Seleccionar Cliente' : step === 2 ? 'Configurar Carrito' : 'Finalizar Pedido'}
+                                <h2 className="text-3xl font-black text-brand-carbon uppercase italic italic flex items-center gap-4">
+                                    {editingOrder ? (
+                                        <>
+                                            <Edit3 className="w-8 h-8 text-primary" />
+                                            Editando Pedido <span className="text-gray-300">#{editingOrder.id.slice(0, 8).toUpperCase()}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ShoppingBag className="w-8 h-8 text-primary font-black" />
+                                            Nuevo Pedido <span className="text-gray-300">Manual</span>
+                                        </>
+                                    )}
                                 </h2>
                             </div>
                             <button onClick={() => setIsCreateModalOpen(false)} className="p-4 bg-white rounded-full text-gray-300 hover:text-brand-carbon transition-colors shadow-sm">
@@ -1290,7 +1435,7 @@ export default function OrdersList() {
                                                     <div className="pt-10 flex justify-end">
                                                         <div className="text-right bg-white p-8 rounded-[2rem] border border-gray-100 shadow-xl min-w-[300px]">
                                                             <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block mb-2">Total Estimado</span>
-                                                            <p className="text-4xl font-black text-brand-carbon italic">{calculateTotal().toFixed(2)} €</p>
+                                                            <p className="text-4xl font-black text-brand-carbon italic">{calculateTotal().total.toFixed(2)} €</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1314,6 +1459,15 @@ export default function OrdersList() {
                                                 <option value="AWAITING_PAYMENT">⏳ Pago en Espera</option>
                                                 <option value="PAID">💎 Pagado / Confirmado</option>
                                             </select>
+                                        </div>
+                                        <div className="space-y-4">
+                                            <label className="text-[10px] font-black uppercase tracking-[.4em] text-gray-400">Fecha y Hora del Pedido</label>
+                                            <input
+                                                type="datetime-local"
+                                                value={orderForm.created_at}
+                                                onChange={e => setOrderForm({ ...orderForm, created_at: e.target.value })}
+                                                className="w-full p-6 bg-gray-50 border-none rounded-[1.5rem] font-black text-xs uppercase italic tracking-widest focus:ring-2 focus:ring-primary/20 outline-none"
+                                            />
                                         </div>
                                         <div className="space-y-4">
                                             <label className="text-[10px] font-black uppercase tracking-[.4em] text-gray-400">Método de Entrega</label>
@@ -1353,14 +1507,27 @@ export default function OrdersList() {
                                             <span className="text-[11px] font-bold text-white/40 uppercase tracking-[.3em]">Resumen de Pedido</span>
                                             <span className="text-[10px] font-black italic text-primary">{cart.length} Artículos</span>
                                         </div>
+                                        <div className="space-y-4 mb-8 border-b border-white/5 pb-8">
+                                            <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-white/40">
+                                                <span>Subtotal</span>
+                                                <span className="text-white">{calculateTotal().subtotal.toFixed(2)}€</span>
+                                            </div>
+                                            <div className="flex justify-between text-xs font-bold uppercase tracking-widest text-white/40">
+                                                <span>Envío {orderForm.shipping_method === 'pickup' && '(Recogida)'}</span>
+                                                <span className={calculateTotal().shipping === 0 ? 'text-emerald-400' : 'text-white'}>
+                                                    {calculateTotal().shipping === 0 ? 'GRATIS' : `${calculateTotal().shipping.toFixed(2)}€`}
+                                                </span>
+                                            </div>
+                                        </div>
                                         <div className="flex justify-between items-end">
                                             <div>
                                                 <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mb-1.5 leading-none">Cliente Seleccionado</p>
                                                 <p className="text-xl font-black uppercase italic leading-none">{selectedCustomer?.full_name}</p>
                                             </div>
-                                            <p className="text-5xl font-black italic flex items-start gap-2">
-                                                {calculateTotal().toFixed(2)} <span className="text-sm text-primary mt-2">€</span>
-                                            </p>
+                                            <div className="text-right">
+                                                <p className="text-[9px] font-bold text-white/30 uppercase tracking-widest mb-1.5 leading-none">Total Final</p>
+                                                <p className="text-4xl font-black italic text-primary">{calculateTotal().total.toFixed(2)}€</p>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1391,7 +1558,7 @@ export default function OrdersList() {
                                     </>
                                 ) : (
                                     <>
-                                        <span>{step === 3 ? 'Finalizar y Crear' : 'Siguiente Paso'}</span>
+                                        <span>{step === 3 ? (editingOrder ? 'Guardar Cambios' : 'Finalizar y Crear') : 'Siguiente Paso'}</span>
                                         <ChevronRight className={`w-5 h-5 ${step === 3 ? 'hidden' : ''}`} />
                                     </>
                                 )}
