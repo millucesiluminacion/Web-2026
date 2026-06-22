@@ -160,7 +160,14 @@ export default function OrdersList() {
         await fetchCreateData();
 
         // 3. Set Selected Customer (Synthesize if not found in list)
-        const customer = customers.find(c => c.id === order.customer_id);
+        let customer = customers.find(c => c.id === order.customer_id);
+
+        // If not found in memory, try a direct fetch to be safe (RLS might affect this, but good to have)
+        if (!customer && order.customer_id) {
+            const { data } = await supabase.from('customers').select('*').eq('id', order.customer_id).maybeSingle();
+            if (data) customer = data;
+        }
+
         setSelectedCustomer(customer || {
             id: order.customer_id,
             full_name: order.customer_name,
@@ -232,9 +239,13 @@ export default function OrdersList() {
     }
 
     const addToCart = (product) => {
-        const pricing = calculateProductPrice(product, selectedCustomer);
+        const existing = cart.find(item => item.id === product.id);
+        const newQty = existing ? existing.quantity + 1 : 1;
+        const pricing = calculateProductPrice(product, selectedCustomer, newQty);
+
         const productWithPrice = {
             ...product,
+            quantity: newQty,
             price: pricing.finalPrice,
             displayPrice: pricing.displayPrice,
             isProPrice: pricing.isProPrice,
@@ -242,11 +253,10 @@ export default function OrdersList() {
             showPriceWithoutVat: pricing.showPriceWithoutVat
         };
 
-        const existing = cart.find(item => item.id === product.id);
         if (existing) {
-            setCart(cart.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+            setCart(cart.map(item => item.id === product.id ? productWithPrice : item));
         } else {
-            setCart([...cart, { ...productWithPrice, quantity: 1 }]);
+            setCart([...cart, productWithPrice]);
         }
     };
 
@@ -1533,7 +1543,14 @@ export default function OrdersList() {
                                         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                                             <div>
                                                 <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Productos de la Boutique</h3>
-                                                <span className="text-[10px] font-bold text-gray-300 uppercase italic">{products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length} Disponibles</span>
+                                                <div className="flex items-center gap-3 mt-1">
+                                                    <span className="text-[10px] font-bold text-gray-300 uppercase italic">{products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length} Disponibles</span>
+                                                    {selectedCustomer && (
+                                                        <span className="text-[9px] font-black px-2 py-0.5 bg-brand-carbon text-white rounded uppercase italic">
+                                                            Tarifa: {selectedCustomer.is_partner ? 'SOCIO VIP' : selectedCustomer.user_type === 'profesional' ? 'PROFESIONAL' : 'CLIENTE FINAL'}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="relative w-full md:w-96">
                                                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
