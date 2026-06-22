@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
 
@@ -34,6 +34,8 @@ export default function OrdersList() {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [cart, setCart] = useState([]);
     const [isCreating, setIsCreating] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editingOrderId, setEditingOrderId] = useState(null);
     const [orderForm, setOrderForm] = useState({
         status: 'PENDING',
         payment_method: 'TRANSFERENCIA',
@@ -44,6 +46,15 @@ export default function OrdersList() {
     const [sendEmailToCustomer, setSendEmailToCustomer] = useState(true);
     const [productSearch, setProductSearch] = useState('');
     const [customerSearch, setCustomerSearch] = useState('');
+    const [isQuickAddOpen, setIsQuickAddOpen] = useState(false);
+    const [isSavingQuickAdd, setIsSavingQuickAdd] = useState(false);
+    const [quickAddForm, setQuickAddForm] = useState({
+        full_name: '',
+        email: '',
+        phone: '',
+        address: '',
+        user_type: 'persona'
+    });
 
     useEffect(() => {
         fetchOrders();
@@ -119,15 +130,106 @@ export default function OrdersList() {
     }
 
     const openCreateModal = () => {
+        setIsEditing(false);
+        setEditingOrderId(null);
         setStep(1);
         setSelectedCustomer(null);
         setCart([]);
         setOrderForm({ status: 'PENDING', payment_method: 'TRANSFERENCIA', shipping_method: 'pickup', created_at: new Date().toISOString().slice(0, 16) });
         setProductSearch('');
         setCustomerSearch('');
+        setIsQuickAddOpen(false);
+        setQuickAddForm({ full_name: '', email: '', phone: '', address: '', user_type: 'persona' });
         setIsCreateModalOpen(true);
         fetchCreateData();
     };
+
+    const handleEditOrder = async (order) => {
+        setIsEditing(true);
+        setEditingOrderId(order.id);
+
+        // 1. Populate Form Basic Data
+        setOrderForm({
+            status: order.status,
+            payment_method: order.payment_method,
+            shipping_method: order.shipping_method,
+            created_at: new Date(order.created_at).toISOString().slice(0, 16)
+        });
+
+        // 2. Load Customers & Products data if not already loaded
+        await fetchCreateData();
+
+        // 3. Set Selected Customer (Synthesize if not found in list)
+        const customer = customers.find(c => c.id === order.customer_id);
+        setSelectedCustomer(customer || {
+            id: order.customer_id,
+            full_name: order.customer_name,
+            email: order.customer_email,
+            phone: order.customer_phone,
+            address: order.shipping_address,
+            user_type: 'persona' // fallback
+        });
+
+        // 4. Load Order Items into Cart
+        try {
+            setFetchingItems(true);
+            const { data: items, error } = await supabase
+                .from('order_items')
+                .select('*, products(*)')
+                .eq('order_id', order.id);
+
+            if (error) throw error;
+
+            const cartItems = items.map(item => {
+                const product = item.products || { id: item.product_id, name: item.product_name };
+                // Calculate pricing for the item based on the customer profile
+                return {
+                    ...product,
+                    id: item.product_id,
+                    name: item.product_name,
+                    quantity: item.quantity,
+                    price: item.unit_price,
+                    displayPrice: item.unit_price // Simple fallback, will be refined in Step 2 if modified
+                };
+            });
+
+            setCart(cartItems);
+            setStep(2); // Go directly to product selection
+            setIsCreateModalOpen(true);
+        } catch (error) {
+            console.error('Error loading order for edit:', error);
+            alert('Error al cargar el pedido');
+        } finally {
+            setFetchingItems(false);
+        }
+    };
+
+    async function handleQuickAddCustomer(e) {
+        if (e) e.preventDefault();
+        if (!quickAddForm.full_name || !quickAddForm.email) {
+            alert('Nombre y Email son obligatorios');
+            return;
+        }
+        try {
+            setIsSavingQuickAdd(true);
+            const { data, error } = await supabase
+                .from('customers')
+                .insert([quickAddForm])
+                .select()
+                .single();
+
+            if (error) throw error;
+
+            setCustomers([data, ...customers]);
+            setSelectedCustomer(data);
+            setIsQuickAddOpen(false);
+            setStep(2);
+        } catch (error) {
+            alert('Error al crear cliente: ' + error.message);
+        } finally {
+            setIsSavingQuickAdd(false);
+        }
+    }
 
     const addToCart = (product) => {
         const pricing = calculateProductPrice(product, selectedCustomer);
@@ -240,27 +342,63 @@ export default function OrdersList() {
             setIsCreating(true);
             const { subtotal, shipping, total } = calculateTotal();
 
-            // 1. Create Order
-            const { data: order, error: orderError } = await supabase
-                .from('orders')
-                .insert([{
-                    customer_id: selectedCustomer.id,
-                    customer_name: selectedCustomer.full_name,
-                    customer_email: selectedCustomer.email,
-                    customer_phone: selectedCustomer.phone,
-                    shipping_address: selectedCustomer.address,
-                    total: total,
-                    shipping_cost: shipping,
-                    status: orderForm.status,
-                    payment_method: orderForm.payment_method,
-                    shipping_method: orderForm.shipping_method,
-                    created_at: new Date(orderForm.created_at).toISOString(),
-                    payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
-                }])
-                .select()
-                .maybeSingle();
+            let order;
+            if (isEditing && editingOrderId) {
+                // 1. Update existing Order
+                const { data: updatedOrder, error: orderError } = await supabase
+                    .from('orders')
+                    .update({
+                        customer_id: selectedCustomer.id,
+                        customer_name: selectedCustomer.full_name,
+                        customer_email: selectedCustomer.email,
+                        customer_phone: selectedCustomer.phone,
+                        shipping_address: selectedCustomer.address,
+                        total: total,
+                        status: orderForm.status,
+                        payment_method: orderForm.payment_method,
+                        shipping_method: orderForm.shipping_method,
+                        created_at: new Date(orderForm.created_at).toISOString(),
+                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
+                    })
+                    .eq('id', editingOrderId)
+                    .select()
+                    .maybeSingle();
 
-            if (orderError) throw orderError;
+                if (orderError) throw orderError;
+                order = updatedOrder;
+
+                // 2. Delete old items to re-insert new ones
+                const { error: deleteError } = await supabase
+                    .from('order_items')
+                    .delete()
+                    .eq('order_id', editingOrderId);
+
+                if (deleteError) throw deleteError;
+            } else {
+                // 1. Create New Order
+                const { data: newOrder, error: orderError } = await supabase
+                    .from('orders')
+                    .insert([{
+                        customer_id: selectedCustomer.id,
+                        customer_name: selectedCustomer.full_name,
+                        customer_email: selectedCustomer.email,
+                        customer_phone: selectedCustomer.phone,
+                        shipping_address: selectedCustomer.address,
+                        total: total,
+                        status: orderForm.status,
+                        payment_method: orderForm.payment_method,
+                        shipping_method: orderForm.shipping_method,
+                        created_at: new Date(orderForm.created_at).toISOString(),
+                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
+                    }])
+                    .select()
+                    .maybeSingle();
+
+                if (orderError) throw orderError;
+                order = newOrder;
+            }
+
+            // 2b. Insert Order Items
 
             // 2. Create Order Items
             const itemsToInsert = cart.map(item => ({
@@ -919,6 +1057,15 @@ export default function OrdersList() {
                                             >
                                                 <Eye className="w-4 h-4" />
                                             </button>
+                                            {order.status !== 'COMPLETED' && (
+                                                <button
+                                                    onClick={() => handleEditOrder(order)}
+                                                    title="Modificar Pedido"
+                                                    className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-amber-600 hover:border-amber-100 hover:bg-amber-50 rounded-xl transition-all flex items-center justify-center shadow-sm"
+                                                >
+                                                    <Pencil className="w-4 h-4" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => handlePrintOrder(order)}
                                                 title="Reimprimir Recibo/Factura"
@@ -1239,7 +1386,16 @@ export default function OrdersList() {
                             {step === 1 && (
                                 <div className="space-y-8 animate-in slide-in-from-right-10 duration-500">
                                     <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-4">
-                                        <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Listado de Clientes</h3>
+                                        <div className="flex items-center gap-4">
+                                            <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Listado de Clientes</h3>
+                                            <button
+                                                onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
+                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isQuickAddOpen ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white'}`}
+                                            >
+                                                {isQuickAddOpen ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                                                {isQuickAddOpen ? 'Cancelar' : 'Nuevo Cliente'}
+                                            </button>
+                                        </div>
                                         <div className="relative w-full md:w-96">
                                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                             <input
@@ -1251,37 +1407,122 @@ export default function OrdersList() {
                                             />
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {customers
-                                            .filter(c => !customerSearch ||
-                                                c.full_name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
-                                                c.email?.toLowerCase().includes(customerSearch.toLowerCase()))
-                                            .map(c => (
+
+                                    {isQuickAddOpen ? (
+                                        <div className="bg-gray-50/50 p-10 rounded-[3rem] border-2 border-primary/20 animate-in fade-in slide-in-from-top-4 duration-500">
+                                            <div className="flex items-center gap-4 mb-8">
+                                                <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                                    <User className="w-6 h-6" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-[10px] font-black text-primary uppercase tracking-widest">Registro Rápido</p>
+                                                    <h4 className="text-xl font-black text-brand-carbon uppercase italic leading-none font-outfit">Nuevo <span className="text-primary/40">Cliente</span></h4>
+                                                </div>
+                                            </div>
+
+                                            <form onSubmit={handleQuickAddCustomer} className="space-y-8">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nombre Completo</label>
+                                                        <input
+                                                            required
+                                                            placeholder="EJ. JUAN PEREZ"
+                                                            className="w-full bg-white border border-gray-100 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit uppercase"
+                                                            value={quickAddForm.full_name}
+                                                            onChange={e => setQuickAddForm({ ...quickAddForm, full_name: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Email Contacto</label>
+                                                        <input
+                                                            required
+                                                            type="email"
+                                                            placeholder="EMAIL@EXAMPLE.COM"
+                                                            className="w-full bg-white border border-gray-100 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit lowercase"
+                                                            value={quickAddForm.email}
+                                                            onChange={e => setQuickAddForm({ ...quickAddForm, email: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Teléfono</label>
+                                                        <input
+                                                            placeholder="+34 000 000 000"
+                                                            className="w-full bg-white border border-gray-100 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                                            value={quickAddForm.phone}
+                                                            onChange={e => setQuickAddForm({ ...quickAddForm, phone: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Tipo de Cliente</label>
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setQuickAddForm({ ...quickAddForm, user_type: 'persona' })}
+                                                                className={`p-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${quickAddForm.user_type === 'persona' ? 'bg-brand-carbon text-white border-brand-carbon shadow-lg' : 'bg-white text-gray-400 border-gray-100'}`}
+                                                            >
+                                                                Particular
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setQuickAddForm({ ...quickAddForm, user_type: 'profesional' })}
+                                                                className={`p-3 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${quickAddForm.user_type === 'profesional' ? 'bg-brand-carbon text-white border-brand-carbon shadow-lg' : 'bg-white text-gray-400 border-gray-100'}`}
+                                                            >
+                                                                Profesional
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Dirección de Envío</label>
+                                                    <textarea
+                                                        placeholder="CALLE, CIUDAD, CP..."
+                                                        className="w-full bg-white border border-gray-100 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit h-24 resize-none"
+                                                        value={quickAddForm.address}
+                                                        onChange={e => setQuickAddForm({ ...quickAddForm, address: e.target.value })}
+                                                    />
+                                                </div>
                                                 <button
-                                                    key={c.id}
-                                                    onClick={() => { setSelectedCustomer(c); setStep(2); }}
-                                                    className={`p-8 rounded-[2.5rem] border text-left transition-all group ${selectedCustomer?.id === c.id ? 'bg-brand-carbon text-white border-brand-carbon shadow-2xl scale-105' : 'bg-white border-gray-100 hover:border-primary/30 hover:shadow-xl'}`}
+                                                    disabled={isSavingQuickAdd}
+                                                    className="w-full py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[11px] shadow-2xl hover:bg-primary transition-all flex items-center justify-center gap-3 active:scale-95"
                                                 >
-                                                    <div className="flex items-center gap-5 mb-6">
-                                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black italic shadow-inner ${selectedCustomer?.id === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
-                                                            {c.full_name?.charAt(0) || '?'}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-black uppercase italic tracking-tighter line-clamp-1">{c.full_name}</p>
-                                                            <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedCustomer?.id === c.id ? 'text-white/40' : 'text-gray-300'}`}>ID: {c.id.slice(0, 8)}</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="space-y-2">
-                                                        <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
-                                                            <Mail className="w-3.5 h-3.5" /> {c.email}
-                                                        </p>
-                                                        <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
-                                                            <MapPin className="w-3.5 h-3.5" /> {c.address || 'Sin dirección'}
-                                                        </p>
-                                                    </div>
+                                                    {isSavingQuickAdd ? <Loader2 className="w-5 h-5 animate-spin" /> : <Plus className="w-5 h-5" />}
+                                                    Guardar y Seleccionar Cliente
                                                 </button>
-                                            ))}
-                                    </div>
+                                            </form>
+                                        </div>
+                                    ) : (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                            {customers
+                                                .filter(c => !customerSearch ||
+                                                    c.full_name?.toLowerCase().includes(customerSearch.toLowerCase()) ||
+                                                    c.email?.toLowerCase().includes(customerSearch.toLowerCase()))
+                                                .map(c => (
+                                                    <button
+                                                        key={c.id}
+                                                        onClick={() => { setSelectedCustomer(c); setStep(2); }}
+                                                        className={`p-8 rounded-[2.5rem] border text-left transition-all group ${selectedCustomer?.id === c.id ? 'bg-brand-carbon text-white border-brand-carbon shadow-2xl scale-105' : 'bg-white border-gray-100 hover:border-primary/30 hover:shadow-xl'}`}
+                                                    >
+                                                        <div className="flex items-center gap-5 mb-6">
+                                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-xl font-black italic shadow-inner ${selectedCustomer?.id === c.id ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-primary/10 group-hover:text-primary'}`}>
+                                                                {c.full_name?.charAt(0) || '?'}
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-black uppercase italic tracking-tighter line-clamp-1">{c.full_name}</p>
+                                                                <p className={`text-[9px] font-bold uppercase tracking-widest ${selectedCustomer?.id === c.id ? 'text-white/40' : 'text-gray-300'}`}>ID: {c.id.slice(0, 8)}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
+                                                                <Mail className="w-3.5 h-3.5" /> {c.email}
+                                                            </p>
+                                                            <p className={`text-[10px] font-bold flex items-center gap-2 ${selectedCustomer?.id === c.id ? 'text-white/60' : 'text-gray-400'}`}>
+                                                                <MapPin className="w-3.5 h-3.5" /> {c.address || 'Sin dirección'}
+                                                            </p>
+                                                        </div>
+                                                    </button>
+                                                ))}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1573,8 +1814,8 @@ export default function OrdersList() {
                                     </>
                                 ) : (
                                     <>
-                                        <span>{step === 3 ? 'Finalizar y Crear' : 'Siguiente Paso'}</span>
-                                        <ChevronRight className={`w-5 h-5 ${step === 3 ? 'hidden' : ''}`} />
+                                        <span>{isEditing ? 'Guardar Cambios' : (step === 3 ? 'Finalizar y Crear' : 'Siguiente Paso')}</span>
+                                        <ChevronRight className={`w-5 h-5 ${(step === 3 || isEditing) ? 'hidden' : ''}`} />
                                     </>
                                 )}
                             </button>
