@@ -53,7 +53,10 @@ export default function OrdersList() {
         email: '',
         phone: '',
         address: '',
-        user_type: 'persona'
+        user_type: 'persona',
+        company_name: '',
+        vat_id: '',
+        is_partner: false
     });
 
     useEffect(() => {
@@ -139,7 +142,7 @@ export default function OrdersList() {
         setProductSearch('');
         setCustomerSearch('');
         setIsQuickAddOpen(false);
-        setQuickAddForm({ full_name: '', email: '', phone: '', address: '', user_type: 'persona' });
+        setQuickAddForm({ full_name: '', email: '', phone: '', address: '', user_type: 'persona', company_name: '', vat_id: '', is_partner: false });
         setIsCreateModalOpen(true);
         fetchCreateData();
     };
@@ -241,13 +244,23 @@ export default function OrdersList() {
     const addToCart = (product) => {
         const existing = cart.find(item => item.id === product.id);
         const newQty = existing ? existing.quantity + 1 : 1;
+        const currentDiscount = existing ? (existing.manual_discount || 0) : 0;
         const pricing = calculateProductPrice(product, selectedCustomer, newQty);
+        console.log('[Debug Pricing] Product:', product.name, 'Customer:', selectedCustomer?.full_name, 'Pricing Object:', pricing);
+
+        // Final price with manual discount adjustment
+        const finalPriceWithDiscount = pricing.finalPrice * (1 - (currentDiscount / 100));
+        const finalDisplayWithDiscount = pricing.displayPrice * (1 - (currentDiscount / 100));
 
         const productWithPrice = {
             ...product,
+            // Guardamos el precio original para evitar que recálculos futuros usen el precio ya descontado
+            base_price_persistence: pricing.finalPrice,
+            base_display_persistence: pricing.displayPrice,
             quantity: newQty,
-            price: pricing.finalPrice,
-            displayPrice: pricing.displayPrice,
+            manual_discount: currentDiscount,
+            price: pricing.finalPrice * (1 - (currentDiscount / 100)),
+            displayPrice: pricing.displayPrice * (1 - (currentDiscount / 100)),
             isProPrice: pricing.isProPrice,
             isPartnerPrice: pricing.isPartnerPrice,
             showPriceWithoutVat: pricing.showPriceWithoutVat
@@ -263,16 +276,43 @@ export default function OrdersList() {
     const updateQuantity = (id, delta) => {
         setCart(cart.map(item => {
             if (item.id === id) {
-                const newQty = Math.max(1, item.quantity + delta);
-                const pricing = calculateProductPrice(item, selectedCustomer, newQty);
+                const productForCalc = { ...item, price: item.base_price_persistence || item.price };
+                const pricing = calculateProductPrice(productForCalc, selectedCustomer, newQty);
+                const currentDiscount = item.manual_discount || 0;
+
                 return {
                     ...item,
                     quantity: newQty,
-                    price: pricing.finalPrice,
-                    displayPrice: pricing.displayPrice,
+                    price: pricing.finalPrice * (1 - (currentDiscount / 100)),
+                    displayPrice: pricing.displayPrice * (1 - (currentDiscount / 100)),
                     isProPrice: pricing.isProPrice,
                     isPartnerPrice: pricing.isPartnerPrice,
-                    showPriceWithoutVat: pricing.showPriceWithoutVat
+                    showPriceWithoutVat: pricing.showPriceWithoutVat,
+                    base_price_persistence: pricing.finalPrice,
+                    base_display_persistence: pricing.displayPrice
+                };
+            }
+            return item;
+        }));
+    };
+
+    const setManualDiscount = (id, value) => {
+        const discount = parseFloat(value);
+        if (isNaN(discount)) return;
+        const finalDiscount = Math.max(0, Math.min(100, discount));
+
+        setCart(cart.map(item => {
+            if (item.id === id) {
+                const productForCalc = { ...item, price: item.base_price_persistence || item.price };
+                const pricing = calculateProductPrice(productForCalc, selectedCustomer, item.quantity);
+                console.log('[Debug Pricing Update] Manual Discount:', finalDiscount, 'Pricing Object:', pricing);
+                return {
+                    ...item,
+                    manual_discount: finalDiscount,
+                    price: pricing.finalPrice * (1 - (finalDiscount / 100)),
+                    displayPrice: pricing.displayPrice * (1 - (finalDiscount / 100)),
+                    base_price_persistence: pricing.finalPrice,
+                    base_display_persistence: pricing.displayPrice
                 };
             }
             return item;
@@ -285,15 +325,19 @@ export default function OrdersList() {
         const finalQty = Math.max(1, qty);
         setCart(cart.map(item => {
             if (item.id === id) {
-                const pricing = calculateProductPrice(item, selectedCustomer, finalQty);
+                const productForCalc = { ...item, price: item.base_price_persistence || item.price };
+                const pricing = calculateProductPrice(productForCalc, selectedCustomer, finalQty);
+                const currentDiscount = item.manual_discount || 0;
                 return {
                     ...item,
                     quantity: finalQty,
-                    price: pricing.finalPrice,
-                    displayPrice: pricing.displayPrice,
+                    price: pricing.finalPrice * (1 - (currentDiscount / 100)),
+                    displayPrice: pricing.displayPrice * (1 - (currentDiscount / 100)),
                     isProPrice: pricing.isProPrice,
                     isPartnerPrice: pricing.isPartnerPrice,
-                    showPriceWithoutVat: pricing.showPriceWithoutVat
+                    showPriceWithoutVat: pricing.showPriceWithoutVat,
+                    base_price_persistence: pricing.finalPrice,
+                    base_display_persistence: pricing.displayPrice
                 };
             }
             return item;
@@ -305,10 +349,11 @@ export default function OrdersList() {
         if (cart.length > 0) {
             setCart(prevCart => prevCart.map(item => {
                 const pricing = calculateProductPrice(item, selectedCustomer, item.quantity);
+                const currentDiscount = item.manual_discount || 0;
                 return {
                     ...item,
-                    price: pricing.finalPrice,
-                    displayPrice: pricing.displayPrice,
+                    price: pricing.finalPrice * (1 - (currentDiscount / 100)),
+                    displayPrice: pricing.displayPrice * (1 - (currentDiscount / 100)),
                     isProPrice: pricing.isProPrice,
                     isPartnerPrice: pricing.isPartnerPrice,
                     showPriceWithoutVat: pricing.showPriceWithoutVat
@@ -1481,6 +1526,39 @@ export default function OrdersList() {
                                                             </button>
                                                         </div>
                                                     </div>
+
+                                                    {quickAddForm.user_type === 'profesional' && (
+                                                        <>
+                                                            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Nombre de Empresa</label>
+                                                                <input
+                                                                    placeholder="RAZÓN SOCIAL"
+                                                                    className="w-full bg-white border border-gray-100 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit uppercase"
+                                                                    value={quickAddForm.company_name}
+                                                                    onChange={e => setQuickAddForm({ ...quickAddForm, company_name: e.target.value })}
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">NIF / CIF</label>
+                                                                <input
+                                                                    placeholder="B00000000"
+                                                                    className="w-full bg-white border border-gray-100 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit uppercase"
+                                                                    value={quickAddForm.vat_id}
+                                                                    onChange={e => setQuickAddForm({ ...quickAddForm, vat_id: e.target.value })}
+                                                                />
+                                                            </div>
+                                                            <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300 flex items-center gap-3 pt-6">
+                                                                <input
+                                                                    type="checkbox"
+                                                                    id="quick_is_partner"
+                                                                    className="w-5 h-5 rounded-lg border-gray-100 text-primary focus:ring-primary/20"
+                                                                    checked={quickAddForm.is_partner}
+                                                                    onChange={e => setQuickAddForm({ ...quickAddForm, is_partner: e.target.checked })}
+                                                                />
+                                                                <label htmlFor="quick_is_partner" className="text-[10px] font-black uppercase tracking-widest text-gray-400 cursor-pointer">Es Socio VIP / Partner</label>
+                                                            </div>
+                                                        </>
+                                                    )}
                                                 </div>
                                                 <div className="space-y-3">
                                                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Dirección de Envío</label>
@@ -1658,14 +1736,34 @@ export default function OrdersList() {
                                                             <div className="flex items-center gap-12">
                                                                 <div className="flex items-center gap-4 bg-gray-50 px-4 py-2 rounded-xl">
                                                                     <button onClick={() => updateQuantity(item.id, -1)} className="font-black text-gray-400 p-2 hover:text-brand-carbon">-</button>
-                                                                    <input
-                                                                        type="number"
-                                                                        value={item.quantity}
-                                                                        onChange={(e) => setQuantity(item.id, e.target.value)}
-                                                                        className="text-xs font-black text-brand-carbon w-12 text-center bg-transparent border-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                        min="1"
-                                                                    />
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className="text-[7px] font-black text-gray-300 uppercase mb-0.5">Cant</span>
+                                                                        <input
+                                                                            type="number"
+                                                                            value={item.quantity}
+                                                                            onChange={(e) => setQuantity(item.id, e.target.value)}
+                                                                            className="text-xs font-black text-brand-carbon w-10 text-center bg-transparent border-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none p-0"
+                                                                            min="1"
+                                                                        />
+                                                                    </div>
                                                                     <button onClick={() => updateQuantity(item.id, 1)} className="font-black text-gray-400 p-2 hover:text-primary">+</button>
+                                                                </div>
+
+                                                                <div className="flex items-center gap-4 bg-amber-50/50 px-4 py-2 rounded-xl border border-amber-100/50">
+                                                                    <div className="flex flex-col items-center">
+                                                                        <span className="text-[7px] font-black text-amber-600/60 uppercase mb-0.5">DTO %</span>
+                                                                        <div className="flex items-center">
+                                                                            <input
+                                                                                type="number"
+                                                                                value={item.manual_discount || 0}
+                                                                                onChange={(e) => setManualDiscount(item.id, e.target.value)}
+                                                                                className="text-xs font-black text-amber-600 w-10 text-center bg-transparent border-none focus:ring-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none p-0"
+                                                                                min="0"
+                                                                                max="100"
+                                                                            />
+                                                                            <span className="text-[10px] font-black text-amber-600/40">%</span>
+                                                                        </div>
+                                                                    </div>
                                                                 </div>
                                                                 <div className="text-right w-32">
                                                                     <div className="flex flex-col items-end">
@@ -1675,9 +1773,19 @@ export default function OrdersList() {
                                                                                 <span className="text-[8px] font-black text-primary uppercase italic">+IVA</span>
                                                                             )}
                                                                         </div>
-                                                                        {item.showPriceWithoutVat && (
-                                                                            <p className="text-[9px] font-bold text-gray-300">Total con IVA: {(item.price * item.quantity).toFixed(2)} €</p>
-                                                                        )}
+                                                                        {/* Desglose para depuración */}
+                                                                        <div className="mt-1 text-[7px] font-bold text-gray-400 uppercase space-y-0.5 text-right w-full">
+                                                                            <div>Base: {(item.base_display_persistence || item.displayPrice / (1 - (item.manual_discount || 0) / 100)).toFixed(2)}€ {item.showPriceWithoutVat ? ' (Sin IVA)' : ' (C/ IVA)'}</div>
+                                                                            {item.manual_discount > 0 && (
+                                                                                <div className="text-amber-500">Dto Manual: -{item.manual_discount}%</div>
+                                                                            )}
+                                                                            <div className="text-brand-carbon font-black border-t border-gray-50 pt-0.5 mt-0.5">Unitario: {item.displayPrice.toFixed(2)}€</div>
+                                                                            {item.showPriceWithoutVat ? (
+                                                                                <div className="text-gray-300">Total con IVA: {(item.price * item.quantity).toFixed(2)}€</div>
+                                                                            ) : (
+                                                                                <div className="text-gray-300">Base Imponible: {((item.price * item.quantity) / 1.21).toFixed(2)}€</div>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
                                                                 </div>
                                                                 <button onClick={() => removeFromCart(item.id)} className="text-red-300 hover:text-red-500 transition-colors p-2">
