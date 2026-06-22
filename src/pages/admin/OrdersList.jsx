@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag, Edit3 } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
 
@@ -40,12 +40,8 @@ export default function OrdersList() {
         shipping_method: 'pickup',
         created_at: new Date().toISOString().slice(0, 16)
     });
-    const [shippingConfig, setShippingConfig] = useState({
-        tiers: {
-            b2c: { zones: { peninsula: { base_cost: 5.95, free_shipping_threshold: 150 } } }
-        }
-    });
-    const [editingOrder, setEditingOrder] = useState(null);
+    const [shippingConfig, setShippingConfig] = useState(null);
+    const [sendEmailToCustomer, setSendEmailToCustomer] = useState(true);
     const [productSearch, setProductSearch] = useState('');
     const [customerSearch, setCustomerSearch] = useState('');
 
@@ -123,7 +119,6 @@ export default function OrdersList() {
     }
 
     const openCreateModal = () => {
-        setEditingOrder(null);
         setStep(1);
         setSelectedCustomer(null);
         setCart([]);
@@ -132,62 +127,6 @@ export default function OrdersList() {
         setCustomerSearch('');
         setIsCreateModalOpen(true);
         fetchCreateData();
-    };
-
-    const handleEditOrder = async (order) => {
-        try {
-            setLoading(true);
-            setEditingOrder(order);
-
-            // 1. Set Customer
-            const orderCustomer = customers.find(c => c.id === order.customer_id) || {
-                id: order.customer_id,
-                full_name: order.customer_name,
-                email: order.customer_email,
-                phone: order.customer_phone,
-                address: order.shipping_address
-            };
-            setSelectedCustomer(orderCustomer);
-
-            // 2. Fetch Order Items and map to cart
-            const { data: items, error } = await supabase
-                .from('order_items')
-                .select('*, products(image_url, category, attributes, stock)')
-                .eq('order_id', order.id);
-
-            if (error) throw error;
-
-            const cartItems = items.map(item => ({
-                id: item.product_id,
-                name: item.product_name,
-                price: item.unit_price,
-                quantity: item.quantity,
-                image_url: item.products?.image_url,
-                category: item.products?.category,
-                attributes: item.products?.attributes,
-                stock: item.products?.stock
-            }));
-
-            setCart(cartItems);
-
-            // 3. Ensure we have data (especially shipping config)
-            fetchCreateData();
-
-            // 4. Set Form
-            setOrderForm({
-                status: order.status,
-                payment_method: order.payment_method,
-                shipping_method: order.shipping_method,
-                created_at: new Date(order.created_at).toISOString().slice(0, 16)
-            });
-
-            setStep(2); // Start at products step to allow modifications
-            setIsCreateModalOpen(true);
-        } catch (err) {
-            alert("Error al cargar pedido para editar: " + err.message);
-        } finally {
-            setLoading(false);
-        }
     };
 
     const addToCart = (product) => {
@@ -269,25 +208,20 @@ export default function OrdersList() {
     const removeFromCart = (id) => setCart(cart.filter(item => item.id !== id));
 
     const calculateShippingCost = () => {
-        if (orderForm.shipping_method === 'pickup') return 0;
+        if (orderForm.shipping_method === 'pickup' || !shippingConfig) return 0;
 
         const tier = selectedCustomer?.user_type === 'profesional' ? 'b2b' : (selectedCustomer?.is_partner ? 'socio' : 'b2c');
-
-        // Robust fallbacks if config is missing or incomplete
-        const tierConfig = shippingConfig?.tiers?.[tier] || shippingConfig?.tiers?.['b2c'];
+        const tierConfig = shippingConfig.tiers?.[tier] || shippingConfig.tiers?.['b2c'];
         const zoneConfig = tierConfig?.zones?.['peninsula'] || { base_cost: 5.95, free_shipping_threshold: 150 };
 
         const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-        const base_cost = zoneConfig.base_cost !== undefined ? Number(zoneConfig.base_cost) : 5.95;
-        const threshold = zoneConfig.free_shipping_threshold !== undefined ? Number(zoneConfig.free_shipping_threshold) : 150;
-
         if (subtotal > 0) {
-            if (threshold === 0 || subtotal >= threshold) {
+            if (zoneConfig.free_shipping_threshold === 0 || subtotal >= zoneConfig.free_shipping_threshold) {
                 return 0;
             }
         }
-        return base_cost;
+        return Number(zoneConfig.base_cost) || 0;
     };
 
     const calculateTotal = () => {
@@ -306,58 +240,31 @@ export default function OrdersList() {
             setIsCreating(true);
             const { subtotal, shipping, total } = calculateTotal();
 
-            let orderId = editingOrder?.id;
+            // 1. Create Order
+            const { data: order, error: orderError } = await supabase
+                .from('orders')
+                .insert([{
+                    customer_id: selectedCustomer.id,
+                    customer_name: selectedCustomer.full_name,
+                    customer_email: selectedCustomer.email,
+                    customer_phone: selectedCustomer.phone,
+                    shipping_address: selectedCustomer.address,
+                    total: total,
+                    shipping_cost: shipping,
+                    status: orderForm.status,
+                    payment_method: orderForm.payment_method,
+                    shipping_method: orderForm.shipping_method,
+                    created_at: new Date(orderForm.created_at).toISOString(),
+                    payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
+                }])
+                .select()
+                .maybeSingle();
 
-            if (editingOrder) {
-                // UPDATE
-                const { error: updateError } = await supabase
-                    .from('orders')
-                    .update({
-                        total: total,
-                        status: orderForm.status,
-                        payment_method: orderForm.payment_method,
-                        shipping_method: orderForm.shipping_method,
-                        created_at: new Date(orderForm.created_at).toISOString(),
-                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
-                    })
-                    .eq('id', editingOrder.id);
-
-                if (updateError) throw updateError;
-
-                // Replace items (Delete old -> Insert new)
-                const { error: deleteError } = await supabase
-                    .from('order_items')
-                    .delete()
-                    .eq('order_id', editingOrder.id);
-
-                if (deleteError) throw deleteError;
-            } else {
-                // INSERT
-                const { data: order, error: orderError } = await supabase
-                    .from('orders')
-                    .insert([{
-                        customer_id: selectedCustomer.id,
-                        customer_name: selectedCustomer.full_name,
-                        customer_email: selectedCustomer.email,
-                        customer_phone: selectedCustomer.phone,
-                        shipping_address: selectedCustomer.address,
-                        total: total,
-                        status: orderForm.status,
-                        payment_method: orderForm.payment_method,
-                        shipping_method: orderForm.shipping_method,
-                        created_at: new Date(orderForm.created_at).toISOString(),
-                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
-                    }])
-                    .select()
-                    .maybeSingle();
-
-                if (orderError) throw orderError;
-                orderId = order.id;
-            }
+            if (orderError) throw orderError;
 
             // 2. Create Order Items
             const itemsToInsert = cart.map(item => ({
-                order_id: orderId,
+                order_id: order.id,
                 product_id: item.id,
                 product_name: item.name,
                 quantity: item.quantity,
@@ -370,10 +277,118 @@ export default function OrdersList() {
 
             if (itemsError) throw itemsError;
 
+            // 3. Trigger Email Notifications
+            try {
+                const itemsHtml = cart.map(item => `
+                    <tr style="border-bottom: 1px solid #f0f0f0;">
+                        <td style="padding: 12px 0; font-size: 14px;">
+                            <div style="font-weight: bold; color: #111827;">${item.name}</div>
+                            <div style="font-size: 12px; color: #6b7280;">Boutique Ref: ${item.id.slice(0, 8).toUpperCase()}</div>
+                        </td>
+                        <td style="padding: 12px 10px; font-size: 14px; text-align: center; color: #374151;">${item.quantity}</td>
+                        <td style="padding: 12px 0; font-size: 14px; text-align: right; font-weight: bold; color: #111827;">${item.price.toFixed(2)}€</td>
+                    </tr>
+                `).join('');
+
+                const ivaAmount = total * 0.17355;
+                const orderDetailsHtml = `
+                    <div style="margin-top: 30px; border: 1px solid #f0f0f0; border-radius: 16px; overflow: hidden;">
+                        <div style="background-color: #fafafa; padding: 15px 20px; border-bottom: 1px solid #f0f0f0;">
+                            <h3 style="margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: #111827; font-style: italic;">Detalles del Pedido (Manual)</h3>
+                        </div>
+                        <div style="padding: 20px;">
+                            <table style="width: 100%; border-collapse: collapse;">
+                                <thead>
+                                    <tr style="border-bottom: 2px solid #111827;">
+                                        <th style="text-align: left; padding-bottom: 10px; font-size: 10px; text-transform: uppercase; color: #6b7280;">Producto</th>
+                                        <th style="text-align: center; padding-bottom: 10px; font-size: 10px; text-transform: uppercase; color: #6b7280;">Cant.</th>
+                                        <th style="text-align: right; padding-bottom: 10px; font-size: 10px; text-transform: uppercase; color: #6b7280;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${itemsHtml}
+                                </tbody>
+                            </table>
+                        </div>
+                        <div style="background-color: #fafafa; padding: 20px; border-top: 1px solid #f0f0f0;">
+                            <table style="width: 100%;">
+                                <tr>
+                                    <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Subtotal:</td>
+                                    <td style="text-align: right; font-size: 14px; font-weight: bold;">${(total - shipping).toFixed(2)}€</td>
+                                </tr>
+                                <tr>
+                                    <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Envío:</td>
+                                    <td style="text-align: right; font-size: 14px; font-weight: bold;">${shipping.toFixed(2)}€</td>
+                                </tr>
+                                <tr style="border-top: 1px solid #e5e7eb;">
+                                    <td style="padding-top: 10px; font-size: 14px; font-weight: 900; color: #111827; text-transform: uppercase; font-style: italic;">Total del Pedido:</td>
+                                    <td style="padding-top: 10px; text-align: right; font-size: 20px; font-weight: 900; color: #111827;">${total.toFixed(2)}€</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                `;
+
+                // 1. Send to Customer
+                if (sendEmailToCustomer) {
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026'
+                        },
+                        body: JSON.stringify({
+                            to: selectedCustomer.email,
+                            templateKey: 'order_confirmation',
+                            variables: {
+                                name: selectedCustomer.full_name,
+                                order_id: order.id.slice(0, 8).toUpperCase(),
+                                site_name: 'Mil Luces Iluminación',
+                                body: `Hemos registrado un nuevo pedido manual para ti. Aquí tienes los detalles:<br/>${orderDetailsHtml}`
+                            }
+                        })
+                    });
+                }
+
+                // 2. Send to Admin
+                let adminEmail = 'milluces@millucesiluminacion.com';
+                const { data: brandData } = await supabase.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
+                if (brandData?.value?.contact_email) adminEmail = brandData.value.contact_email;
+
+                await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026'
+                    },
+                    body: JSON.stringify({
+                        to: adminEmail,
+                        templateKey: 'master_layout',
+                        variables: {
+                            site_name: 'Mil Luces Iluminación',
+                            body: `
+                                <div style="font-family: sans-serif; color: #111827;">
+                                    <h1 style="font-style: italic; text-transform: uppercase; font-weight: 900; border-bottom: 2px solid #111827; padding-bottom: 10px; font-size: 24px;">Nuevo Pedido Manual</h1>
+                                    <p>Se ha registrado un pedido manual desde el panel de administración:</p>
+                                    <div style="background-color: #f9f9f9; padding: 20px; border-radius: 12px; border: 1px solid #f0f0f0;">
+                                        <p><b>Referencia:</b> #${order.id.slice(0, 8).toUpperCase()}</p>
+                                        <p><b>Cliente:</b> ${selectedCustomer.full_name}</p>
+                                        <p><b>Email:</b> ${selectedCustomer.email}</p>
+                                    </div>
+                                    ${orderDetailsHtml}
+                                </div>
+                            `
+                        }
+                    })
+                });
+            } catch (err) {
+                console.error('Error sending emails:', err);
+            }
+
             setIsCreateModalOpen(false);
             fetchOrders();
         } catch (error) {
-            alert('Error al gestionar pedido: ' + error.message);
+            alert('Error al crear pedido: ' + error.message);
         } finally {
             setIsCreating(false);
         }
@@ -904,15 +919,6 @@ export default function OrdersList() {
                                             >
                                                 <Eye className="w-4 h-4" />
                                             </button>
-                                            {order.status !== 'COMPLETED' && (
-                                                <button
-                                                    onClick={() => handleEditOrder(order)}
-                                                    title="Editar Pedido"
-                                                    className="w-9 h-9 bg-white border border-gray-100 text-gray-400 hover:text-primary hover:border-primary/20 hover:bg-primary/5 rounded-xl transition-all flex items-center justify-center shadow-sm"
-                                                >
-                                                    <Edit3 className="w-4 h-4" />
-                                                </button>
-                                            )}
                                             <button
                                                 onClick={() => handlePrintOrder(order)}
                                                 title="Reimprimir Recibo/Factura"
@@ -1219,18 +1225,8 @@ export default function OrdersList() {
                         <div className="p-10 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
                             <div>
                                 <span className="text-[10px] font-black text-primary uppercase tracking-[.5em] mb-2 block">Paso {step} de 3</span>
-                                <h2 className="text-3xl font-black text-brand-carbon uppercase italic italic flex items-center gap-4">
-                                    {editingOrder ? (
-                                        <>
-                                            <Edit3 className="w-8 h-8 text-primary" />
-                                            Editando Pedido <span className="text-gray-300">#{editingOrder.id.slice(0, 8).toUpperCase()}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ShoppingBag className="w-8 h-8 text-primary font-black" />
-                                            Nuevo Pedido <span className="text-gray-300">Manual</span>
-                                        </>
-                                    )}
+                                <h2 className="text-3xl font-black text-brand-carbon uppercase italic leading-none">
+                                    {step === 1 ? 'Seleccionar Cliente' : step === 2 ? 'Configurar Carrito' : 'Finalizar Pedido'}
                                 </h2>
                             </div>
                             <button onClick={() => setIsCreateModalOpen(false)} className="p-4 bg-white rounded-full text-gray-300 hover:text-brand-carbon transition-colors shadow-sm">
@@ -1502,7 +1498,26 @@ export default function OrdersList() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="bg-brand-carbon p-10 rounded-[3rem] text-white shadow- luxury">
+
+                                    {/* Email Confirmation Toggle */}
+                                    <div className="bg-white border-2 border-gray-100 p-8 rounded-[2.5rem] flex items-center justify-between group hover:border-primary/20 transition-all cursor-pointer" onClick={() => setSendEmailToCustomer(!sendEmailToCustomer)}>
+                                        <div className="flex items-center gap-6">
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${sendEmailToCustomer ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-400'}`}>
+                                                <Mail className="w-6 h-6" />
+                                            </div>
+                                            <div>
+                                                <p className="text-[12px] font-black uppercase italic tracking-widest text-brand-carbon">Confirmación por Email</p>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
+                                                    {sendEmailToCustomer ? 'SE ENVIARÁ COPIA AL CLIENTE' : 'NO SE ENVIARÁ COPIA AL CLIENTE'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className={`w-14 h-8 rounded-full p-1 transition-all flex items-center ${sendEmailToCustomer ? 'bg-emerald-500 justify-end' : 'bg-gray-200 justify-start'}`}>
+                                            <div className="w-6 h-6 bg-white rounded-full shadow-md"></div>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-brand-carbon p-10 rounded-[3rem] text-white shadow-2xl">
                                         <div className="flex justify-between items-center mb-6 border-b border-white/10 pb-6">
                                             <span className="text-[11px] font-bold text-white/40 uppercase tracking-[.3em]">Resumen de Pedido</span>
                                             <span className="text-[10px] font-black italic text-primary">{cart.length} Artículos</span>
@@ -1558,7 +1573,7 @@ export default function OrdersList() {
                                     </>
                                 ) : (
                                     <>
-                                        <span>{step === 3 ? (editingOrder ? 'Guardar Cambios' : 'Finalizar y Crear') : 'Siguiente Paso'}</span>
+                                        <span>{step === 3 ? 'Finalizar y Crear' : 'Siguiente Paso'}</span>
                                         <ChevronRight className={`w-5 h-5 ${step === 3 ? 'hidden' : ''}`} />
                                     </>
                                 )}
@@ -1566,117 +1581,120 @@ export default function OrdersList() {
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
 
             {/* ── Professional Print Template (Hidden on Screen) ──────────────── */}
-            {selectedOrder && (
-                <div id="invoice-print" className="hidden print:block font-outfit text-brand-carbon bg-white">
-                    {/* Header: Logo & Branding */}
-                    <div className="flex justify-between items-start border-b-4 border-brand-carbon pb-8 mb-12">
-                        <div>
-                            <h1 className="text-4xl font-black uppercase italic leading-none mb-2">
-                                Mil Luces <span className="text-gray-300">Iluminación</span>
-                            </h1>
-                            <p className="text-[11px] font-black uppercase tracking-[.4em] text-primary italic">Iluminación Lineal & LED Profesional</p>
-                        </div>
-                        <div className="text-right">
-                            <h2 className="text-xl font-black uppercase italic mb-1">Orden de Pedido</h2>
-                            <p className="text-xl font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
-                            <p className="text-[10px] font-black text-primary uppercase italic mt-1">{formatPaymentMethod(selectedOrder.payment_method)}</p>
-                        </div>
-                    </div>
-
-                    {/* Customer & Shipping Grid */}
-                    <div className="grid grid-cols-2 gap-12 mb-16">
-                        <section className="space-y-4">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Información del Cliente</h3>
-                            <div className="space-y-1">
-                                <p className="text-sm font-black uppercase italic">{selectedOrder.customer_name}</p>
-                                <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_email}</p>
-                                <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_phone || 'Teléfono no facilitado'}</p>
+            {
+                selectedOrder && (
+                    <div id="invoice-print" className="hidden print:block font-outfit text-brand-carbon bg-white">
+                        {/* Header: Logo & Branding */}
+                        <div className="flex justify-between items-start border-b-4 border-brand-carbon pb-8 mb-12">
+                            <div>
+                                <h1 className="text-4xl font-black uppercase italic leading-none mb-2">
+                                    Mil Luces <span className="text-gray-300">Iluminación</span>
+                                </h1>
+                                <p className="text-[11px] font-black uppercase tracking-[.4em] text-primary italic">Iluminación Lineal & LED Profesional</p>
                             </div>
-                        </section>
-                        <section className="space-y-4">
-                            <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Método de Entrega / Envío</h3>
-                            <div className="space-y-1">
-                                {selectedOrder.shipping_method === 'pickup' ? (
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                        <p className="text-sm font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
-                                    </div>
-                                ) : (
-                                    <>
-                                        <p className="text-sm font-black uppercase italic">Entrega a Domicilio</p>
-                                        <p className="text-[11px] font-medium leading-relaxed">
-                                            {selectedOrder.shipping_address}<br />
-                                            {selectedOrder.shipping_zip} {selectedOrder.shipping_city}
-                                        </p>
-                                    </>
-                                )}
+                            <div className="text-right">
+                                <h2 className="text-xl font-black uppercase italic mb-1">Orden de Pedido</h2>
+                                <p className="text-xl font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+                                <p className="text-[10px] font-black text-primary uppercase italic mt-1">{formatPaymentMethod(selectedOrder.payment_method)}</p>
                             </div>
-                        </section>
-                    </div>
+                        </div>
 
-                    {/* Items Table */}
-                    <div className="mb-16">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b-2 border-brand-carbon uppercase text-[10px] font-black tracking-widest text-gray-400">
-                                    <th className="py-4 pr-4">Concepto</th>
-                                    <th className="py-4 px-4 text-center">Cant.</th>
-                                    <th className="py-4 px-4 text-right">Precio Ud.</th>
-                                    <th className="py-4 pl-4 text-right">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {orderItems.map((item, idx) => (
-                                    <tr key={idx} className="group italic">
-                                        <td className="py-6 pr-4">
-                                            <p className="text-[11px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
-                                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">REF: {item.product_id?.slice(-6).toUpperCase()}</p>
-                                        </td>
-                                        <td className="py-6 px-4 text-center font-black text-sm">x{item.quantity}</td>
-                                        <td className="py-6 px-4 text-right text-xs font-bold">{item.unit_price.toFixed(2)}€</td>
-                                        <td className="py-6 pl-4 text-right text-sm font-black italic">{(item.unit_price * item.quantity).toFixed(2)}€</td>
+                        {/* Customer & Shipping Grid */}
+                        <div className="grid grid-cols-2 gap-12 mb-16">
+                            <section className="space-y-4">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Información del Cliente</h3>
+                                <div className="space-y-1">
+                                    <p className="text-sm font-black uppercase italic">{selectedOrder.customer_name}</p>
+                                    <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_email}</p>
+                                    <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_phone || 'Teléfono no facilitado'}</p>
+                                </div>
+                            </section>
+                            <section className="space-y-4">
+                                <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Método de Entrega / Envío</h3>
+                                <div className="space-y-1">
+                                    {selectedOrder.shipping_method === 'pickup' ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                            <p className="text-sm font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <p className="text-sm font-black uppercase italic">Entrega a Domicilio</p>
+                                            <p className="text-[11px] font-medium leading-relaxed">
+                                                {selectedOrder.shipping_address}<br />
+                                                {selectedOrder.shipping_zip} {selectedOrder.shipping_city}
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
+                            </section>
+                        </div>
+
+                        {/* Items Table */}
+                        <div className="mb-16">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b-2 border-brand-carbon uppercase text-[10px] font-black tracking-widest text-gray-400">
+                                        <th className="py-4 pr-4">Concepto</th>
+                                        <th className="py-4 px-4 text-center">Cant.</th>
+                                        <th className="py-4 px-4 text-right">Precio Ud.</th>
+                                        <th className="py-4 pl-4 text-right">Total</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {orderItems.map((item, idx) => (
+                                        <tr key={idx} className="group italic">
+                                            <td className="py-6 pr-4">
+                                                <p className="text-[11px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
+                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">REF: {item.product_id?.slice(-6).toUpperCase()}</p>
+                                            </td>
+                                            <td className="py-6 px-4 text-center font-black text-sm">x{item.quantity}</td>
+                                            <td className="py-6 px-4 text-right text-xs font-bold">{item.unit_price.toFixed(2)}€</td>
+                                            <td className="py-6 pl-4 text-right text-sm font-black italic">{(item.unit_price * item.quantity).toFixed(2)}€</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
 
-                    {/* Totals Summary */}
-                    <div className="flex justify-end mb-12">
-                        <div className="w-full max-w-[280px] space-y-3 bg-gray-50 p-8 rounded-3xl border border-gray-100">
-                            <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                <span>Base Imponible</span>
-                                <span>{(selectedOrder.total / 1.21).toFixed(2)}€</span>
-                            </div>
-                            <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                <span>Impuestos (21%)</span>
-                                <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)}€</span>
-                            </div>
-                            <div className="pt-4 border-t border-gray-200 flex justify-between items-end">
-                                <span className="text-xs font-black uppercase italic text-brand-carbon">Total Factura</span>
-                                <div className="text-right leading-none">
-                                    <span className="text-3xl font-black italic">{selectedOrder.total.toFixed(2)}</span>
-                                    <span className="text-lg font-black ml-1">€</span>
+                        {/* Totals Summary */}
+                        <div className="flex justify-end mb-12">
+                            <div className="w-full max-w-[280px] space-y-3 bg-gray-50 p-8 rounded-3xl border border-gray-100">
+                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                    <span>Base Imponible</span>
+                                    <span>{(selectedOrder.total / 1.21).toFixed(2)}€</span>
+                                </div>
+                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                    <span>Impuestos (21%)</span>
+                                    <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)}€</span>
+                                </div>
+                                <div className="pt-4 border-t border-gray-200 flex justify-between items-end">
+                                    <span className="text-xs font-black uppercase italic text-brand-carbon">Total Factura</span>
+                                    <div className="text-right leading-none">
+                                        <span className="text-3xl font-black italic">{selectedOrder.total.toFixed(2)}</span>
+                                        <span className="text-lg font-black ml-1">€</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Footer */}
-                    <div id="invoice-print-footer" className="border-t border-gray-100 pt-6 text-center space-y-2">
-                        <p className="text-[10px] font-black uppercase tracking-[.4em] text-gray-300 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
-                        <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
-                            Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
-                            milluces@millucesiluminacion.com · +34 917 654 062
-                        </p>
+                        {/* Footer */}
+                        <div id="invoice-print-footer" className="border-t border-gray-100 pt-6 text-center space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-[.4em] text-gray-300 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
+                                Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
+                                milluces@millucesiluminacion.com · +34 917 654 062
+                            </p>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
 
