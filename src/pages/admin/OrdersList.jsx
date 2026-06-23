@@ -1,12 +1,18 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+
 import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag, Pencil } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
 
 export default function OrdersList() {
+    const location = useLocation();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
+    const [searchQuery, setSearchQuery] = useState(() => {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('email') || '';
+    });
     const [statusFilter, setStatusFilter] = useState('ALL');
     const [dateFilter, setDateFilter] = useState('ALL');
     const [selectedOrders, setSelectedOrders] = useState([]);
@@ -59,6 +65,13 @@ export default function OrdersList() {
         is_partner: false
     });
 
+    // Sync search with URL param changes (e.g. navigating between customers)
+    useEffect(() => {
+        const params = new URLSearchParams(location.search);
+        const emailParam = params.get('email');
+        setSearchQuery(emailParam || '');
+    }, [location.search]);
+
     useEffect(() => {
         fetchOrders();
     }, [page, statusFilter, dateFilter, searchQuery]); // Recargar al cambiar página o filtros
@@ -72,7 +85,13 @@ export default function OrdersList() {
 
             // Apply Server-side Filters
             if (searchQuery) {
-                query = query.or(`id.ilike.%${searchQuery}%,customer_email.ilike.%${searchQuery}%,customer_name.ilike.%${searchQuery}%`);
+                if (searchQuery.includes('@')) {
+                    // Email search — filter directly, avoid UUID ilike issues
+                    query = query.ilike('customer_email', `%${searchQuery}%`);
+                } else {
+                    // Generic search by name or partial ID
+                    query = query.or(`customer_email.ilike.%${searchQuery}%,customer_name.ilike.%${searchQuery}%`);
+                }
             }
             if (statusFilter !== 'ALL') {
                 query = query.eq('status', statusFilter);

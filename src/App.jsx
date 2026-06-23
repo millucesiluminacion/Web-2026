@@ -35,6 +35,7 @@ import ReviewsAdmin from './pages/admin/ReviewsAdmin';
 import BadgesAdmin from './pages/admin/BadgesAdmin';
 import NewsletterAdmin from './pages/admin/NewsletterAdmin';
 import FiltersAdmin from './pages/admin/FiltersAdmin';
+import DashboardSettings from './pages/admin/DashboardSettings';
 
 
 import PaymentSettings from './pages/admin/PaymentSettings';
@@ -88,6 +89,7 @@ function App() {
 
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<Dashboard />} />
+              <Route path="dashboard-settings" element={<DashboardSettings />} />
               <Route path="products" element={<ProductList />} />
               <Route path="categories" element={<CategoriesAdmin />} />
               <Route path="orders" element={<OrdersList />} />
