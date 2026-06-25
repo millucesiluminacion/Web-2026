@@ -20,7 +20,6 @@ import ContactPage from './pages/ContactPage';
 import BrandsPage from './pages/BrandsPage';
 import RoomsPage from './pages/RoomsPage';
 import { CartProvider } from './context/CartContext';
-import CategoriesList from './pages/admin/CategoriesList';
 import OrdersList from './pages/admin/OrdersList';
 import CustomersList from './pages/admin/CustomersList';
 import BrandsList from './pages/admin/BrandsList';
@@ -36,6 +35,8 @@ import BadgesAdmin from './pages/admin/BadgesAdmin';
 import NewsletterAdmin from './pages/admin/NewsletterAdmin';
 import FiltersAdmin from './pages/admin/FiltersAdmin';
 import DashboardSettings from './pages/admin/DashboardSettings';
+import Statistics from './pages/admin/Statistics';
+
 
 
 import PaymentSettings from './pages/admin/PaymentSettings';
@@ -114,6 +115,7 @@ function App() {
               <Route path="reviews" element={<ReviewsAdmin />} />
               <Route path="badges" element={<BadgesAdmin />} />
               <Route path="newsletter" element={<NewsletterAdmin />} />
+              <Route path="statistics" element={<Statistics />} />
               <Route path="filters" element={<FiltersAdmin />} />
             </Route>
           </Routes>

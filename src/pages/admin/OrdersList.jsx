@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { Search, Loader2, Eye, Truck, CheckCircle, Clock, XCircle, X, MapPin, Phone, Mail, Package, CreditCard as CardIcon, Plus, Minus, Trash2, ChevronRight, ChevronLeft, Download, Printer, Filter, MoreVertical, Trash, User, ShoppingBag, Pencil } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
 
@@ -24,7 +24,7 @@ export default function OrdersList() {
 
     // Pagination state
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(50);
+    const [pageSize, setPageSize] = useState(50);
     const [totalCount, setTotalCount] = useState(0);
     const [stats, setStats] = useState({
         days7: { total: 0, count: 0 },
@@ -74,7 +74,7 @@ export default function OrdersList() {
 
     useEffect(() => {
         fetchOrders();
-    }, [page, statusFilter, dateFilter, searchQuery]); // Recargar al cambiar página o filtros
+    }, [page, pageSize, statusFilter, dateFilter, searchQuery]); // Recargar al cambiar página, tamaño o filtros
 
     async function fetchOrders() {
         try {
@@ -295,6 +295,7 @@ export default function OrdersList() {
     const updateQuantity = (id, delta) => {
         setCart(cart.map(item => {
             if (item.id === id) {
+                const newQty = Math.max(1, item.quantity + delta);
                 const productForCalc = { ...item, price: item.base_price_persistence || item.price };
                 const pricing = calculateProductPrice(productForCalc, selectedCustomer, newQty);
                 const currentDiscount = item.manual_discount || 0;
@@ -1169,19 +1170,37 @@ export default function OrdersList() {
                 )}
 
                 {/* Pagination Controls */}
-                {totalCount > pageSize && (
+                {totalCount > 0 && (
                     <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 bg-white p-8 rounded-[3rem] border border-gray-100 shadow-luxury animate-in fade-in slide-in-from-bottom-4 duration-700 font-outfit">
-                        <div className="flex items-center gap-4">
-                            <div className="flex -space-x-2">
+                        <div className="flex flex-col md:flex-row items-center gap-8">
+                            <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-full bg-primary/10 border-2 border-white flex items-center justify-center text-primary font-black text-xs">
-                                    {Math.ceil(totalCount / pageSize)}
+                                    {Math.ceil(totalCount / pageSize) || 1}
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">Flujo de Caja</p>
+                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">
+                                        Pág. <span className="text-primary">{page}</span> de <span className="text-brand-carbon font-black">{Math.ceil(totalCount / pageSize) || 1}</span> ({totalCount} pedidos)
+                                    </p>
                                 </div>
                             </div>
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-brand-carbon italic">Flujo de Caja</p>
-                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-tight">
-                                    Mostrando <span className="text-primary">{orders.length}</span> de <span className="text-brand-carbon">{totalCount}</span> transacciones
-                                </p>
+
+                            {/* Page Size Selector */}
+                            <div className="flex items-center gap-3 border-l border-gray-100 pl-8">
+                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Mostrar</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => {
+                                        setPageSize(Number(e.target.value));
+                                        setPage(1);
+                                    }}
+                                    className="bg-gray-50 border-none rounded-xl px-3 py-1.5 text-[10px] font-black text-brand-carbon outline-none focus:ring-1 focus:ring-primary/20"
+                                >
+                                    <option value={25}>25</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                    <option value={200}>200</option>
+                                </select>
                             </div>
                         </div>
 
@@ -1189,33 +1208,40 @@ export default function OrdersList() {
                             <button
                                 onClick={() => setPage(prev => Math.max(1, prev - 1))}
                                 disabled={page === 1}
-                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                                className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
                             >
-                                <ChevronRight className="w-6 h-6 rotate-180" />
+                                <ChevronRight className="w-5 h-5 rotate-180" />
                             </button>
 
                             <div className="flex items-center gap-1">
-                                {[...Array(Math.min(5, Math.ceil(totalCount / pageSize)))].map((_, i) => {
-                                    const pageNum = i + 1;
-                                    return (
-                                        <button
-                                            key={pageNum}
-                                            onClick={() => setPage(pageNum)}
-                                            className={`w-12 h-12 rounded-xl text-[10px] font-black transition-all ${page === pageNum ? 'bg-brand-carbon text-white shadow-lg scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
-                                        >
-                                            {pageNum}
-                                        </button>
-                                    );
-                                })}
-                                {Math.ceil(totalCount / pageSize) > 5 && <span className="px-2 text-gray-300">...</span>}
+                                {(() => {
+                                    const totalPages = Math.ceil(totalCount / pageSize);
+                                    const pages = [];
+                                    const startPage = Math.max(1, page - 2);
+                                    const endPage = Math.min(totalPages, startPage + 4);
+
+                                    for (let i = startPage; i <= endPage; i++) {
+                                        pages.push(
+                                            <button
+                                                key={i}
+                                                onClick={() => setPage(i)}
+                                                className={`w-10 h-10 rounded-xl text-[10px] font-black transition-all ${page === i ? 'bg-brand-carbon text-white shadow-lg scale-110' : 'bg-gray-50 text-gray-400 hover:bg-gray-100'}`}
+                                            >
+                                                {i}
+                                            </button>
+                                        );
+                                    }
+                                    return pages;
+                                })()}
+                                {Math.ceil(totalCount / pageSize) > page + 2 && <span className="px-2 text-gray-300">...</span>}
                             </div>
 
                             <button
                                 onClick={() => setPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
-                                disabled={page >= Math.ceil(totalCount / pageSize)}
-                                className="w-14 h-14 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
+                                disabled={page >= Math.ceil(totalCount / pageSize) || totalCount === 0}
+                                className="w-12 h-12 rounded-2xl bg-white border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary disabled:opacity-30 disabled:hover:border-gray-100 disabled:hover:text-gray-400 transition-all shadow-sm"
                             >
-                                <ChevronRight className="w-6 h-6" />
+                                <ChevronRight className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
