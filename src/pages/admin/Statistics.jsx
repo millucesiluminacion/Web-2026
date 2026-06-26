@@ -5,7 +5,7 @@ import {
     Package,
     Loader2,
     Users as UsersIcon,
-    DollarSign,
+    Euro,
     PieChart as PieChartIcon,
     BarChart2,
     Activity,
@@ -377,7 +377,7 @@ export default function Statistics() {
                     {
                         label: 'Ventas Confirmadas',
                         value: `${stats.totalSales.toLocaleString()} €`,
-                        icon: DollarSign,
+                        icon: Euro,
                         color: 'text-primary',
                         bg: 'bg-primary/5',
                         delta: stats.comparison.revenue,
