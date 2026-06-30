@@ -3,12 +3,13 @@ import {
     Search, Globe, Package, Menu, Sofa, BookOpen,
     Save, Loader2, AlertCircle, CheckCircle2,
     ExternalLink, Settings, Layout, Image as ImageIcon,
-    Tag, BarChart3, Zap, FileText, ChevronDown, ChevronUp, X
+    Tag, BarChart3, Zap, FileText, ChevronDown, ChevronUp, X, Map, Copy, CheckCheck, Bot
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const TABS = [
     { id: 'global', label: 'Sitio Global', icon: Settings },
+    { id: 'sitemap', label: 'Sitemap', icon: Map },
     { id: 'pages', label: 'Páginas Landing', icon: Layout },
     { id: 'products', label: 'Productos', icon: Package },
     { id: 'categories', label: 'Categorías', icon: Menu },
@@ -16,6 +17,9 @@ const TABS = [
     { id: 'blog', label: 'Blog (Posts)', icon: BookOpen },
     { id: 'cms_pages', label: 'Páginas CMS', icon: FileText },
 ];
+
+const SITEMAP_URL = 'https://2026.millucesiluminacion.com/api/sitemap';
+const ROBOTS_URL = 'https://2026.millucesiluminacion.com/robots.txt';
 
 export default function SEOAdmin() {
     const [activeTab, setActiveTab] = useState('global');
@@ -33,10 +37,18 @@ export default function SEOAdmin() {
         setTimeout(() => setToast(null), 3000);
     };
 
+    const [copied, setCopied] = useState(null);
+    const handleCopy = (text, key) => {
+        navigator.clipboard.writeText(text);
+        setCopied(key);
+        setTimeout(() => setCopied(null), 2000);
+    };
+
     useEffect(() => {
         setExpandedId(null);
         setSearchQuery('');
         if (activeTab === 'global') fetchGlobalSettings();
+        else if (activeTab === 'sitemap') return; // static panel, no fetch
         else if (activeTab === 'pages') fetchStaticPages();
         else fetchItems(activeTab);
     }, [activeTab]);
@@ -271,6 +283,78 @@ export default function SEOAdmin() {
                     <div className="p-32 flex flex-col items-center justify-center">
                         <Loader2 className="w-10 h-10 animate-spin text-primary mb-6" />
                         <p className="text-[10px] font-black uppercase tracking-[.4em] text-gray-400">Analizando Metadatos SEO...</p>
+                    </div>
+                ) : activeTab === 'sitemap' ? (
+                    /* ── Sitemap Panel ── */
+                    <div className="p-10 space-y-8 max-w-3xl mx-auto">
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                                <Map className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-black text-brand-carbon uppercase italic">Sitemap Dinámico · Activo</h2>
+                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Generado en tiempo real desde Supabase · Caché 24h</p>
+                            </div>
+                        </div>
+
+                        {/* Sitemap URL */}
+                        <div className="bg-gray-50 rounded-3xl border border-gray-100 p-6 space-y-3">
+                            <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">URL del Sitemap (para Google Search Console)</label>
+                            <div className="flex items-center gap-3">
+                                <code className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono text-primary break-all">{SITEMAP_URL}</code>
+                                <button onClick={() => handleCopy(SITEMAP_URL, 'sitemap')}
+                                    className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all flex items-center justify-center" title="Copiar URL">
+                                    {copied === 'sitemap' ? <CheckCheck className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                </button>
+                                <a href={SITEMAP_URL} target="_blank" rel="noopener noreferrer"
+                                    className="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-brand-carbon hover:text-white transition-all flex items-center justify-center" title="Abrir sitemap">
+                                    <ExternalLink className="w-4 h-4" />
+                                </a>
+                            </div>
+                        </div>
+
+                        {/* Robots.txt */}
+                        <div className="bg-gray-50 rounded-3xl border border-gray-100 p-6 space-y-3">
+                            <label className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">robots.txt</label>
+                            <div className="flex items-center gap-3">
+                                <code className="flex-1 bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono text-gray-600 break-all">{ROBOTS_URL}</code>
+                                <a href={ROBOTS_URL} target="_blank" rel="noopener noreferrer"
+                                    className="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-100 text-gray-500 hover:bg-brand-carbon hover:text-white transition-all flex items-center justify-center" title="Abrir robots.txt">
+                                    <ExternalLink className="w-4 h-4" />
+                                </a>
+                            </div>
+                        </div>
+
+                        {/* Instructions */}
+                        <div className="bg-blue-50/60 border border-blue-100 rounded-3xl p-6 space-y-4">
+                            <h3 className="text-[10px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-2">
+                                <Bot className="w-4 h-4" /> Cómo registrarlo en Google Search Console
+                            </h3>
+                            <ol className="space-y-2 text-[11px] text-blue-900 font-medium leading-relaxed list-decimal list-inside">
+                                <li>Accede a <a href="https://search.google.com/search-console" target="_blank" rel="noopener noreferrer" className="underline font-bold">Google Search Console</a></li>
+                                <li>Selecciona tu propiedad <strong>2026.millucesiluminacion.com</strong></li>
+                                <li>En el menú lateral, haz clic en <strong>Sitemaps</strong></li>
+                                <li>Pega la URL del sitemap y pulsa <strong>Enviar</strong></li>
+                            </ol>
+                        </div>
+
+                        {/* What's included */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {[
+                                { label: 'Páginas Estáticas', count: '9', icon: FileText, color: 'bg-violet-50 text-violet-600' },
+                                { label: 'Categorías', count: 'Auto', icon: Menu, color: 'bg-amber-50 text-amber-600' },
+                                { label: 'Productos', count: 'Auto', icon: Package, color: 'bg-emerald-50 text-emerald-600' },
+                                { label: 'Blog Posts', count: 'Auto', icon: BookOpen, color: 'bg-blue-50 text-blue-600' },
+                            ].map(({ label, count, icon: Icon, color }) => (
+                                <div key={label} className="bg-white border border-gray-100 rounded-2xl p-4 text-center">
+                                    <div className={`w-9 h-9 rounded-xl ${color} flex items-center justify-center mx-auto mb-2`}>
+                                        <Icon className="w-4 h-4" />
+                                    </div>
+                                    <p className="text-lg font-black text-brand-carbon italic leading-none">{count}</p>
+                                    <p className="text-[8px] font-bold uppercase text-gray-400 tracking-widest mt-1">{label}</p>
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 ) : activeTab === 'global' ? (
                     /* ── Global Form ── */
