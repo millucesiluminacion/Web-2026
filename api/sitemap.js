@@ -50,61 +50,90 @@ export default async function handler(req, res) {
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     try {
-        // Fetch dynamic data in parallel
-        const [productsRes, categoriesRes, blogRes] = await Promise.all([
+        // Fetch dynamic data in parallel (using created_at instead of updated_at)
+        const [productsRes, categoriesRes, blogRes, brandsRes, roomsRes] = await Promise.all([
             supabase
                 .from('products')
-                .select('slug, updated_at')
+                .select('slug, created_at')
                 .is('parent_id', null)
                 .neq('is_active', false)
                 .not('slug', 'is', null)
-                .order('updated_at', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(5000),
             supabase
                 .from('categories')
-                .select('slug, updated_at')
+                .select('slug, created_at')
                 .not('slug', 'is', null),
             supabase
                 .from('blog_posts')
-                .select('slug, updated_at')
+                .select('slug, created_at')
                 .not('slug', 'is', null)
-                .order('updated_at', { ascending: false })
+                .order('created_at', { ascending: false })
                 .limit(1000),
+            supabase
+                .from('brands')
+                .select('name, created_at'),
+            supabase
+                .from('rooms')
+                .select('slug, created_at')
+                .not('slug', 'is', null),
         ]);
 
         const entries = [];
 
-        // Static pages
+        // 1. Static pages
         for (const route of staticRoutes) {
             entries.push(urlEntry(route));
         }
 
-        // Categories → /catalogo?category=slug
+        // 2. Categories → /catalogo?category=slug
         for (const cat of (categoriesRes.data || [])) {
             entries.push(urlEntry({
                 loc: `/catalogo?category=${xmlEscape(cat.slug)}`,
-                lastmod: cat.updated_at ? cat.updated_at.split('T')[0] : undefined,
+                lastmod: cat.created_at ? cat.created_at.split('T')[0] : undefined,
                 changefreq: 'weekly',
                 priority: '0.7',
             }));
         }
 
-        // Products → /product/slug
+        // 3. Products → /product/slug
         for (const prod of (productsRes.data || [])) {
             entries.push(urlEntry({
                 loc: `/product/${xmlEscape(prod.slug)}`,
-                lastmod: prod.updated_at ? prod.updated_at.split('T')[0] : undefined,
+                lastmod: prod.created_at ? prod.created_at.split('T')[0] : undefined,
                 changefreq: 'weekly',
                 priority: '0.8',
             }));
         }
 
-        // Blog posts → /blog/slug
+        // 4. Blog posts → /blog/slug
         for (const post of (blogRes.data || [])) {
             entries.push(urlEntry({
                 loc: `/blog/${xmlEscape(post.slug)}`,
-                lastmod: post.updated_at ? post.updated_at.split('T')[0] : undefined,
+                lastmod: post.created_at ? post.created_at.split('T')[0] : undefined,
                 changefreq: 'monthly',
+                priority: '0.6',
+            }));
+        }
+
+        // 5. Brands → /catalogo?brand=name_lowercase
+        for (const brand of (brandsRes.data || [])) {
+            if (brand.name) {
+                entries.push(urlEntry({
+                    loc: `/catalogo?brand=${xmlEscape(brand.name.toLowerCase())}`,
+                    lastmod: brand.created_at ? brand.created_at.split('T')[0] : undefined,
+                    changefreq: 'weekly',
+                    priority: '0.6',
+                }));
+            }
+        }
+
+        // 6. Rooms → /catalogo?room=slug
+        for (const room of (roomsRes.data || [])) {
+            entries.push(urlEntry({
+                loc: `/catalogo?room=${xmlEscape(room.slug)}`,
+                lastmod: room.created_at ? room.created_at.split('T')[0] : undefined,
+                changefreq: 'weekly',
                 priority: '0.6',
             }));
         }
