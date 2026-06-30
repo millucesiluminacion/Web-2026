@@ -87,16 +87,7 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     // VAT CALCULATIONS
     // Prices in DB already include VAT (confirmed by USER)
     const showPriceWithoutVat = isPro || isPartner;
-
-    let basePrice = finalPrice / (1 + IVA_RATE);
-
-    if (showPriceWithoutVat) {
-        // Round base price to 2 decimals to avoid floating point issues in large quantities
-        // and ensure the total matches exactly what the user sees (base * units * 1.21)
-        basePrice = Math.round(basePrice * 100) / 100;
-        finalPrice = basePrice * (1 + IVA_RATE);
-    }
-
+    const basePrice = finalPrice / (1 + IVA_RATE);
     const ivaAmount = finalPrice - basePrice;
     const displayPrice = showPriceWithoutVat ? basePrice : finalPrice;
 

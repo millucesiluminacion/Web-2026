@@ -26,6 +26,10 @@ const COLOR_MAP = {
     "Morado": "#A855F7",
     "Púrpura": "#A855F7",
     "Purpura": "#A855F7",
+    "Amarillo": "#FFE600",
+    "Amarillo Limón": "#E6FF00",
+    "Amarillo Limon": "#E6FF00",
+    "Amarillo Dorado": "#FFB300",
     // Temperaturas de Luz (Premium Glow Colors)
     "3000K": "#FFF1DC",
     "Blanco cálido": "#FFF1DC",

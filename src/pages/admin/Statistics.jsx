@@ -632,7 +632,7 @@ export default function Statistics() {
                     <div className="relative z-10">
                         <div className="flex items-center justify-between mb-8">
                             <h2 className="text-xl font-black uppercase italic text-brand-carbon leading-none">Top Clientes (LTV)</h2>
-                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-[.3em]">Valor de Vida</span>
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-[.3em]">Gasto por Cliente</span>
                         </div>
                         <div className="space-y-6">
                             {stats.topClients.map((c, i) => (
