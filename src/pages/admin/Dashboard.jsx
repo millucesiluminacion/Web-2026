@@ -8,6 +8,8 @@ import { seedCMS } from '../../lib/seedCMS';
 export default function Dashboard() {
     const [stats, setStats] = useState({
         totalSales: 0,
+        currentMonthSales: 0,
+        last30DaysSales: 0,
         orderCount: 0,
         productCount: 0,
         customerCount: 0,
@@ -51,7 +53,8 @@ export default function Dashboard() {
             const now = new Date();
             const thirtyDaysAgo = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000));
             const sixtyDaysAgo = new Date(now.getTime() - (60 * 24 * 60 * 60 * 1000));
-            const thresholdDate = new Date(now.setMonth(now.getMonth() - dashConfig.activeClientThreshold));
+            const thresholdDate = new Date(now);
+            thresholdDate.setMonth(thresholdDate.getMonth() - dashConfig.activeClientThreshold);
 
             // 1. Current Period Data
             const [prodRes, catRes, custRes, orderRes] = await Promise.all([
@@ -64,6 +67,16 @@ export default function Dashboard() {
 
             const currentOrders = orderRes.data || [];
             const totalSales = currentOrders.reduce((acc, curr) => acc + (curr.total || 0), 0);
+
+            // Calculate current calendar month start in local time
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const currentMonthOrders = currentOrders.filter(o => new Date(o.created_at) >= startOfMonth);
+            const currentMonthSales = currentMonthOrders.reduce((acc, curr) => acc + (curr.total || 0), 0);
+
+            // Calculate last 30 days orders
+            const last30DaysOrders = currentOrders.filter(o => new Date(o.created_at) >= thirtyDaysAgo);
+            const last30DaysSales = last30DaysOrders.reduce((acc, curr) => acc + (curr.total || 0), 0);
+
             const avgTicket = orderRes.count > 0 ? totalSales / orderRes.count : 0;
             const conversionRate = custRes.count > 0 ? (orderRes.count / custRes.count) * 100 : 0;
 
@@ -157,6 +170,8 @@ export default function Dashboard() {
 
             setStats({
                 totalSales,
+                currentMonthSales,
+                last30DaysSales,
                 orderCount: orderRes.count || 0,
                 productCount: prodRes.count || 0,
                 customerCount: custRes.count || 0,
@@ -225,19 +240,22 @@ export default function Dashboard() {
     const currentMonthKey = (new Date().getMonth() + 1).toString().padStart(2, '0');
     const currentGoal = config.monthlyGoals[currentMonthKey] || 5000;
 
-    // Calculate Forecast (Simple linear projection)
+    // Progressive goal: pro-rated target based on elapsed days
     const currentDay = new Date().getDate();
     const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    const salesForecast = (stats.totalSales / currentDay) * daysInMonth;
+    const salesForecast = (stats.currentMonthSales / currentDay) * daysInMonth;
+    const progressiveGoal = (currentGoal / daysInMonth) * currentDay;
+    const isEarlyMonth = currentDay <= 3;
+    const hasNoSalesYet = stats.currentMonthSales === 0;
 
     const cards = [
         {
             label: 'Volumen Negocio',
-            value: `${stats.totalSales.toFixed(2)} €`,
+            value: `${stats.last30DaysSales.toFixed(2)} €`,
             icon: TrendingUp,
             color: 'text-primary',
             bg: 'bg-primary/10',
-            trend: calculateGrowth(stats.totalSales, stats.prevMonthSales),
+            trend: calculateGrowth(stats.last30DaysSales, stats.prevMonthSales),
             sub: 'vs últimos 30 días'
         },
         {
@@ -251,11 +269,11 @@ export default function Dashboard() {
         },
         {
             label: 'Previsión Cierre',
-            value: `${salesForecast.toFixed(0)} €`,
+            value: (isEarlyMonth && hasNoSalesYet) ? `${currentGoal.toFixed(0)} €` : `${salesForecast.toFixed(0)} €`,
             icon: ArrowUpRight,
             color: 'text-blue-500',
             bg: 'bg-blue-50',
-            trend: calculateGrowth(salesForecast, currentGoal),
+            trend: (isEarlyMonth && hasNoSalesYet) ? 'Iniciando' : calculateGrowth(salesForecast, currentGoal),
             sub: 'proyección mensual'
         },
         {
@@ -296,11 +314,29 @@ export default function Dashboard() {
                 <div>
                     <div className="flex items-center gap-3 mb-3">
                         <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] font-outfit">Core Intelligence v2.0</span>
-                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border font-outfit ${(stats.totalSales >= currentGoal) ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                            (stats.totalSales >= currentGoal * 0.6) ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-red-50 text-red-600 border-red-100'
+                        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border font-outfit ${(isEarlyMonth && hasNoSalesYet)
+                                ? 'bg-blue-50 text-blue-600 border-blue-100'
+                                : (stats.currentMonthSales >= progressiveGoal)
+                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                    : (stats.currentMonthSales >= progressiveGoal * 0.6)
+                                        ? 'bg-amber-50 text-amber-600 border-amber-100'
+                                        : 'bg-red-50 text-red-600 border-red-100'
                             }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${(stats.totalSales >= currentGoal) ? 'bg-emerald-500' : (stats.totalSales >= currentGoal * 0.6) ? 'bg-amber-500' : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.4)]'}`}></span>
-                            {(stats.totalSales >= currentGoal) ? 'Estado Óptimo' : (stats.totalSales >= currentGoal * 0.6) ? 'Rendimiento Medio' : 'Atención Crítica'}
+                            <span className={`w-1.5 h-1.5 rounded-full ${(isEarlyMonth && hasNoSalesYet)
+                                    ? 'bg-blue-400'
+                                    : (stats.currentMonthSales >= progressiveGoal)
+                                        ? 'bg-emerald-500'
+                                        : (stats.currentMonthSales >= progressiveGoal * 0.6)
+                                            ? 'bg-amber-500'
+                                            : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.4)]'
+                                }`}></span>
+                            {(isEarlyMonth && hasNoSalesYet)
+                                ? 'Inicio de Mes'
+                                : (stats.currentMonthSales >= progressiveGoal)
+                                    ? 'Estado Óptimo'
+                                    : (stats.currentMonthSales >= progressiveGoal * 0.6)
+                                        ? 'Rendimiento Medio'
+                                        : 'Atención Crítica'}
                         </div>
                     </div>
                     <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
@@ -310,13 +346,13 @@ export default function Dashboard() {
 
                 <div className="flex flex-wrap items-center gap-6 w-full md:w-auto">
                     {/* Compact Goal Alert Integration - Normalized to h-14 */}
-                    {stats.totalSales < currentGoal && (
+                    {!(isEarlyMonth && hasNoSalesYet) && stats.currentMonthSales < progressiveGoal && (
                         <div className="flex items-center gap-4 bg-red-50 px-5 h-14 rounded-2xl border border-red-100 animate-pulse">
                             <AlertCircle className="w-4 h-4 text-red-500" />
                             <div>
                                 <p className="text-[10px] font-black text-red-700 uppercase leading-none font-outfit">Hito en Riesgo</p>
                                 <p className="text-[9px] font-bold text-red-500 uppercase tracking-tight mt-1 font-outfit">
-                                    -{(currentGoal - stats.totalSales).toFixed(0)}€ p. Objetivo
+                                    -{(progressiveGoal - stats.currentMonthSales).toFixed(0)}€ hoy · -{(currentGoal - stats.currentMonthSales).toFixed(0)}€ meta
                                 </p>
                             </div>
                         </div>
@@ -327,9 +363,9 @@ export default function Dashboard() {
                         <div className="relative w-10 h-10 flex items-center justify-center group/info">
                             <svg className="w-full h-full -rotate-90">
                                 <circle cx="20" cy="20" r="18" fill="transparent" stroke="#f3f4f6" strokeWidth="4" />
-                                <circle cx="20" cy="20" r="18" fill="transparent" stroke="currentColor" strokeWidth="4" strokeDasharray={113} strokeDashoffset={113 - (113 * Math.min((stats.totalSales / currentGoal) * 100, 100)) / 100} className="text-primary" />
+                                <circle cx="20" cy="20" r="18" fill="transparent" stroke="currentColor" strokeWidth="4" strokeDasharray={113} strokeDashoffset={113 - (113 * Math.min((stats.currentMonthSales / currentGoal) * 100, 100)) / 100} className="text-primary" />
                             </svg>
-                            <span className="absolute text-[8px] font-black text-brand-carbon italic font-outfit">{Math.floor((stats.totalSales / currentGoal) * 100)}%</span>
+                            <span className="absolute text-[8px] font-black text-brand-carbon italic font-outfit">{Math.floor((stats.currentMonthSales / currentGoal) * 100)}%</span>
 
                             {/* Definition Context Tooltip (CSS based) */}
                             <div className="absolute bottom-full mb-4 hidden group-hover/info:block w-48 p-4 bg-brand-carbon text-white rounded-2xl text-[8px] font-bold uppercase tracking-widest leading-relaxed shadow-2xl z-20">
@@ -339,7 +375,7 @@ export default function Dashboard() {
                         </div>
                         <div className="border-l border-gray-100 pl-4">
                             <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5 font-outfit">Hito Mensual</p>
-                            <span className="text-sm font-black text-brand-carbon italic block leading-none font-outfit">{stats.totalSales.toFixed(0)}€</span>
+                            <span className="text-sm font-black text-brand-carbon italic block leading-none font-outfit">{stats.currentMonthSales.toFixed(0)}€</span>
                         </div>
                     </div>
 
