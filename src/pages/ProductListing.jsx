@@ -485,12 +485,14 @@ export default function ProductListing() {
             let minP = Infinity;
             let maxP = 0;
 
+            const resolvedBrandId = brandQuery ? (brands.find(b => b.slug === brandQuery)?.id ?? null) : null;
+            const resolvedProfessionId = professionSlug ? (professions.find(p => p.slug === professionSlug)?.id ?? null) : null;
             const { data: rpcData, error: rpcErr } = await supabase.rpc('get_catalog_metadata', {
-                p_category_id: currentCat?.id,
-                p_room_id: roomId,
-                p_brand_id: brandQuery ? brands.find(b => b.slug === brandQuery)?.id : null,
-                p_profession_id: professionSlug ? professions.find(p => p.slug === professionSlug)?.id : null,
-                p_search_query: searchQuery
+                p_category_id: currentCat?.id ?? null,
+                p_room_id: roomId ?? null,
+                p_brand_id: resolvedBrandId,
+                p_profession_id: resolvedProfessionId,
+                p_search_query: searchQuery ?? null
             });
 
             if (!rpcErr && rpcData) {

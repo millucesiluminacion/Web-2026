@@ -313,22 +313,22 @@ export default function Dashboard() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 mb-12 pb-8 border-b border-gray-100">
                 <div>
                     <div className="flex items-center gap-3 mb-3">
-                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] font-outfit">Core Intelligence v2.0</span>
+                        <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] font-outfit">Ecommerce v2.0</span>
                         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border font-outfit ${(isEarlyMonth && hasNoSalesYet)
-                                ? 'bg-blue-50 text-blue-600 border-blue-100'
-                                : (stats.currentMonthSales >= progressiveGoal)
-                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                    : (stats.currentMonthSales >= progressiveGoal * 0.6)
-                                        ? 'bg-amber-50 text-amber-600 border-amber-100'
-                                        : 'bg-red-50 text-red-600 border-red-100'
+                            ? 'bg-blue-50 text-blue-600 border-blue-100'
+                            : (stats.currentMonthSales >= progressiveGoal)
+                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                                : (stats.currentMonthSales >= progressiveGoal * 0.6)
+                                    ? 'bg-amber-50 text-amber-600 border-amber-100'
+                                    : 'bg-red-50 text-red-600 border-red-100'
                             }`}>
                             <span className={`w-1.5 h-1.5 rounded-full ${(isEarlyMonth && hasNoSalesYet)
-                                    ? 'bg-blue-400'
-                                    : (stats.currentMonthSales >= progressiveGoal)
-                                        ? 'bg-emerald-500'
-                                        : (stats.currentMonthSales >= progressiveGoal * 0.6)
-                                            ? 'bg-amber-500'
-                                            : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.4)]'
+                                ? 'bg-blue-400'
+                                : (stats.currentMonthSales >= progressiveGoal)
+                                    ? 'bg-emerald-500'
+                                    : (stats.currentMonthSales >= progressiveGoal * 0.6)
+                                        ? 'bg-amber-500'
+                                        : 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.4)]'
                                 }`}></span>
                             {(isEarlyMonth && hasNoSalesYet)
                                 ? 'Inicio de Mes'
@@ -494,8 +494,8 @@ export default function Dashboard() {
                 <div className="lg:col-span-3">
                     <div className="flex items-center justify-between mb-8 px-2 font-outfit">
                         <div className="flex items-center gap-4">
-                            <h2 className="text-lg font-black text-brand-carbon uppercase tracking-tighter italic">Operaciones de Directo</h2>
-                            <div className="text-[8px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-widest border border-blue-100 shadow-sm">Live Feed</div>
+                            <h2 className="text-lg font-black text-brand-carbon uppercase tracking-tighter italic">Ultimos Pedidos</h2>
+                            <div className="text-[8px] font-black text-blue-500 bg-blue-50 px-2 py-1 rounded-md uppercase tracking-widest border border-blue-100 shadow-sm">Live Shopping</div>
                         </div>
                         <Link to="/admin/orders" className="text-[10px] font-black text-primary uppercase tracking-[.2em] hover:opacity-70 transition-opacity">Ver Historial Completo</Link>
                     </div>
@@ -537,7 +537,7 @@ export default function Dashboard() {
                     <div className="flex items-center justify-between mb-8 px-2 font-outfit">
                         <div className="flex items-center gap-4">
                             <h2 className="text-lg font-black text-brand-carbon uppercase tracking-tighter italic">Top Clientes</h2>
-                            <div className="text-[8px] font-black text-primary bg-primary/10 px-2 py-1 rounded-md uppercase tracking-widest border border-primary/20 shadow-sm">Por LTV</div>
+                            <div className="text-[8px] font-black text-primary bg-primary/10 px-2 py-1 rounded-md uppercase tracking-widest border border-primary/20 shadow-sm">Por Gasto</div>
                         </div>
                         <Link to="/admin/customers" className="text-[10px] font-black text-primary uppercase tracking-[.2em] hover:opacity-70 transition-opacity">Ver Todos</Link>
                     </div>
