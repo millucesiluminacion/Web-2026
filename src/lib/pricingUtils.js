@@ -31,7 +31,8 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     const hasDbDiscount = dbDiscountPrice > 0 && dbDiscountPrice < standardPrice;
 
     // User profile data
-    const isPro = userProfile?.user_type === 'profesional';
+    const isProUser = userProfile?.user_type === 'profesional';
+    const hasProPrices = isProUser && !!userProfile?.has_pro_prices;
     const isPartner = !!userProfile?.is_partner;
 
     // Base price for calculations (standard B2C)
@@ -55,7 +56,7 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
             }
         }
         // 2. Professional - Second Priority
-        else if (isPro) {
+        else if (hasProPrices) {
             if (professionalPrice > 0) {
                 finalPrice = professionalPrice;
                 isProPrice = true;
@@ -67,7 +68,7 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
     const volumeConfig = product.volume_pricing || {};
     let roleKey = 'individual';
     if (isPartner) roleKey = 'partner';
-    else if (isPro) roleKey = 'profesional';
+    else if (hasProPrices) roleKey = 'profesional';
 
     const scales = volumeConfig[roleKey] || [];
     if (scales.length > 0 && quantity > 1) {
@@ -86,7 +87,7 @@ export const calculateProductPrice = (product, userProfile, quantity = 1) => {
 
     // VAT CALCULATIONS
     // Prices in DB already include VAT (confirmed by USER)
-    const showPriceWithoutVat = isPro || isPartner;
+    const showPriceWithoutVat = isProUser || isPartner;
     const basePrice = finalPrice / (1 + IVA_RATE);
     const ivaAmount = finalPrice - basePrice;
     const displayPrice = showPriceWithoutVat ? basePrice : finalPrice;

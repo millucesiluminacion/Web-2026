@@ -182,7 +182,7 @@ export function CartProvider({ children }) {
             totalSavings,
             isSideCartOpen,
             setIsSideCartOpen,
-            discountPercent: profile?.user_type === 'profesional' ? discountPercent : 0
+            discountPercent: (profile?.user_type === 'profesional' && !!profile?.has_pro_prices) ? discountPercent : 0
         }}>
             {children}
         </CartContext.Provider>

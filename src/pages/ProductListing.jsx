@@ -392,6 +392,7 @@ export default function ProductListing() {
     // Reset filters and page when main section changes
     useEffect(() => {
         setSelectedDynamicFilters({});
+        setAvailableDynamicFilters({});
         setAvailability({ inStock: false, onOffer: false, isNew: false });
         setCurrentPage(1);
         setProducts([]);
@@ -434,6 +435,8 @@ export default function ProductListing() {
             setLoading(true);
             const allCats = categories.length > 0 ? categories : (await supabase.from('categories').select('*').order('order_index')).data || [];
             const currentCat = allCats.find(c => c.slug?.toLowerCase() === categoryQuery?.toLowerCase());
+            const subcat = subcategoryQuery ? allCats.find(c => c.slug?.toLowerCase() === subcategoryQuery.toLowerCase()) : null;
+            const activeCat = subcat || currentCat;
 
             // 1. Gather all category IDs in scope (using many-to-many relationships)
             const gatherCatIds = (id, cats, rels) => {
@@ -445,7 +448,7 @@ export default function ProductListing() {
                 });
                 return [...new Set(ids)]; // Prevent duplicates if any
             };
-            const scopedCatIds = currentCat ? gatherCatIds(currentCat.id, allCats, relationships.length > 0 ? relationships : (await supabase.from('category_relationships').select('*')).data || []) : [];
+            const scopedCatIds = activeCat ? gatherCatIds(activeCat.id, allCats, relationships.length > 0 ? relationships : (await supabase.from('category_relationships').select('*')).data || []) : [];
 
             // 2. Fetch Filter Config
             const { data: allF } = await supabase.from('dynamic_filters').select('*, associations:dynamic_filter_categories(category_id)').eq('is_active', true).order('order_index');
@@ -456,8 +459,13 @@ export default function ProductListing() {
             setDynamicFiltersConfig(catF);
 
             // 3. Build Query
+            // Resolve roomId slug → UUID (the URL param can be a slug like 'salon', but DB expects UUID)
+            const allRooms = rooms.length > 0 ? rooms : (await supabase.from('rooms').select('id, slug').order('order_index')).data || [];
+            if (rooms.length === 0 && allRooms.length > 0) setRooms(allRooms);
+            const resolvedRoomId = roomId ? (allRooms.find(r => r.slug === roomId || r.id === roomId)?.id ?? null) : null;
+
             let qSelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
-            if (roomId) qSelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
+            if (resolvedRoomId) qSelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
 
             let buildQ = (isMeta = false) => {
                 let q = supabase.from('products').select(isMeta ? 'id, attributes, price, discount_price, created_at, parent_id, stock' : qSelect, { count: 'exact' });
@@ -474,7 +482,7 @@ export default function ProductListing() {
                 }
 
                 if (searchQuery) q = q.or(`name.ilike.%${searchQuery}%,reference.ilike.%${searchQuery}%`);
-                if (roomId) q = q.eq('product_rooms.room_id', roomId);
+                if (resolvedRoomId) q = q.eq('product_rooms.room_id', resolvedRoomId);
                 return q;
             };
 
@@ -488,8 +496,8 @@ export default function ProductListing() {
             const resolvedBrandId = brandQuery ? (brands.find(b => b.slug === brandQuery)?.id ?? null) : null;
             const resolvedProfessionId = professionSlug ? (professions.find(p => p.slug === professionSlug)?.id ?? null) : null;
             const { data: rpcData, error: rpcErr } = await supabase.rpc('get_catalog_metadata', {
-                p_category_id: currentCat?.id ?? null,
-                p_room_id: roomId ?? null,
+                p_category_id: activeCat?.id ?? null,
+                p_room_id: resolvedRoomId,
                 p_brand_id: resolvedBrandId,
                 p_profession_id: resolvedProfessionId,
                 p_search_query: searchQuery ?? null
@@ -628,7 +636,12 @@ export default function ProductListing() {
         } catch (e) { console.error('Product Fetch Error:', e); } finally { setLoading(false); }
     }
 
-    const clearFilters = () => { setPriceRange([priceLimits[0], priceLimits[1]]); setSelectedDynamicFilters({}); setAvailability({ inStock: false, onOffer: false, isNew: false }); };
+    const clearFilters = () => {
+        setPriceRange([priceLimits[0], priceLimits[1]]);
+        setSelectedDynamicFilters({});
+        setAvailability({ inStock: false, onOffer: false, isNew: false });
+        setCurrentPage(1);
+    };
 
     const totalPages = Math.max(1, Math.ceil(totalResults / itemsPerPage));
     const pageNumbers = useMemo(() => {
@@ -660,7 +673,10 @@ export default function ProductListing() {
                             <div className="space-y-4">
                                 <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Precio</h4>
                                 <input type="range" min={priceLimits[0]} max={priceLimits[1]} value={priceRange[1]}
-                                    onChange={(e) => setPriceRange([priceRange[0], parseInt(e.target.value)])}
+                                    onChange={(e) => {
+                                        setPriceRange([priceRange[0], parseInt(e.target.value)]);
+                                        setCurrentPage(1);
+                                    }}
                                     className="w-full accent-primary h-1.5 bg-gray-100 rounded-lg appearance-none" />
                                 <div className="flex justify-between text-[10px] font-black italic"><span>{priceRange[0]}€</span><span className="text-primary">{priceRange[1]}€</span></div>
                             </div>
@@ -700,10 +716,13 @@ export default function ProductListing() {
                                                     const glow = !isWhite ? `0 0 15px ${glowColor}${isSel ? 'aa' : '44'}` : '0 4px 10px rgba(0,0,0,0.05)';
 
                                                     return (
-                                                        <button key={val} onClick={() => setSelectedDynamicFilters(prev => {
-                                                            const cur = prev[k] || [];
-                                                            return { ...prev, [k]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] };
-                                                        })} title={val} className={`w-10 h-10 rounded-full border-2 transition-all duration-500 flex items-center justify-center relative
+                                                        <button key={val} onClick={() => {
+                                                            setSelectedDynamicFilters(prev => {
+                                                                const cur = prev[k] || [];
+                                                                return { ...prev, [k]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] };
+                                                            });
+                                                            setCurrentPage(1);
+                                                        }} title={val} className={`w-10 h-10 rounded-full border-2 transition-all duration-500 flex items-center justify-center relative
                                                             ${isSel ? 'ring-4 ring-primary scale-125 border-primary z-10 shadow-2xl' : 'border-white shadow-md hover:scale-110'}`}
                                                             style={{
                                                                 background: cCode,
@@ -713,10 +732,13 @@ export default function ProductListing() {
                                                 }
 
                                                 return (
-                                                    <button key={val} onClick={() => setSelectedDynamicFilters(prev => {
-                                                        const cur = prev[k] || [];
-                                                        return { ...prev, [k]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] };
-                                                    })} className={`px-4 py-2 rounded-xl text-[10px] font-black italic border transition-all duration-300
+                                                    <button key={val} onClick={() => {
+                                                        setSelectedDynamicFilters(prev => {
+                                                            const cur = prev[k] || [];
+                                                            return { ...prev, [k]: cur.includes(val) ? cur.filter(v => v !== val) : [...cur, val] };
+                                                        });
+                                                        setCurrentPage(1);
+                                                    }} className={`px-4 py-2 rounded-xl text-[10px] font-black italic border transition-all duration-300
                                                         ${isSel ? 'bg-primary border-primary text-white shadow-[0_10px_30px_rgba(59,130,246,0.6)] ring-4 ring-primary/30 scale-110 z-10' : 'bg-white border-gray-100 text-gray-400 hover:border-primary/30'}`}>
                                                         {val}
                                                     </button>
@@ -739,7 +761,10 @@ export default function ProductListing() {
                                         <span
                                             className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 ${availability[key] ? 'bg-primary border-primary' : 'border-gray-200 group-hover:border-primary/40'
                                                 }`}
-                                            onClick={() => setAvailability(prev => ({ ...prev, [key]: !prev[key] }))}
+                                            onClick={() => {
+                                                setAvailability(prev => ({ ...prev, [key]: !prev[key] }));
+                                                setCurrentPage(1);
+                                            }}
                                         >
                                             {availability[key] && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                         </span>
@@ -807,16 +832,24 @@ export default function ProductListing() {
                                 </div>
                             )}
 
-                            <div className="flex items-center justify-between mb-8 p-5 bg-white rounded-[2rem] border border-gray-100 shadow-sm">
-                                <div className="flex items-center gap-3">
-                                    <button onClick={() => setFiltersOpen(true)} className="lg:hidden text-[10px] font-black uppercase px-4 py-2 bg-gray-50 rounded-xl">Filtros</button>
-                                    <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest italic">{totalResults} piezas encontradas</span>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4 p-4 sm:p-5 bg-white rounded-[2rem] border border-gray-100 shadow-sm">
+                                <div className="flex items-center gap-3 w-full sm:w-auto">
+                                    <button
+                                        onClick={() => setFiltersOpen(!filtersOpen)}
+                                        className="lg:hidden text-[10px] font-black uppercase px-4 py-2 bg-gray-50 rounded-xl border border-gray-100 flex items-center gap-2"
+                                    >
+                                        <Filter className="w-3.5 h-3.5" />
+                                        Filtros
+                                    </button>
+                                    <span className="text-gray-400 text-[10px] font-bold uppercase tracking-widest italic">{totalResults} piezas</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    {PAGE_SIZE_OPTIONS.map(n => (
-                                        <button key={n} onClick={() => { setItemsPerPage(n); setCurrentPage(1); }} className={`w-8 h-8 rounded-lg text-[9px] font-black border transition-all ${itemsPerPage === n ? 'bg-brand-carbon text-white' : 'bg-white text-gray-400'}`}>{n}</button>
-                                    ))}
-                                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-gray-50 border-none rounded-xl text-[10px] font-black uppercase italic px-4 py-2">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <div className="hidden sm:flex items-center gap-2">
+                                        {PAGE_SIZE_OPTIONS.map(n => (
+                                            <button key={n} onClick={() => { setItemsPerPage(n); setCurrentPage(1); }} className={`w-8 h-8 rounded-lg text-[9px] font-black border transition-all ${itemsPerPage === n ? 'bg-brand-carbon text-white' : 'bg-white text-gray-400'}`}>{n}</button>
+                                        ))}
+                                    </div>
+                                    <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-gray-50 border-none rounded-xl text-[10px] font-black uppercase italic px-3 py-2 max-w-[160px] sm:max-w-none">
                                         {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                                     </select>
                                 </div>

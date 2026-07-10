@@ -408,7 +408,7 @@ export default function Cart() {
                         <CheckCircle2 className="w-12 h-12 text-primary" />
                     </div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-3 block">Compra Confirmada</span>
-                    <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4">
+                    <h1 className="text-3xl sm:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4">
                         ¡Pedido <span className="text-gray-300">Recibido!</span>
                     </h1>
                     <p className="text-sm text-gray-400 font-bold mb-2">
@@ -480,7 +480,7 @@ export default function Cart() {
 
                 <div className="mb-12 text-center">
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Tu Selección Exclusiva</span>
-                    <h1 className="text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">
+                    <h1 className="text-3xl sm:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">
                         Finalizar <span className="text-gray-300">Pedido</span>
                     </h1>
                 </div>
@@ -525,7 +525,7 @@ export default function Cart() {
                                                         </div>
                                                     </Link>
                                                 </div>
-                                                <div className="flex items-center gap-6">
+                                                <div className="flex items-center gap-3 sm:gap-6 flex-wrap">
                                                     <div className="flex items-center bg-gray-50 rounded-xl px-3 py-1.5 border border-gray-100 shadow-sm">
                                                         {item.isMandatory ? (
                                                             <span className="text-[10px] font-black text-brand-carbon px-2 italic">{item.quantity}</span>

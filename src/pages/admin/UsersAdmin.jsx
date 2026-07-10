@@ -21,7 +21,8 @@ export default function UsersAdmin() {
         company_name: '',
         vat_id: '',
         discount_percent: 0,
-        is_partner: false
+        is_partner: false,
+        has_pro_prices: false
     });
 
     // Pagination state
@@ -92,7 +93,8 @@ export default function UsersAdmin() {
             company_name: '',
             vat_id: '',
             discount_percent: 0,
-            is_partner: false
+            is_partner: false,
+            has_pro_prices: false
         });
         setIsModalOpen(true);
     }
@@ -107,7 +109,8 @@ export default function UsersAdmin() {
             company_name: user.company_name || '',
             vat_id: user.vat_id || '',
             discount_percent: user.discount_percent || 0,
-            is_partner: user.is_partner || false
+            is_partner: user.is_partner || false,
+            has_pro_prices: user.has_pro_prices || false
         });
         setIsModalOpen(true);
     }
@@ -221,7 +224,8 @@ export default function UsersAdmin() {
                                 company_name: formData.company_name,
                                 vat_id: formData.vat_id,
                                 discount_percent: formData.discount_percent || 0,
-                                is_partner: formData.is_partner || false
+                                is_partner: formData.is_partner || false,
+                                has_pro_prices: formData.has_pro_prices || false
                             }
                         }
                     });
@@ -273,6 +277,7 @@ export default function UsersAdmin() {
             NIF: u.vat_id,
             Descuento: u.discount_percent,
             Socio: u.is_partner ? 'SÍ' : 'NO',
+            Tarifa_Pro: u.has_pro_prices ? 'SÍ' : 'NO',
             Creado: u.created_at
         })));
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -315,6 +320,7 @@ export default function UsersAdmin() {
                     if (row.NIF || row.vat_id) updates.vat_id = row.NIF || row.vat_id;
                     if (row.Descuento || row.discount_percent !== undefined) updates.discount_percent = parseFloat(row.Descuento || row.discount_percent);
                     if (row.Socio || row.is_partner !== undefined) updates.is_partner = (row.Socio === 'SÍ' || row.Socio === 'true' || row.is_partner === true);
+                    if (row.Tarifa_Pro || row.has_pro_prices !== undefined) updates.has_pro_prices = (row.Tarifa_Pro === 'SÍ' || row.Tarifa_Pro === 'true' || row.has_pro_prices === true);
 
                     if (Object.keys(updates).length > 0) {
                         const { error } = await supabase.from('profiles').update(updates).eq('id', id);
@@ -679,29 +685,50 @@ export default function UsersAdmin() {
                             </div>
 
                             {formData.user_type === 'profesional' && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-in fade-in slide-in-from-top-4 duration-300">
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre Fiscal</label>
-                                        <div className="relative">
-                                            <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-                                            <input
-                                                className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
-                                                value={formData.company_name}
-                                                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-                                                placeholder="Nombre de la empresa"
-                                            />
-                                        </div>
+                                <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-300">
+                                    <div className="bg-primary/5 p-6 rounded-3xl border border-primary/10 space-y-4">
+                                        <label className="flex items-center gap-4 cursor-pointer group">
+                                            <div className="relative">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only"
+                                                    checked={formData.has_pro_prices}
+                                                    onChange={(e) => setFormData({ ...formData, has_pro_prices: e.target.checked })}
+                                                />
+                                                <div className={`w-14 h-7 rounded-full transition-colors duration-300 ${formData.has_pro_prices ? 'bg-primary' : 'bg-gray-300'}`}></div>
+                                                <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform duration-300 ${formData.has_pro_prices ? 'translate-x-7' : 'translate-x-0'}`}></div>
+                                            </div>
+                                            <div className="text-left">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-brand-carbon block">Activar tarifas profesionales B2B</span>
+                                                <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tight block">Aplica las tarifas especiales de profesional a este cliente</span>
+                                            </div>
+                                        </label>
                                     </div>
-                                    <div className="space-y-3">
-                                        <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">NIF / CIF</label>
-                                        <div className="relative">
-                                            <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-                                            <input
-                                                className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
-                                                value={formData.vat_id}
-                                                onChange={(e) => setFormData({ ...formData, vat_id: e.target.value })}
-                                                placeholder="ID Fiscal"
-                                            />
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nombre Fiscal</label>
+                                            <div className="relative">
+                                                <FileText className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                                <input
+                                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                                    value={formData.company_name}
+                                                    onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                                                    placeholder="Nombre de la empresa"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-3">
+                                            <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">NIF / CIF</label>
+                                            <div className="relative">
+                                                <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                                <input
+                                                    className="w-full bg-gray-50 border-none rounded-2xl p-4 pl-12 text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none transition-all font-outfit"
+                                                    value={formData.vat_id}
+                                                    onChange={(e) => setFormData({ ...formData, vat_id: e.target.value })}
+                                                    placeholder="ID Fiscal"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

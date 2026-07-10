@@ -536,7 +536,7 @@ export default function ProductDetail() {
                     {/* Art Gallery Display */}
                     <div className="lg:col-span-7 space-y-4">
                         {/* Main Image */}
-                        <div className="bg-white rounded-[3rem] p-12 lg:p-20 shadow-luxury border border-gray-100/50 flex items-center justify-center min-h-[500px] lg:h-[700px] overflow-hidden group relative">
+                        <div className="bg-white rounded-[2rem] lg:rounded-[3rem] p-6 sm:p-12 lg:p-20 shadow-luxury border border-gray-100/50 flex items-center justify-center min-h-[280px] sm:min-h-[400px] lg:h-[700px] overflow-hidden group relative">
                             {/* Advanced Badges */}
                             <BadgeRenderer product={displayProduct} />
 
@@ -555,7 +555,7 @@ export default function ProductDetail() {
 
                         {/* Thumbnail Gallery */}
                         {productImages.length > 1 && (
-                            <div className="flex gap-3 justify-center">
+                            <div className="flex gap-2 sm:gap-3 justify-center flex-wrap">
                                 {productImages.map((img, idx) => (
                                     <button
                                         key={idx}
@@ -664,15 +664,15 @@ export default function ProductDetail() {
                             {(isShowingProDiscount || hasAnyDiscount) ? (
                                 <div>
                                     <div className="flex items-baseline gap-3 mb-1">
-                                        <span className="text-2xl font-bold text-gray-300 line-through italic tracking-tighter">
+                                        <span className="text-lg sm:text-2xl font-bold text-gray-300 line-through italic tracking-tighter">
                                             {originalPrice.toFixed(2)}€
                                         </span>
                                         <span className={`px-2 py-0.5 text-white text-[10px] font-black rounded-lg uppercase italic ${isPartnerPrice ? 'bg-indigo-600' : isShowingProDiscount ? 'bg-primary' : 'bg-red-500'}`}>
                                             {isPartnerPrice ? 'Tarifa Socio' : isShowingProDiscount ? `Pro -${displayDiscountPercent}%` : `Ahorra ${displayDiscountPercent}%`}
                                         </span>
                                     </div>
-                                    <div className="flex items-baseline gap-2">
-                                        <span className={`text-5xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                    <div className="flex items-baseline gap-2 flex-wrap">
+                                        <span className={`text-4xl sm:text-5xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
                                             {finalPrice.toFixed(2)}
                                         </span>
                                         <span className={`text-2xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>€</span>
@@ -682,8 +682,8 @@ export default function ProductDetail() {
                                     </div>
                                 </div>
                             ) : (
-                                <div className="flex items-baseline gap-2">
-                                    <span className="text-5xl font-black text-brand-carbon italic tracking-tighter">
+                                <div className="flex items-baseline gap-2 flex-wrap">
+                                    <span className="text-4xl sm:text-5xl font-black text-brand-carbon italic tracking-tighter">
                                         {displayProduct ? originalPrice.toFixed(2) : '---'}
                                     </span>
                                     <span className="text-2xl font-black text-brand-carbon italic tracking-tighter">€</span>
@@ -1023,7 +1023,7 @@ export default function ProductDetail() {
 
                 {/* Trust Manifesto - Dynamic Horizontal */}
                 {trustBadges.length > 0 && (
-                    <div className={`mt-16 grid grid-cols-1 sm:grid-cols-2 ${trustBadges.length >= 3 ? 'lg:grid-cols-3' : ''} ${trustBadges.length >= 4 ? 'xl:grid-cols-4' : ''} gap-8 py-10 border-t border-b border-gray-100 bg-white/50 rounded-[3rem] px-10`}>
+                    <div className={`mt-16 grid grid-cols-1 sm:grid-cols-2 ${trustBadges.length >= 3 ? 'lg:grid-cols-3' : ''} ${trustBadges.length >= 4 ? 'xl:grid-cols-4' : ''} gap-6 py-8 border-t border-b border-gray-100 bg-white/50 rounded-[2rem] px-4 sm:px-10`}>
                         {trustBadges.map((badge, idx) => {
                             const IconComponent = availableIcons[badge.icon_name] || Truck;
                             const isFirst = idx === 0;

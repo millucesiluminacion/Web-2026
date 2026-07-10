@@ -67,7 +67,7 @@ export function AuthProvider({ children }) {
 
     // Standardized Tier Detection
     const isPartner = !!profile?.is_partner;
-    const isPro = profile?.user_type === 'profesional';
+    const isPro = profile?.user_type === 'profesional' && !!profile?.has_pro_prices;
     const userTier = isPartner ? 'vip' : isPro ? 'pro' : 'normal';
 
     const value = {

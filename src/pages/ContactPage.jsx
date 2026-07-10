@@ -52,7 +52,7 @@ export default function ContactPage() {
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.45em] mb-4 block animate-slide-right">
                         {cmsContent?.content?.header_subtitle || 'Atención al cliente'}
                     </span>
-                    <h1 className="text-4xl md:text-7xl font-black text-brand-carbon uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-sm">
+                    <h1 className="text-3xl sm:text-4xl md:text-7xl font-black text-brand-carbon uppercase italic leading-[0.85] tracking-tighter mb-8 animate-reveal-up drop-shadow-sm">
                         {cmsContent?.content?.header_title || (
                             <>Contacto <span className="text-primary/40">Exclusivo</span></>
                         )}
@@ -64,7 +64,7 @@ export default function ContactPage() {
                 </header>
             </div>
 
-            <section className="py-24 md:py-32">
+            <section className="py-10 md:py-24 lg:py-32">
                 <div className="container mx-auto px-6">
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-16">
 

@@ -113,7 +113,7 @@ export function Header({ onOpenAuthModal }) {
                 onMouseLeave={handleMegaLeave}
             >
                 {/* Top bar */}
-                <div className="max-w-[1600px] mx-auto px-6 md:px-10 flex items-center justify-between gap-8">
+                <div className="max-w-[1600px] mx-auto px-4 sm:px-6 md:px-10 flex items-center justify-between gap-3 md:gap-8">
 
                     {/* Left: Logo + Nav */}
                     <div className="flex items-center gap-12">
@@ -197,6 +197,7 @@ export function Header({ onOpenAuthModal }) {
                             {user ? (
                                 <div className="relative group">
                                     <Link to="/perfil"
+                                        aria-label="Ir a mi cuenta"
                                         className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all shadow-xl relative group/user ${userTier === 'vip'
                                             ? 'bg-brand-carbon text-yellow-500 ring-2 ring-yellow-500/30'
                                             : userTier === 'pro'
@@ -234,13 +235,14 @@ export function Header({ onOpenAuthModal }) {
                                     </div>
                                 </div>
                             ) : (
-                                <button onClick={() => onOpenAuthModal('login')} className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all">
+                                <button onClick={() => onOpenAuthModal('login')} aria-label="Iniciar sesión" className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-brand-carbon bg-gray-50/50 hover:bg-white hover:shadow-lg transition-all">
                                     <User className="w-5 h-5" />
                                 </button>
                             )}
 
                             <button
                                 onClick={() => setIsSideCartOpen(true)}
+                                aria-label={totalItems > 0 ? `Ver carrito con ${totalItems} productos` : 'Ver carrito vacío'}
                                 className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center relative bg-primary text-white shadow-xl shadow-primary/20 hover:scale-105 transition-all"
                             >
                                 <ShoppingCart className="w-5 h-5" />
@@ -253,7 +255,7 @@ export function Header({ onOpenAuthModal }) {
                         </div>
 
                         {/* Mobile toggle */}
-                        <button className="xl:hidden w-10 h-10 flex items-center justify-center rounded-full bg-gray-50" onClick={() => setIsMenuOpen(!isMenuOpen)}>
+                        <button className="xl:hidden w-10 h-10 flex items-center justify-center rounded-full bg-gray-50" onClick={() => setIsMenuOpen(!isMenuOpen)} aria-label={isMenuOpen ? 'Cerrar menú móvil' : 'Abrir menú móvil'}>
                             {isMenuOpen ? <X className="w-5 h-5" /> : (
                                 <div className="space-y-1">
                                     <div className="w-5 h-[2px] bg-brand-carbon"></div>
@@ -395,14 +397,32 @@ export function Header({ onOpenAuthModal }) {
 
                 {/* Mobile menu */}
                 {isMenuOpen && (
-                    <div className="xl:hidden absolute top-full left-0 right-0 bg-white border-t border-gray-100 shadow-2xl p-8 z-50">
+                    <div className="xl:hidden absolute top-full left-0 right-0 bg-white border-t border-gray-100 shadow-2xl p-6 sm:p-8 z-50 overflow-x-hidden">
                         <div className="max-w-[1600px] mx-auto">
+
+                            {/* Mobile search bar */}
+                            <form onSubmit={(e) => { handleSearch(e); setIsMenuOpen(false); }} className="flex relative mb-6">
+                                <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                                    <Search className="w-4 h-4 text-gray-400" />
+                                </div>
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Buscar productos..."
+                                    className="w-full pl-10 pr-4 py-3 bg-gray-50 rounded-2xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border-none"
+                                />
+                                <button type="submit" className="ml-3 px-4 py-3 bg-primary text-white rounded-2xl text-xs font-black uppercase">
+                                    Buscar
+                                </button>
+                            </form>
+
                             <p className="text-[9px] font-black text-primary uppercase tracking-[.4em] mb-5">Categorías</p>
                             <div className="grid grid-cols-2 gap-y-3 gap-x-6 mb-8">
                                 {categories.map((cat) => (
                                     <Link key={cat.slug} to={`/catalogo?category=${cat.slug}`} onClick={() => setIsMenuOpen(false)}
                                         className="text-[11px] font-bold text-gray-500 hover:text-brand-carbon uppercase italic tracking-wide transition-colors flex items-center gap-2">
-                                        <span className="w-1 h-1 rounded-full bg-gray-200 group-hover:bg-primary flex-shrink-0"></span>
+                                        <span className="w-1 h-1 rounded-full bg-gray-200 flex-shrink-0"></span>
                                         {cat.name}
                                     </Link>
                                 ))}

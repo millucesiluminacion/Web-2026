@@ -19,12 +19,12 @@ export function MainLayout() {
     const themeClass = userTier === 'vip' ? 'theme-socio' : userTier === 'pro' ? 'theme-pro' : '';
 
     return (
-        <div className={`flex flex-col min-h-screen bg-gray-50 text-gray-900 font-sans ${themeClass}`}>
+        <div className={`flex flex-col min-h-screen bg-gray-50 text-gray-900 font-sans overflow-x-hidden ${themeClass}`}>
             <div className="fixed top-0 left-0 right-0 z-50">
                 <TopBanner onOpenAuthModal={openAuthModal} />
                 <Header onOpenAuthModal={openAuthModal} />
             </div>
-            <main className="flex-grow pt-[120px]">
+            <main className="flex-grow pt-[110px] sm:pt-[120px] overflow-x-hidden">
                 <Outlet />
             </main>
             <Footer />
@@ -36,4 +36,5 @@ export function MainLayout() {
             />
         </div>
     );
+
 }
