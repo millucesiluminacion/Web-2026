@@ -53,7 +53,8 @@ export default function Cart() {
         shippingMethod: null // 'delivery' or 'pickup'
     });
 
-    const isB2B = profile?.user_type === 'profesional' || !!profile?.is_partner;
+    const isPro = profile?.user_type === 'profesional' && !!profile?.has_pro_prices;
+    const isB2B = isPro || !!profile?.is_partner;
 
     // Explicit shipping cost calculation based on method choice
     const effectiveShippingCost = formData.shippingMethod === 'pickup' ? 0 : (formData.shippingMethod === 'delivery' ? shippingCost : 0);

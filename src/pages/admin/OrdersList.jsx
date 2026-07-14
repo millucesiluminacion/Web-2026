@@ -387,7 +387,8 @@ export default function OrdersList() {
     const calculateShippingCost = () => {
         if (orderForm.shipping_method === 'pickup' || !shippingConfig) return 0;
 
-        const tier = selectedCustomer?.user_type === 'profesional' ? 'b2b' : (selectedCustomer?.is_partner ? 'socio' : 'b2c');
+        const isPro = selectedCustomer?.user_type === 'profesional' && !!selectedCustomer?.has_pro_prices;
+        const tier = isPro ? 'b2b' : (selectedCustomer?.is_partner ? 'socio' : 'b2c');
         const tierConfig = shippingConfig.tiers?.[tier] || shippingConfig.tiers?.['b2c'];
         const zoneConfig = tierConfig?.zones?.['peninsula'] || { base_cost: 5.95, free_shipping_threshold: 150 };
 
@@ -1670,7 +1671,7 @@ export default function OrdersList() {
                                                     <span className="text-[10px] font-bold text-gray-300 uppercase italic">{products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length} Disponibles</span>
                                                     {selectedCustomer && (
                                                         <span className="text-[9px] font-black px-2 py-0.5 bg-brand-carbon text-white rounded uppercase italic">
-                                                            Tarifa: {selectedCustomer.is_partner ? 'SOCIO VIP' : selectedCustomer.user_type === 'profesional' ? 'PROFESIONAL' : 'CLIENTE FINAL'}
+                                                            Tarifa: {selectedCustomer.is_partner ? 'SOCIO VIP' : (selectedCustomer.user_type === 'profesional' && !!selectedCustomer.has_pro_prices) ? 'PROFESIONAL' : 'CLIENTE FINAL'}
                                                         </span>
                                                     )}
                                                 </div>

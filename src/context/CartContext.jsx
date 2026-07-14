@@ -121,7 +121,8 @@ export function CartProvider({ children }) {
 
     // Dynamic Shipping Logic
     const getShippingDetails = () => {
-        let tier = profile?.user_type === 'profesional' ? 'b2b' : (profile?.is_partner ? 'socio' : 'b2c');
+        const isPro = profile?.user_type === 'profesional' && !!profile?.has_pro_prices;
+        let tier = isPro ? 'b2b' : (profile?.is_partner ? 'socio' : 'b2c');
 
         const tierConfig = shippingConfig.tiers?.[tier] || shippingConfig.tiers?.['b2c'];
 
