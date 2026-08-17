@@ -18,14 +18,19 @@ export default function LoginPage() {
         setLoading(true);
         setError(null);
         try {
-            const redirectUrl = `${window.location.origin}/reset-password`;
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: redirectUrl,
+            const response = await fetch('/api/auth/recover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
             });
-            if (error) throw error;
-            setForgotSent(true);
+            const data = await response.json();
+            if (response.ok) {
+                setForgotSent(true);
+            } else {
+                setError(data.error || 'Error al enviar el enlace de recuperación.');
+            }
         } catch (err) {
-            setError(err.message || 'Error al enviar el enlace de recuperación.');
+            setError(err.message || 'Error de conexión. Inténtalo más tarde.');
         } finally {
             setLoading(false);
         }

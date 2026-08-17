@@ -51,14 +51,19 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
         setLoginLoading(true);
         setLoginError(null);
         try {
-            const redirectUrl = `${window.location.origin}/reset-password`;
-            const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
-                redirectTo: redirectUrl,
+            const response = await fetch('/api/auth/recover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: loginEmail })
             });
-            if (error) throw error;
-            setForgotSent(true);
+            const data = await response.json();
+            if (response.ok) {
+                setForgotSent(true);
+            } else {
+                setLoginError(data.error || 'Error al enviar el enlace de recuperación.');
+            }
         } catch (err) {
-            setLoginError(err.message || 'Error al enviar el enlace de recuperación.');
+            setLoginError(err.message || 'Error de conexión. Inténtalo más tarde.');
         } finally {
             setLoginLoading(false);
         }
