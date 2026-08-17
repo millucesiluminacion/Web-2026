@@ -195,7 +195,7 @@ export function Header({ onOpenAuthModal }) {
                             )}
 
                             {user ? (
-                                <div className="relative group">
+                                <div className="relative group py-1">
                                     <Link to="/perfil"
                                         aria-label="Ir a mi cuenta"
                                         className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center transition-all shadow-xl relative group/user ${userTier === 'vip'
@@ -206,31 +206,33 @@ export function Header({ onOpenAuthModal }) {
                                             }`}>
                                         <User className={`w-5 h-5 transition-colors ${userTier === 'vip' ? 'group-hover:text-yellow-400' : 'group-hover:text-white'}`} />
                                     </Link>
-                                    <div className="absolute top-full right-0 mt-3 bg-white shadow-luxury rounded-[1.5rem] p-5 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all transform translate-y-2 group-hover:translate-y-0 border border-gray-100 min-w-[200px] z-[60]">
-                                        <div className="flex flex-col gap-1">
-                                            <div className="flex items-center justify-between gap-3 border-b border-gray-50 pb-3 mb-2">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-black italic text-brand-carbon truncate max-w-[100px]">
-                                                        {profile?.full_name?.split(' ')[0] || 'Mi Cuenta'}
-                                                    </span>
-                                                    <span className={`text-[7px] font-black w-fit px-1.5 py-0.5 rounded uppercase tracking-tighter mt-0.5 ${userTier === 'vip' ? 'bg-yellow-400 text-brand-carbon' : userTier === 'pro' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400'}`}>
-                                                        {userTier === 'vip' ? 'SOCIO VIP' : userTier === 'pro' ? 'PROFESIONAL' : 'CLIENTE'}
-                                                    </span>
+                                    <div className="absolute top-full right-0 pt-2 z-[60] opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all transform translate-y-2 group-hover:translate-y-0 before:content-[''] before:absolute before:-top-4 before:left-0 before:right-0 before:h-6">
+                                        <div className="bg-white shadow-luxury rounded-[1.5rem] p-5 border border-gray-100 min-w-[200px]">
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center justify-between gap-3 border-b border-gray-50 pb-3 mb-2">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[10px] font-black italic text-brand-carbon truncate max-w-[100px]">
+                                                            {profile?.full_name?.split(' ')[0] || 'Mi Cuenta'}
+                                                        </span>
+                                                        <span className={`text-[7px] font-black w-fit px-1.5 py-0.5 rounded uppercase tracking-tighter mt-0.5 ${userTier === 'vip' ? 'bg-yellow-400 text-brand-carbon' : userTier === 'pro' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                                            {userTier === 'vip' ? 'SOCIO VIP' : userTier === 'pro' ? 'PROFESIONAL' : 'CLIENTE'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100 overflow-hidden">
+                                                        <User className="w-4 h-4 text-gray-300" />
+                                                    </div>
                                                 </div>
-                                                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100 overflow-hidden">
-                                                    <User className="w-4 h-4 text-gray-300" />
-                                                </div>
+
+                                                <Link to="/perfil" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group/link">
+                                                    <User className="w-3.5 h-3.5 text-gray-400 group-hover/link:text-primary" />
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 group-hover/link:text-brand-carbon">Mi Perfil</span>
+                                                </Link>
+
+                                                <button onClick={signOut} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors group/link text-left w-full mt-1">
+                                                    <LogOut className="w-3.5 h-3.5 text-red-300 group-hover/link:text-red-500" />
+                                                    <span className="text-[9px] font-black uppercase tracking-widest text-red-400 group-hover/link:text-red-600">Cerrar Sesión</span>
+                                                </button>
                                             </div>
-
-                                            <Link to="/perfil" className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors group/link">
-                                                <User className="w-3.5 h-3.5 text-gray-400 group-hover/link:text-primary" />
-                                                <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 group-hover/link:text-brand-carbon">Mi Perfil</span>
-                                            </Link>
-
-                                            <button onClick={signOut} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors group/link text-left w-full mt-1">
-                                                <LogOut className="w-3.5 h-3.5 text-red-300 group-hover/link:text-red-500" />
-                                                <span className="text-[9px] font-black uppercase tracking-widest text-red-400 group-hover/link:text-red-600">Cerrar Sesión</span>
-                                            </button>
                                         </div>
                                     </div>
                                 </div>

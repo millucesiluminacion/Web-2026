@@ -128,7 +128,7 @@ export default function ContactPage() {
 
                             {/* Social Accents */}
                             <div className="pt-8 flex items-center gap-6">
-                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Sigue la Iluminación:</span>
+                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Siguenos en:</span>
                                 <div className="flex gap-4">
                                     {['instagram', 'linkedin', 'pinterest'].map(social => (
                                         <div key={social} className="w-8 h-8 rounded-full border border-gray-100 flex items-center justify-center text-gray-400 hover:text-primary hover:border-primary transition-all cursor-pointer">

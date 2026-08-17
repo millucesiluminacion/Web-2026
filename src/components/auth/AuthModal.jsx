@@ -13,6 +13,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
     const [loginPassword, setLoginPassword] = useState('');
     const [loginLoading, setLoginLoading] = useState(false);
     const [loginError, setLoginError] = useState(null);
+    const [forgotSent, setForgotSent] = useState(false);
 
     // Register state
     const [regEmail, setRegEmail] = useState('');
@@ -39,6 +40,25 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
             // Stay on current page, no redirect to /admin
         } catch (err) {
             setLoginError(err.message);
+        } finally {
+            setLoginLoading(false);
+        }
+    };
+
+    const handleModalForgot = async (e) => {
+        e.preventDefault();
+        if (!loginEmail) return setLoginError('Introduce tu email para recuperar la contraseña.');
+        setLoginLoading(true);
+        setLoginError(null);
+        try {
+            const redirectUrl = `${window.location.origin}/reset-password`;
+            const { error } = await supabase.auth.resetPasswordForEmail(loginEmail, {
+                redirectTo: redirectUrl,
+            });
+            if (error) throw error;
+            setForgotSent(true);
+        } catch (err) {
+            setLoginError(err.message || 'Error al enviar el enlace de recuperación.');
         } finally {
             setLoginLoading(false);
         }
@@ -87,7 +107,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                     <div>
                         <p className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-1">Mil Luces Boutique</p>
                         <h2 className="text-2xl font-black text-brand-carbon uppercase italic tracking-tighter leading-none">
-                            {activeTab === 'login' ? 'Bienvenido' : 'Nueva Cuenta'}
+                            {activeTab === 'login' ? 'Bienvenido' : activeTab === 'register' ? 'Nueva Cuenta' : 'Recuperar Cuenta'}
                         </h2>
                     </div>
                     <button
@@ -99,22 +119,24 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                 </div>
 
                 {/* Tab Switcher */}
-                <div className="px-8 pt-6">
-                    <div className="flex gap-1 p-1.5 bg-gray-50 rounded-2xl border border-gray-100">
-                        <button
-                            onClick={() => setActiveTab('login')}
-                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'login' ? 'bg-white shadow-md text-brand-carbon' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            Iniciar Sesión
-                        </button>
-                        <button
-                            onClick={() => setActiveTab('register')}
-                            className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'register' ? 'bg-white shadow-md text-brand-carbon' : 'text-gray-400 hover:text-gray-600'}`}
-                        >
-                            Crear Cuenta
-                        </button>
+                {activeTab !== 'forgot' && (
+                    <div className="px-8 pt-6">
+                        <div className="flex gap-1 p-1.5 bg-gray-50 rounded-2xl border border-gray-100">
+                            <button
+                                onClick={() => setActiveTab('login')}
+                                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'login' ? 'bg-white shadow-md text-brand-carbon' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                Iniciar Sesión
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('register')}
+                                className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'register' ? 'bg-white shadow-md text-brand-carbon' : 'text-gray-400 hover:text-gray-600'}`}
+                            >
+                                Crear Cuenta
+                            </button>
+                        </div>
                     </div>
-                </div>
+                )}
 
                 {/* Form Content */}
                 <div className="p-8">
@@ -142,7 +164,16 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                                 </div>
                             </div>
                             <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Contraseña</label>
+                                <div className="flex justify-between items-center ml-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Contraseña</label>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setActiveTab('forgot'); setLoginError(null); }}
+                                        className="text-[9px] font-black text-primary uppercase tracking-widest hover:underline"
+                                    >
+                                        ¿Olvidaste tu contraseña?
+                                    </button>
+                                </div>
                                 <div className="relative">
                                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
                                     <input
@@ -168,6 +199,67 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                                 </button>
                             </p>
                         </form>
+                    )}
+
+                    {/* ── FORGOT PASSWORD TAB ── */}
+                    {activeTab === 'forgot' && (
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                            {forgotSent ? (
+                                <div className="text-center py-4 space-y-3">
+                                    <div className="w-12 h-12 bg-green-50 rounded-full flex items-center justify-center mx-auto border border-green-200">
+                                        <Mail className="w-5 h-5 text-green-600" />
+                                    </div>
+                                    <h3 className="text-sm font-black text-brand-carbon uppercase">¡Enlace Enviado!</h3>
+                                    <p className="text-[10px] text-gray-500 leading-relaxed font-bold">Hemos enviado un correo a <strong>{loginEmail}</strong> con un enlace para restablecer tu contraseña.</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setActiveTab('login'); setForgotSent(false); setLoginError(null); }}
+                                        className="text-[10px] font-black text-primary hover:underline uppercase tracking-widest pt-2 block mx-auto"
+                                    >
+                                        Volver a Iniciar Sesión
+                                    </button>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleModalForgot} className="space-y-4">
+                                    {loginError && (
+                                        <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600">
+                                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                                            <p className="text-[10px] font-bold uppercase tracking-wide leading-relaxed">{loginError}</p>
+                                        </div>
+                                    )}
+                                    <p className="text-[11px] text-gray-500 font-bold leading-relaxed">
+                                        Introduce tu email y te enviaremos las instrucciones para restablecer tu contraseña.
+                                    </p>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email</label>
+                                        <div className="relative">
+                                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                                            <input
+                                                type="email" required
+                                                value={loginEmail}
+                                                onChange={(e) => setLoginEmail(e.target.value)}
+                                                placeholder="hola@ejemplo.com"
+                                                className="w-full h-12 bg-gray-50 border-none rounded-2xl pl-11 pr-4 text-sm font-bold focus:ring-4 focus:ring-primary/10 transition-all placeholder:text-gray-300 focus:outline-none"
+                                                disabled={loginLoading}
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit" disabled={loginLoading}
+                                        className="w-full h-14 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] tracking-widest hover:bg-primary transition-all shadow-xl shadow-brand-carbon/10 flex items-center justify-center gap-3 disabled:opacity-50 mt-2"
+                                    >
+                                        {loginLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <><span>Enviar Enlace</span><ArrowRight className="w-4 h-4 text-primary" /></>}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => { setActiveTab('login'); setLoginError(null); }}
+                                        className="w-full text-[10px] font-black text-gray-400 hover:text-primary uppercase tracking-widest text-center pt-2"
+                                    >
+                                        ← Volver a Iniciar Sesión
+                                    </button>
+                                </form>
+                            )}
+                        </div>
                     )}
 
                     {/* ── REGISTER TAB ── */}
