@@ -28,9 +28,15 @@ export default async function handler(req, res) {
         const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
         // 1. Determinar URL de redirección
-        const proto = req.headers['x-forwarded-proto'] || 'https';
-        const host = req.headers.host || 'millucesiluminacion.com';
-        const redirectUrl = `${proto}://${host}/reset-password`;
+        const appUrl = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
+        let baseUrl = appUrl;
+
+        if (req.headers.host && !req.headers.host.includes('localhost') && !req.headers.host.includes('127.0.0.1')) {
+            const proto = req.headers['x-forwarded-proto'] || 'https';
+            baseUrl = `${proto}://${req.headers.host}`;
+        }
+
+        const redirectUrl = `${baseUrl}/reset-password`;
 
         // 2. Generar enlace raw mediante la API Admin de Supabase
         const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
@@ -46,7 +52,17 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'No pudimos generar el enlace. Verifica que el correo exista.' });
         }
 
-        const resetUrl = linkData?.properties?.action_link || `${redirectUrl}#access_token=${linkData?.properties?.hashed_token}&type=recovery`;
+        let resetUrl = linkData?.properties?.action_link;
+
+        if (resetUrl) {
+            // Reemplazar cualquier referencia a localhost en la URL de retorno de Supabase
+            resetUrl = resetUrl
+                .replace(/redirect_to=http%3A%2F%2Flocalhost%3A\d+/gi, `redirect_to=${encodeURIComponent(redirectUrl)}`)
+                .replace(/redirect_to=http%3A%2F%2F127\.0\.0\.1%3A\d+/gi, `redirect_to=${encodeURIComponent(redirectUrl)}`)
+                .replace(/redirect_to=http:\/\/localhost:\d+/gi, `redirect_to=${encodeURIComponent(redirectUrl)}`);
+        } else {
+            resetUrl = `${redirectUrl}#access_token=${linkData?.properties?.hashed_token}&type=recovery`;
+        }
 
         // 3. Obtener el nombre del usuario para la plantilla
         let userName = targetEmail.split('@')[0];

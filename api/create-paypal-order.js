@@ -96,13 +96,13 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Importe no válido.' });
         }
 
-        // PayPal API: support sandbox mode
-        const paypalBaseUrl = sandbox
+        // Determine initial PayPal base URL (Live vs Sandbox)
+        let activePaypalBaseUrl = (sandbox || String(clientId).startsWith('sb') || String(secretKey).startsWith('E'))
             ? 'https://api-m.sandbox.paypal.com'
             : 'https://api-m.paypal.com';
 
-        // Autenticación con PayPal
-        const authRes = await fetch(`${paypalBaseUrl}/v1/oauth2/token`, {
+        // Intento 1: Autenticación con el endpoint principal
+        let authRes = await fetch(`${activePaypalBaseUrl}/v1/oauth2/token`, {
             method: 'POST',
             headers: {
                 'Authorization': `Basic ${Buffer.from(`${clientId}:${secretKey}`).toString('base64')}`,
@@ -111,16 +111,39 @@ export default async function handler(req, res) {
             body: 'grant_type=client_credentials',
         });
 
-        const authData = await authRes.json();
+        let authData = await authRes.json();
+
+        // Intento 2: Fallback automático si la cuenta es de Sandbox/Live alternativo
         if (!authData.access_token) {
-            console.error('[PayPal] Auth failed:', authData);
-            return res.status(500).json({ error: 'No se pudo autenticar con PayPal. Revisa las credenciales.' });
+            const alternateUrl = activePaypalBaseUrl.includes('sandbox')
+                ? 'https://api-m.paypal.com'
+                : 'https://api-m.sandbox.paypal.com';
+
+            console.warn(`[PayPal] Primary auth failed on ${activePaypalBaseUrl}. Retrying on alternate: ${alternateUrl}`);
+            const altRes = await fetch(`${alternateUrl}/v1/oauth2/token`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Basic ${Buffer.from(`${clientId}:${secretKey}`).toString('base64')}`,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'grant_type=client_credentials',
+            });
+            const altData = await altRes.json();
+            if (altData.access_token) {
+                authData = altData;
+                activePaypalBaseUrl = alternateUrl;
+            } else {
+                console.error('[PayPal] Auth failed on both Live & Sandbox:', authData, altData);
+                return res.status(500).json({
+                    error: `No se pudo autenticar con PayPal (${authData.error_description || authData.error || 'Credenciales no válidas'}). Verifica tu Client ID y Secret Key.`
+                });
+            }
         }
 
         const baseUrl = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
 
         // Crear orden PayPal con precio verificado
-        const orderRes = await fetch(`${paypalBaseUrl}/v2/checkout/orders`, {
+        const orderRes = await fetch(`${activePaypalBaseUrl}/v2/checkout/orders`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${authData.access_token}`,

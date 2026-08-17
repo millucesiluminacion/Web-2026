@@ -93,7 +93,7 @@ export default function Cart() {
                             setStripePromise(loadStripe(row.value.publicKey));
                         }
                     }
-                    if (row.key === 'payment_paypal' && row.value?.enabled && row.value?.clientId) {
+                    if (row.key === 'payment_paypal' && row.value?.enabled && (row.value?.clientId || row.value?.secretKey || row.value?.merchantId || row.value?.connectClientId)) {
                         methods.paypal = row.value;
                     }
                     if (row.key === 'payment_transfer' && row.value?.enabled) {
