@@ -25,9 +25,12 @@ export default async function handler(req, res) {
             .eq('key', 'payment_paypal')
             .single();
 
-        const paypalConfig = data?.value || {};
-        const clientId = paypalConfig.clientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID;
-        const secretKey = paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY;
+        const rawClientId = paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '';
+        const rawSecretKey = paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '';
+
+        // Clean any accidental whitespace, quotes, or newlines
+        const clientId = rawClientId.trim().replace(/^["']|["']$/g, '');
+        const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
         const sandbox = paypalConfig.sandbox;
 
         if (!clientId || (!secretKey && paypalConfig.mode !== 'connect')) {

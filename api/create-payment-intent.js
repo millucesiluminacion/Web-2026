@@ -29,7 +29,8 @@ export default async function handler(req, res) {
             .single();
 
         const stripeConfig = data?.value || {};
-        const secretKey = stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY;
+        const rawSecretKey = stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '';
+        const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
 
         if (!secretKey) {
             return res.status(400).json({ error: 'Stripe no está configurado en el panel de administración.' });

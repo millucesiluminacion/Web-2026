@@ -267,8 +267,15 @@ export default function PaymentSettings() {
         setSaving(provider);
         const keyMap = { stripe: 'payment_stripe', paypal: 'payment_paypal', transfer: 'payment_transfer' };
 
+        const providerData = { ...settings[provider] };
+        Object.keys(providerData).forEach(k => {
+            if (typeof providerData[k] === 'string') {
+                providerData[k] = providerData[k].trim().replace(/^["']|["']$/g, '');
+            }
+        });
+
         const currentConfig = {
-            ...settings[provider],
+            ...providerData,
             enabled: true, // Activar automáticamente al guardar llaves
         };
 
