@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     User, Mail, Phone, MapPin, Shield, Star,
     Zap, LogOut, Loader2, Save, Key, ShoppingBag,
@@ -139,6 +139,13 @@ export default function AccountPage() {
         }
     };
 
+    const navigate = useNavigate();
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/');
+    };
+
     if (loading) return (
         <div className="flex h-[60vh] items-center justify-center">
             <Loader2 className="w-10 h-10 animate-spin text-primary" />
@@ -232,7 +239,7 @@ export default function AccountPage() {
                     ))}
 
                     <button
-                        onClick={signOut}
+                        onClick={handleSignOut}
                         className="w-full flex items-center gap-4 p-6 rounded-3xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all group mt-8"
                     >
                         <LogOut className="w-5 h-5" />

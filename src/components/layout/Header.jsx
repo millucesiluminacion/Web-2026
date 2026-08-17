@@ -43,6 +43,11 @@ export function Header({ onOpenAuthModal }) {
     const { totalItems, setIsSideCartOpen } = useCart();
     const { profile, userTier, isPro, isPartner, user, signOut } = useAuth();
     const navigate = useNavigate();
+
+    const handleSignOut = async () => {
+        await signOut();
+        navigate('/');
+    };
     const isAdmin = profile?.role === 'admin' || profile?.role === 'manager';
     const menuRef = useRef(null);
     const megaRef = useRef(null);
@@ -228,7 +233,7 @@ export function Header({ onOpenAuthModal }) {
                                                     <span className="text-[9px] font-black uppercase tracking-widest text-gray-500 group-hover/link:text-brand-carbon">Mi Perfil</span>
                                                 </Link>
 
-                                                <button onClick={signOut} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors group/link text-left w-full mt-1">
+                                                <button onClick={handleSignOut} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-red-50 transition-colors group/link text-left w-full mt-1">
                                                     <LogOut className="w-3.5 h-3.5 text-red-300 group-hover/link:text-red-500" />
                                                     <span className="text-[9px] font-black uppercase tracking-widest text-red-400 group-hover/link:text-red-600">Cerrar Sesión</span>
                                                 </button>
