@@ -25,11 +25,14 @@ export default async function handler(req, res) {
             .eq('key', 'payment_paypal')
             .single();
 
-        if (error || !data?.value?.clientId || !data?.value?.secretKey) {
+        const paypalConfig = data?.value || {};
+        const clientId = paypalConfig.clientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID;
+        const secretKey = paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY;
+        const sandbox = paypalConfig.sandbox;
+
+        if (!clientId || (!secretKey && paypalConfig.mode !== 'connect')) {
             return res.status(400).json({ error: 'PayPal no está configurado en el admin.' });
         }
-
-        const { clientId, secretKey, sandbox } = data.value;
         const { orderId } = req.body;
 
         if (!orderId) {

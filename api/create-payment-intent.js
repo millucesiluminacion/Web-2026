@@ -28,11 +28,20 @@ export default async function handler(req, res) {
             .eq('key', 'payment_stripe')
             .single();
 
-        if (error || !data?.value?.secretKey) {
+        const stripeConfig = data?.value || {};
+        const secretKey = stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY;
+
+        if (!secretKey) {
             return res.status(400).json({ error: 'Stripe no está configurado en el panel de administración.' });
         }
 
-        const stripe = new Stripe(data.value.secretKey, { apiVersion: '2024-04-10' });
+        const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10' });
+
+        // Determinar si usar cuenta conectada (Stripe Connect)
+        const stripeOptions = {};
+        if (stripeConfig.mode === 'connect' && stripeConfig.connectAccountId) {
+            stripeOptions.stripeAccount = stripeConfig.connectAccountId;
+        }
 
         const { orderId, metadata = {} } = req.body;
 
@@ -112,7 +121,7 @@ export default async function handler(req, res) {
             automatic_payment_methods: {
                 enabled: true,
             },
-        });
+        }, stripeOptions);
 
         // Update order with payment intent ID for tracking
         await supabase
