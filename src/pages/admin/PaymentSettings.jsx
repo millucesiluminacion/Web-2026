@@ -219,22 +219,47 @@ export default function PaymentSettings() {
         checkUrlParams();
     }, []);
 
-    function checkUrlParams() {
+    async function checkUrlParams() {
         const params = new URLSearchParams(window.location.search);
         const status = params.get('status');
         const error = params.get('error');
+        const merchantId = params.get('merchantId') || params.get('merchantIdInPayPal') || params.get('merchant_id');
 
-        if (status === 'stripe_connected') {
+        if (merchantId) {
+            await handleSaveMerchantId('paypal', merchantId);
+            setToast({ type: 'success', text: `¡Cuenta de PayPal conectada exitosamente via OAuth! ID Comercio: ${merchantId}` });
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (status === 'stripe_connected') {
             setToast({ type: 'success', text: '¡Cuenta de Stripe conectada exitosamente via OAuth!' });
+            window.history.replaceState({}, document.title, window.location.pathname);
         } else if (status === 'paypal_connected') {
             setToast({ type: 'success', text: '¡Cuenta de PayPal conectada exitosamente via OAuth!' });
+            window.history.replaceState({}, document.title, window.location.pathname);
         } else if (error) {
             setToast({ type: 'error', text: `Error de conexión OAuth: ${decodeURIComponent(error)}` });
         }
 
-        if (status || error) {
+        if (status || error || merchantId) {
             setTimeout(() => setToast({ type: '', text: '' }), 5000);
         }
+    }
+
+    async function handleSaveMerchantId(provider, merchantId) {
+        const current = settings[provider] || {};
+        const updated = {
+            ...current,
+            enabled: true,
+            mode: 'connect',
+            merchantId: merchantId,
+            connectEnabled: true,
+            connectedAt: new Date().toISOString()
+        };
+        setSettings(prev => ({ ...prev, [provider]: updated }));
+
+        const keyMap = { stripe: 'payment_stripe', paypal: 'payment_paypal' };
+        await supabase.from('app_settings').upsert([
+            { key: keyMap[provider], value: updated, description: `Configuración de ${provider}` }
+        ]);
     }
 
     async function fetchSettings() {
@@ -257,10 +282,18 @@ export default function PaymentSettings() {
     }
 
     function handleChange(provider, field, value) {
-        setSettings(prev => ({
-            ...prev,
-            [provider]: { ...prev[provider], [field]: value }
-        }));
+        setSettings(prev => {
+            const currentProvider = { ...prev[provider], [field]: value };
+            if (field === 'connectClientId') {
+                currentProvider.clientId = value;
+            } else if (field === 'clientId') {
+                currentProvider.connectClientId = value;
+            }
+            return {
+                ...prev,
+                [provider]: currentProvider
+            };
+        });
     }
 
     async function handleSave(provider) {
@@ -303,11 +336,14 @@ export default function PaymentSettings() {
         }
 
         if (provider === 'paypal' && (!paypalClientId || paypalClientId === 'sandbox_placeholder')) {
-            return alert("⚠️ Debes escribir tu 'PayPal Partner Client ID' en el campo de arriba para iniciar el proceso de autorización.");
+            return alert("⚠️ Debes escribir tu 'Client ID de PayPal' en el campo de arriba para iniciar el proceso de autorización OAuth.");
         }
 
+        // Auto-save Client ID to database before redirecting
+        await handleSave(provider);
+
         try {
-            const endpoint = `/api/payments/${provider}/connect`;
+            const endpoint = `/api/payments/${provider}/connect?clientId=${encodeURIComponent(paypalClientId || stripeClientId || '')}`;
             const res = await fetch(endpoint);
             const contentType = res.headers.get('content-type') || '';
 
@@ -330,8 +366,9 @@ export default function PaymentSettings() {
                 const stripeUrl = `https://connect.stripe.com/oauth/authorize?response_type=code&client_id=${encodeURIComponent(stripeClientId)}&scope=read_write&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}`;
                 window.location.href = stripeUrl;
             } else if (provider === 'paypal') {
-                const returnUrl = `${proto}//${host}/api/payments/paypal/callback`;
-                const paypalDomain = 'https://www.sandbox.paypal.com';
+                const returnUrl = `${proto}//${host}/admin/payments`;
+                const isSandbox = paypalClientId.startsWith('sb');
+                const paypalDomain = isSandbox ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
                 const paypalUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${encodeURIComponent(paypalClientId)}&partnerId=${encodeURIComponent(paypalClientId)}&displayMode=minibrowser&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
                 window.location.href = paypalUrl;
             }

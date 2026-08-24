@@ -5,17 +5,17 @@ export default async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
 
     try {
-        const paypalClientId = process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || 'sandbox_placeholder';
+        const paypalClientId = req.query?.clientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '';
 
         const proto = req.headers['x-forwarded-proto'] || 'https';
         const host = req.headers.host;
-        const returnUrl = `${proto}://${host}/api/payments/paypal/callback`;
+        const returnUrl = `${proto}://${host}/admin/payments`;
 
-        // URL del flujo Partner Referral / Onboarding de PayPal
-        const isSandbox = process.env.PAYPAL_MODE !== 'live';
+        // Detect sandbox vs live based on Client ID prefix or PAYPAL_MODE
+        const isSandbox = process.env.PAYPAL_MODE === 'sandbox' || paypalClientId.startsWith('sb');
         const paypalDomain = isSandbox ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
 
-        const paypalAuthUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${paypalClientId}&partnerId=${paypalClientId}&displayMode=minibrowser&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
+        const paypalAuthUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${encodeURIComponent(paypalClientId)}&partnerId=${encodeURIComponent(paypalClientId)}&displayMode=minibrowser&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
 
         return res.status(200).json({ url: paypalAuthUrl });
     } catch (err) {

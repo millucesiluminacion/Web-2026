@@ -19,11 +19,13 @@ export default async function handler(req, res) {
             process.env.SUPABASE_SERVICE_ROLE_KEY
         );
 
-        const { data, error } = await supabase
+        const { data } = await supabase
             .from('app_settings')
             .select('value')
             .eq('key', 'payment_paypal')
-            .single();
+            .maybeSingle();
+
+        const paypalConfig = data?.value || {};
 
         const rawClientId = paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '';
         const rawSecretKey = paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '';
@@ -31,10 +33,10 @@ export default async function handler(req, res) {
         // Clean any accidental whitespace, quotes, or newlines
         const clientId = rawClientId.trim().replace(/^["']|["']$/g, '');
         const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
-        const sandbox = paypalConfig.sandbox;
+        const sandbox = paypalConfig.sandbox || paypalConfig.mode === 'sandbox';
 
-        if (!clientId || (!secretKey && paypalConfig.mode !== 'connect')) {
-            return res.status(400).json({ error: 'PayPal no está configurado en el admin.' });
+        if (!clientId) {
+            return res.status(400).json({ error: 'PayPal no está configurado correctamente (falta Client ID). Revisa el panel de administración.' });
         }
         const { orderId } = req.body;
 
