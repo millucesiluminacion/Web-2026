@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import StripePaymentForm from '../components/commerce/StripePaymentForm';
 import { IVA_RATE } from '../lib/pricingUtils';
 
@@ -30,6 +31,7 @@ export default function Cart() {
     const [paymentloading, setPaymentLoading] = useState(true);
     const [orderCompleted, setOrderCompleted] = useState(false);
     const [orderRef, setOrderRef] = useState('');
+    const [createdOrderId, setCreatedOrderId] = useState('');
     const [showOrderSummary, setShowOrderSummary] = useState(true);
     const [paymentMethods, setPaymentMethods] = useState({ stripe: null, paypal: null, transfer: null });
     const [payError, setPayError] = useState('');
@@ -343,8 +345,11 @@ export default function Cart() {
                     body: JSON.stringify({ orderId: order.id }),
                 });
                 const { approveUrl, error } = await res.json();
-                if (error) throw new Error(error);
-                window.location.href = approveUrl;
+                if (window.top) {
+                    window.top.location.href = approveUrl;
+                } else {
+                    window.location.assign(approveUrl);
+                }
                 return;
             }
 
@@ -732,6 +737,71 @@ export default function Cart() {
                                                 </Elements>
                                             </div>
                                         )}
+
+                                        {/* Formulario PayPal Embebido */}
+                                        {formData.paymentMethod === 'paypal' && paymentMethods.paypal && (
+                                            <div className="pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
+                                                <PayPalScriptProvider options={{
+                                                    "client-id": (paymentMethods.paypal.clientId || paymentMethods.paypal.connectClientId || "test")?.trim(),
+                                                    currency: "EUR",
+                                                    intent: "capture"
+                                                }}>
+                                                    <PayPalButtons
+                                                        style={{
+                                                            layout: "vertical",
+                                                            color: "black",
+                                                            shape: "rect",
+                                                            label: "pay",
+                                                            height: 50,
+                                                            tagline: false
+                                                        }}
+                                                        disabled={!formData.name || !formData.email || !formData.phone || !formData.shippingMethod}
+                                                        createOrder={async () => {
+                                                            setPayError('');
+                                                            const order = await saveOrder();
+                                                            setCreatedOrderId(order.id);
+                                                            const res = await fetch('/api/create-paypal-order', {
+                                                                method: 'POST',
+                                                                headers: { 'Content-Type': 'application/json' },
+                                                                body: JSON.stringify({ orderId: order.id }),
+                                                            });
+                                                            const data = await res.json();
+                                                            if (data.error) throw new Error(data.error);
+                                                            return data.orderId;
+                                                        }}
+                                                        onApprove={async (data) => {
+                                                            try {
+                                                                setLoading(true);
+                                                                const res = await fetch('/api/capture-paypal-order', {
+                                                                    method: 'POST',
+                                                                    headers: { 'Content-Type': 'application/json' },
+                                                                    body: JSON.stringify({
+                                                                        paypalOrderId: data.orderID,
+                                                                        orderId: createdOrderId
+                                                                    }),
+                                                                });
+                                                                const result = await res.json();
+                                                                if (result.success) {
+                                                                    setOrderRef(createdOrderId.slice(0, 8).toUpperCase());
+                                                                    setOrderCompleted(true);
+                                                                    clearCart();
+                                                                } else {
+                                                                    setPayError(result.error || 'Error completando el pago con PayPal.');
+                                                                }
+                                                            } catch (err) {
+                                                                setPayError('Error al capturar la orden de PayPal.');
+                                                            } finally {
+                                                                setLoading(false);
+                                                            }
+                                                        }}
+                                                        onError={(err) => {
+                                                            console.error('[PayPal SDK Error]:', err);
+                                                            setPayError('Ocurrió un problema con PayPal. Verifica tus datos e inténtalo de nuevo.');
+                                                        }}
+                                                    />
+                                                </PayPalScriptProvider>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -857,7 +927,7 @@ export default function Cart() {
                                         </div>
                                     </div>
                                 </div>
-                                {formData.paymentMethod !== 'stripe' && (
+                                {formData.paymentMethod !== 'stripe' && formData.paymentMethod !== 'paypal' && (
                                     <button
                                         form="aio-form"
                                         type="submit"
