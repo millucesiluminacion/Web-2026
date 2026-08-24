@@ -369,7 +369,7 @@ export default function PaymentSettings() {
                 const returnUrl = `${proto}//${host}/admin/payments`;
                 const isSandbox = paypalClientId.startsWith('sb');
                 const paypalDomain = isSandbox ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
-                const paypalUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${encodeURIComponent(paypalClientId)}&partnerId=${encodeURIComponent(paypalClientId)}&displayMode=minibrowser&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
+                const paypalUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${encodeURIComponent(paypalClientId)}&partnerId=${encodeURIComponent(paypalClientId)}&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
                 window.location.href = paypalUrl;
             }
         } catch (e) {

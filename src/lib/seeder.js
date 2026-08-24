@@ -50,22 +50,7 @@ const STATIC_WHY_US = [
     }
 ];
 
-const STATIC_SLIDERS = [
-    {
-        image_url: 'https://www.efectoled.com/img/core/global/lighting/2026/home/campaigns/848_baliza-v16_prod177697_home-main_desktop_es.png',
-        link_url: '/ofertas-baliza',
-        title: 'Baliza V16 Homologada',
-        order_index: 0,
-        type: 'main_slider'
-    },
-    {
-        image_url: 'https://www.efectoled.com/img/core/global/lighting/2026/home/campaigns/644_proclub-b2c_cms343_home-service_desktop_es.png',
-        link_url: '/register-pro',
-        title: 'PRO CLUB',
-        order_index: 0,
-        type: 'side_banner'
-    }
-];
+const STATIC_SLIDERS = [];
 
 const STATIC_ROOMS = [
     { name: 'Salón / Comedor', slug: 'salon-comedor', image_url: 'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=500&fit=crop', description: 'Iluminación acogedora para tus momentos en familia.', order_index: 0 },

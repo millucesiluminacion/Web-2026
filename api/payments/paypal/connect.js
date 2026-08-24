@@ -15,7 +15,7 @@ export default async function handler(req, res) {
         const isSandbox = process.env.PAYPAL_MODE === 'sandbox' || paypalClientId.startsWith('sb');
         const paypalDomain = isSandbox ? 'https://www.sandbox.paypal.com' : 'https://www.paypal.com';
 
-        const paypalAuthUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${encodeURIComponent(paypalClientId)}&partnerId=${encodeURIComponent(paypalClientId)}&displayMode=minibrowser&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
+        const paypalAuthUrl = `${paypalDomain}/bizsignup/partner/entry?partnerClientId=${encodeURIComponent(paypalClientId)}&partnerId=${encodeURIComponent(paypalClientId)}&sellerNonce=${Date.now()}&returnToPartnerUrl=${encodeURIComponent(returnUrl)}`;
 
         return res.status(200).json({ url: paypalAuthUrl });
     } catch (err) {
