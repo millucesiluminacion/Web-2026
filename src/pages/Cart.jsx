@@ -772,10 +772,11 @@ export default function Cart() {
                                                         onApprove={async (data) => {
                                                             try {
                                                                 setLoading(true);
-                                                                const res = await fetch('/api/capture-paypal-order', {
+                                                                const res = await fetch('/api/create-paypal-order', {
                                                                     method: 'POST',
                                                                     headers: { 'Content-Type': 'application/json' },
                                                                     body: JSON.stringify({
+                                                                        action: 'capture',
                                                                         paypalOrderId: data.orderID,
                                                                         orderId: createdOrderId
                                                                     }),
