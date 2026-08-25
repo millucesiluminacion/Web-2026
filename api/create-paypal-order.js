@@ -39,8 +39,19 @@ export default async function handler(req, res) {
         const clientId = rawClientId.trim().replace(/^["']|["']$/g, '');
         const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
 
+        // Debug: log which fields resolved (mask most of the secret)
+        console.log('[PayPal Config] sandbox:', sandbox,
+            '| clientId field used:', sandbox ? 'testClientId' : 'liveClientId',
+            '| clientId found:', !!clientId, clientId ? `(${clientId.slice(0, 8)}...)` : '(empty)',
+            '| secretKey found:', !!secretKey, secretKey ? `(${secretKey.slice(0, 4)}...)` : '(empty)',
+            '| paypalConfig keys:', Object.keys(paypalConfig)
+        );
+
         if (!clientId) {
-            return res.status(400).json({ error: 'PayPal no está configurado correctamente (falta Client ID).' });
+            return res.status(400).json({ error: 'PayPal no está configurado: falta el Client ID. Configúralo en Admin → Métodos de Pago → PayPal.' });
+        }
+        if (!secretKey) {
+            return res.status(400).json({ error: 'PayPal no está configurado: falta el Secret Key. Configúralo en Admin → Métodos de Pago → PayPal.' });
         }
 
         let activePaypalBaseUrl = (sandbox || String(clientId).startsWith('sb'))
