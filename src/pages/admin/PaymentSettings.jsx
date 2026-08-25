@@ -26,22 +26,30 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
 
     const toggle = (field) => setShow(p => ({ ...p, [field]: !p[field] }));
 
-    const fields = {
-        stripe: [
-            { key: 'publicKey', label: 'Publishable Key (pk_live_ o pk_test_)', placeholder: 'pk_live_xxxxxxxxxxxxxxxx', secret: false },
-            { key: 'secretKey', label: 'Secret Key (sk_live_ o sk_test_)', placeholder: 'sk_live_xxxxxxxxxxxxxxxx', secret: true },
-        ],
-        paypal: [
-            { key: 'clientId', label: 'Client ID', placeholder: 'AXxxxxxxxxxxxxx', secret: false },
-            { key: 'secretKey', label: 'Secret Key', placeholder: 'EKxxxxxxxxxxxxx', secret: true },
-        ],
-        transfer: [
-            { key: 'iban', label: 'IBAN', placeholder: 'ES76 0049 0001 5510 2701 0330', secret: false },
-            { key: 'titular', label: 'Titular de la cuenta', placeholder: 'Mil Luces S.L.', secret: false },
-            { key: 'banco', label: 'Banco', placeholder: 'Banco Santander', secret: false },
-            { key: 'concepto', label: 'Concepto a indicar', placeholder: 'Pedido #XXXXX', secret: false },
-        ],
-    };
+    const isSandbox = !!config.sandbox;
+
+    const currentFields = provider === 'stripe' ? (
+        isSandbox ? [
+            { key: 'testPublicKey', fallbackKey: 'publicKey', label: '🧪 Publishable Key (Test: pk_test_...)', placeholder: 'pk_test_xxxxxxxxxxxxxxxx', secret: false },
+            { key: 'testSecretKey', fallbackKey: 'secretKey', label: '🧪 Secret Key (Test: sk_test_...)', placeholder: 'sk_test_xxxxxxxxxxxxxxxx', secret: true },
+        ] : [
+            { key: 'livePublicKey', fallbackKey: 'publicKey', label: '🚀 Publishable Key (Live: pk_live_...)', placeholder: 'pk_live_xxxxxxxxxxxxxxxx', secret: false },
+            { key: 'liveSecretKey', fallbackKey: 'secretKey', label: '🚀 Secret Key (Live: sk_live_...)', placeholder: 'sk_live_xxxxxxxxxxxxxxxx', secret: true },
+        ]
+    ) : provider === 'paypal' ? (
+        isSandbox ? [
+            { key: 'testClientId', fallbackKey: 'clientId', label: '🧪 Client ID (Test / Sandbox)', placeholder: 'Client ID de Pruebas (ej. sb-xxxx)', secret: false },
+            { key: 'testSecretKey', fallbackKey: 'secretKey', label: '🧪 Secret Key (Test / Sandbox)', placeholder: 'Secret Key de Pruebas', secret: true },
+        ] : [
+            { key: 'liveClientId', fallbackKey: 'clientId', label: '🚀 Client ID (Live / Producción)', placeholder: 'Client ID de Producción', secret: false },
+            { key: 'liveSecretKey', fallbackKey: 'secretKey', label: '🚀 Secret Key (Live / Producción)', placeholder: 'Secret Key de Producción', secret: true },
+        ]
+    ) : [
+        { key: 'iban', label: 'IBAN', placeholder: 'ES76 0049 0001 5510 2701 0330', secret: false },
+        { key: 'titular', label: 'Titular de la cuenta', placeholder: 'Mil Luces S.L.', secret: false },
+        { key: 'banco', label: 'Banco', placeholder: 'Banco Santander', secret: false },
+        { key: 'concepto', label: 'Concepto a indicar', placeholder: 'Pedido #XXXXX', secret: false },
+    ];
 
     return (
         <div className={`bg-white rounded-[2.5rem] border-2 ${isActive ? 'border-green-200 shadow-green-50 shadow-xl' : 'border-gray-100 shadow-sm'} overflow-hidden transition-all duration-500`}>
@@ -183,26 +191,29 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                 ) : (
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {(fields[provider] || []).map(f => (
-                                <div key={f.key} className={f.key === 'iban' || f.key === 'concepto' ? 'md:col-span-2' : ''}>
-                                    <label className={LABEL}>{f.label}</label>
-                                    <div className="relative">
-                                        <input
-                                            type={f.secret && !show[f.key] ? 'password' : 'text'}
-                                            value={config[f.key] || ''}
-                                            onChange={e => onChange(provider, f.key, e.target.value)}
-                                            placeholder={f.placeholder}
-                                            className={FIELD}
-                                        />
-                                        {f.secret && (
-                                            <button type="button" onClick={() => toggle(f.key)}
-                                                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition-colors">
-                                                {show[f.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                                            </button>
-                                        )}
+                            {currentFields.map(f => {
+                                const val = config[f.key] !== undefined ? config[f.key] : (f.fallbackKey ? (config[f.fallbackKey] || '') : '');
+                                return (
+                                    <div key={f.key} className={f.key === 'iban' || f.key === 'concepto' ? 'md:col-span-2' : ''}>
+                                        <label className={LABEL}>{f.label}</label>
+                                        <div className="relative">
+                                            <input
+                                                type={f.secret && !show[f.key] ? 'password' : 'text'}
+                                                value={val}
+                                                onChange={e => onChange(provider, f.key, e.target.value)}
+                                                placeholder={f.placeholder}
+                                                className={FIELD}
+                                            />
+                                            {f.secret && (
+                                                <button type="button" onClick={() => toggle(f.key)}
+                                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500 transition-colors">
+                                                    {show[f.key] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                         <button
                             type="button"

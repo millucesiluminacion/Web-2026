@@ -26,13 +26,18 @@ export default async function handler(req, res) {
             .maybeSingle();
 
         const paypalConfig = data?.value || {};
+        const sandbox = paypalConfig.sandbox || paypalConfig.mode === 'sandbox';
 
-        const rawClientId = paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '';
-        const rawSecretKey = paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '';
+        const rawClientId = sandbox
+            ? (paypalConfig.testClientId || paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '')
+            : (paypalConfig.liveClientId || paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '');
+
+        const rawSecretKey = sandbox
+            ? (paypalConfig.testSecretKey || paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '')
+            : (paypalConfig.liveSecretKey || paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '');
 
         const clientId = rawClientId.trim().replace(/^["']|["']$/g, '');
         const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
-        const sandbox = paypalConfig.sandbox || paypalConfig.mode === 'sandbox';
 
         if (!clientId) {
             return res.status(400).json({ error: 'PayPal no está configurado correctamente (falta Client ID).' });

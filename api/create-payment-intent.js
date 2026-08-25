@@ -29,7 +29,12 @@ export default async function handler(req, res) {
             .single();
 
         const stripeConfig = data?.value || {};
-        const rawSecretKey = stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '';
+        const isSandbox = stripeConfig.sandbox || stripeConfig.mode === 'sandbox';
+
+        const rawSecretKey = isSandbox
+            ? (stripeConfig.testSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '')
+            : (stripeConfig.liveSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '');
+
         const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
 
         if (!secretKey) {
