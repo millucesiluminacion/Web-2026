@@ -89,7 +89,20 @@ export default async function handler(req, res) {
                 activePaypalBaseUrl = alternateUrl;
             } else {
                 console.error('[PayPal Auth Error]:', authData, altData);
-                return res.status(500).json({ error: 'Error de autenticación con PayPal. Revisa el Client ID y Secret Key.' });
+                return res.status(500).json({
+                    error: 'Error de autenticación con PayPal.',
+                    debug: {
+                        sandbox,
+                        clientId_prefix: clientId.slice(0, 10),
+                        secretKey_found: !!secretKey,
+                        secretKey_prefix: secretKey.slice(0, 4),
+                        paypal_error_live: authData?.error,
+                        paypal_error_live_desc: authData?.error_description,
+                        paypal_error_sandbox: altData?.error,
+                        paypal_error_sandbox_desc: altData?.error_description,
+                        fields_in_config: Object.keys(paypalConfig),
+                    }
+                });
             }
         }
 

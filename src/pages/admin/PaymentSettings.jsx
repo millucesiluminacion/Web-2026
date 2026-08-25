@@ -18,9 +18,11 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
             provider === 'paypal' ? !!config.merchantId : false
     );
 
-    const isManualActive = provider === 'stripe' ? (!!config.secretKey && !!config.publicKey) :
-        provider === 'paypal' ? (!!config.clientId && !!config.secretKey) :
-            provider === 'transfer' ? (!!config.iban) : false;
+    const isManualActive = provider === 'stripe'
+        ? ((!!config.secretKey || !!config.testSecretKey || !!config.liveSecretKey) && (!!config.publicKey || !!config.testPublicKey || !!config.livePublicKey))
+        : provider === 'paypal'
+            ? ((!!config.clientId || !!config.testClientId || !!config.liveClientId) && (!!config.secretKey || !!config.testSecretKey || !!config.liveSecretKey))
+            : provider === 'transfer' ? (!!config.iban) : false;
 
     const isActive = config.enabled && (mode === 'connect' ? isConnectActive : isManualActive);
 
@@ -118,7 +120,10 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                         <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Entorno:</span>
                         <button
                             type="button"
-                            onClick={() => onChange(provider, 'sandbox', !config.sandbox)}
+                            onClick={() => {
+                                onChange(provider, 'sandbox', !config.sandbox);
+                                if (onToggle) onToggle(provider, config.enabled, !config.sandbox);
+                            }}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${config.sandbox
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
                                 : 'bg-green-50 text-green-700 border-green-200'
@@ -312,23 +317,28 @@ export default function PaymentSettings() {
     function handleChange(provider, field, value) {
         setSettings(prev => {
             const currentProvider = { ...prev[provider], [field]: value };
-            if (field === 'connectClientId') {
-                currentProvider.clientId = value;
-            } else if (field === 'clientId') {
-                currentProvider.connectClientId = value;
-            }
-            return {
-                ...prev,
-                [provider]: currentProvider
-            };
+            const isSandbox = !!currentProvider.sandbox;
+
+            // Sync new test/live fields to legacy clientId/secretKey for backend compatibility
+            if (field === 'testClientId' && isSandbox) currentProvider.clientId = value;
+            if (field === 'liveClientId' && !isSandbox) currentProvider.clientId = value;
+            if (field === 'testSecretKey' && isSandbox) currentProvider.secretKey = value;
+            if (field === 'liveSecretKey' && !isSandbox) currentProvider.secretKey = value;
+
+            // Legacy connect sync
+            if (field === 'connectClientId') currentProvider.clientId = value;
+            else if (field === 'clientId') currentProvider.connectClientId = value;
+
+            return { ...prev, [provider]: currentProvider };
         });
     }
 
-    async function handleToggle(provider, newEnabled) {
+    async function handleToggle(provider, newEnabled, newSandbox) {
         const keyMap = { stripe: 'payment_stripe', paypal: 'payment_paypal', transfer: 'payment_transfer' };
         const currentConfig = {
             ...settings[provider],
-            enabled: newEnabled
+            enabled: newEnabled,
+            ...(newSandbox !== undefined ? { sandbox: newSandbox } : {})
         };
 
         setSettings(prev => ({ ...prev, [provider]: currentConfig }));
@@ -340,7 +350,10 @@ export default function PaymentSettings() {
         if (error) {
             setToast({ type: 'error', text: 'Error al cambiar estado: ' + error.message });
         } else {
-            setToast({ type: 'success', text: `¡${provider.charAt(0).toUpperCase() + provider.slice(1)} ${newEnabled ? 'activado' : 'desactivado'}!` });
+            const msg = newSandbox !== undefined
+                ? `¡Entorno cambiado a ${newSandbox ? 'Pruebas (Sandbox)' : 'Producción (Live)'}! Guarda las claves correspondientes.`
+                : `¡${provider.charAt(0).toUpperCase() + provider.slice(1)} ${newEnabled ? 'activado' : 'desactivado'}!`;
+            setToast({ type: 'success', text: msg });
         }
         setTimeout(() => setToast({ type: '', text: '' }), 3500);
     }
@@ -355,6 +368,21 @@ export default function PaymentSettings() {
                 providerData[k] = providerData[k].trim().replace(/^["']|["']$/g, '');
             }
         });
+
+        // Always sync active environment keys to legacy fields so backend can always find them
+        const isSandbox = !!providerData.sandbox;
+        if (provider === 'paypal') {
+            if (isSandbox && providerData.testClientId) providerData.clientId = providerData.testClientId;
+            if (!isSandbox && providerData.liveClientId) providerData.clientId = providerData.liveClientId;
+            if (isSandbox && providerData.testSecretKey) providerData.secretKey = providerData.testSecretKey;
+            if (!isSandbox && providerData.liveSecretKey) providerData.secretKey = providerData.liveSecretKey;
+        }
+        if (provider === 'stripe') {
+            if (isSandbox && providerData.testPublicKey) providerData.publicKey = providerData.testPublicKey;
+            if (!isSandbox && providerData.livePublicKey) providerData.publicKey = providerData.livePublicKey;
+            if (isSandbox && providerData.testSecretKey) providerData.secretKey = providerData.testSecretKey;
+            if (!isSandbox && providerData.liveSecretKey) providerData.secretKey = providerData.liveSecretKey;
+        }
 
         const currentConfig = {
             ...providerData,
