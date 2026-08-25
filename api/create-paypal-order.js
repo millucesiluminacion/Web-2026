@@ -29,12 +29,12 @@ export default async function handler(req, res) {
         const sandbox = paypalConfig.sandbox || paypalConfig.mode === 'sandbox';
 
         const rawClientId = sandbox
-            ? (paypalConfig.testClientId || (paypalConfig.clientId && !paypalConfig.liveClientId ? paypalConfig.clientId : '') || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '')
-            : (paypalConfig.liveClientId || (paypalConfig.clientId && !paypalConfig.testClientId ? paypalConfig.clientId : '') || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '');
+            ? (paypalConfig.testClientId || paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '')
+            : (paypalConfig.liveClientId || paypalConfig.clientId || paypalConfig.connectClientId || process.env.PAYPAL_CLIENT_ID || process.env.VITE_PAYPAL_CLIENT_ID || '');
 
         const rawSecretKey = sandbox
-            ? (paypalConfig.testSecretKey || (paypalConfig.secretKey && !paypalConfig.liveSecretKey ? paypalConfig.secretKey : '') || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '')
-            : (paypalConfig.liveSecretKey || (paypalConfig.secretKey && !paypalConfig.testSecretKey ? paypalConfig.secretKey : '') || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '');
+            ? (paypalConfig.testSecretKey || paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '')
+            : (paypalConfig.liveSecretKey || paypalConfig.secretKey || process.env.PAYPAL_SECRET_KEY || process.env.VITE_PAYPAL_SECRET_KEY || '');
 
         const clientId = rawClientId.trim().replace(/^["']|["']$/g, '');
         const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');

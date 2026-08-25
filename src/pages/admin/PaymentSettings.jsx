@@ -318,9 +318,30 @@ export default function PaymentSettings() {
         if (data) {
             const next = { ...settings };
             data.forEach(row => {
-                if (row.key === 'payment_stripe') next.stripe = { mode: row.value?.mode || 'manual', ...row.value };
-                if (row.key === 'payment_paypal') next.paypal = { mode: row.value?.mode || 'manual', ...row.value };
-                if (row.key === 'payment_transfer') next.transfer = row.value;
+                const val = row.value || {};
+                if (row.key === 'payment_stripe') {
+                    if (val.secretKey && !val.liveSecretKey && !val.testSecretKey) {
+                        if (val.sandbox) val.testSecretKey = val.secretKey;
+                        else val.liveSecretKey = val.secretKey;
+                    }
+                    if (val.publicKey && !val.livePublicKey && !val.testPublicKey) {
+                        if (val.sandbox) val.testPublicKey = val.publicKey;
+                        else val.livePublicKey = val.publicKey;
+                    }
+                    next.stripe = { mode: val.mode || 'manual', ...val };
+                }
+                if (row.key === 'payment_paypal') {
+                    if (val.secretKey && !val.liveSecretKey && !val.testSecretKey) {
+                        if (val.sandbox) val.testSecretKey = val.secretKey;
+                        else val.liveSecretKey = val.secretKey;
+                    }
+                    if (val.clientId && !val.liveClientId && !val.testClientId) {
+                        if (val.sandbox) val.testClientId = val.clientId;
+                        else val.liveClientId = val.clientId;
+                    }
+                    next.paypal = { mode: val.mode || 'manual', ...val };
+                }
+                if (row.key === 'payment_transfer') next.transfer = val;
             });
             setSettings(next);
         }
