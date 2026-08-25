@@ -76,12 +76,12 @@ export default async function handler(req, res) {
             }
         }
 
-        const { action, paypalOrderId, orderId } = req.body;
+        const { action, paypalOrderId, orderId, items, shippingCost, appliedCoupon } = req.body;
 
         // ── ACTION 1: CAPTURE PAYPAL ORDER ──
         if (action === 'capture' || paypalOrderId) {
-            if (!paypalOrderId || !orderId) {
-                return res.status(400).json({ error: 'Se requieren paypalOrderId y orderId para capturar.' });
+            if (!paypalOrderId) {
+                return res.status(400).json({ error: 'Se requiere paypalOrderId para capturar.' });
             }
 
             const captureRes = await fetch(`${activePaypalBaseUrl}/v2/checkout/orders/${paypalOrderId}/capture`, {
@@ -95,14 +95,16 @@ export default async function handler(req, res) {
             const captureData = await captureRes.json();
 
             if (captureData.status === 'COMPLETED' || captureData.status === 'APPROVED') {
-                await supabase
-                    .from('orders')
-                    .update({
-                        status: 'PAID',
-                        payment_status: 'completed',
-                        updated_at: new Date().toISOString()
-                    })
-                    .eq('id', orderId);
+                if (orderId) {
+                    await supabase
+                        .from('orders')
+                        .update({
+                            status: 'PAID',
+                            payment_status: 'completed',
+                            updated_at: new Date().toISOString()
+                        })
+                        .eq('id', orderId);
+                }
 
                 return res.status(200).json({ success: true, capture: captureData });
             } else {
@@ -111,57 +113,56 @@ export default async function handler(req, res) {
         }
 
         // ── ACTION 2: CREATE PAYPAL ORDER ──
-        if (!orderId) {
-            return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
-        }
+        let verifiedTotal = 0;
 
-        // SERVER-SIDE PRICE VERIFICATION
-        const { data: orderItems, error: itemsError } = await supabase
-            .from('order_items')
-            .select('product_id, quantity')
-            .eq('order_id', orderId);
+        if (items && Array.isArray(items) && items.length > 0) {
+            const productIds = items.map(item => item.id || item.product_id);
+            const { data: products, error: productsError } = await supabase
+                .from('products')
+                .select('id, price, discount_price')
+                .in('id', productIds);
 
-        if (itemsError || !orderItems?.length) {
-            return res.status(400).json({ error: 'Pedido no encontrado o sin productos.' });
-        }
-
-        const productIds = orderItems.map(item => item.product_id);
-        const { data: products, error: productsError } = await supabase
-            .from('products')
-            .select('id, price, discount_price')
-            .in('id', productIds);
-
-        if (productsError || !products?.length) {
-            return res.status(400).json({ error: 'Error al verificar los precios.' });
-        }
-
-        const productMap = {};
-        products.forEach(p => {
-            productMap[p.id] = (p.discount_price && p.discount_price > 0 && p.discount_price < p.price)
-                ? p.discount_price
-                : p.price;
-        });
-
-        let verifiedSubtotal = 0;
-        for (const item of orderItems) {
-            const unitPrice = productMap[item.product_id];
-            if (unitPrice === undefined) {
-                return res.status(400).json({ error: `Producto no encontrado.` });
+            if (productsError || !products?.length) {
+                return res.status(400).json({ error: 'Error al verificar los precios del catálogo.' });
             }
-            verifiedSubtotal += unitPrice * item.quantity;
+
+            const productMap = {};
+            products.forEach(p => {
+                productMap[p.id] = (p.discount_price && p.discount_price > 0 && p.discount_price < p.price)
+                    ? p.discount_price
+                    : p.price;
+            });
+
+            let subtotal = 0;
+            for (const item of items) {
+                const itemId = item.id || item.product_id;
+                const unitPrice = productMap[itemId];
+                if (unitPrice === undefined) {
+                    return res.status(400).json({ error: `Producto no encontrado.` });
+                }
+                subtotal += unitPrice * item.quantity;
+            }
+
+            let discount = 0;
+            if (appliedCoupon && appliedCoupon.discount_percentage) {
+                discount = subtotal * (appliedCoupon.discount_percentage / 100);
+            }
+
+            const shipping = Number(shippingCost) || 0;
+            verifiedTotal = Math.max(0, subtotal - discount + shipping);
+        } else if (orderId) {
+            // Fallback for orders created in DB beforehand
+            const { data: orderData } = await supabase
+                .from('orders')
+                .select('total')
+                .eq('id', orderId)
+                .single();
+
+            verifiedTotal = orderData?.total || 0;
         }
-
-        const { data: orderData } = await supabase
-            .from('orders')
-            .select('total')
-            .eq('id', orderId)
-            .single();
-
-        const clientTotal = orderData?.total || 0;
-        const verifiedTotal = clientTotal;
 
         if (!verifiedTotal || verifiedTotal <= 0) {
-            return res.status(400).json({ error: 'Importe no válido.' });
+            return res.status(400).json({ error: 'Importe no válido para la orden de PayPal.' });
         }
 
         const baseUrl = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
@@ -183,7 +184,7 @@ export default async function handler(req, res) {
                     description: 'Pedido Mil Luces',
                 }],
                 application_context: {
-                    return_url: `${baseUrl}/cart?payment=success&order=${orderId}`,
+                    return_url: `${baseUrl}/cart?payment=success`,
                     cancel_url: `${baseUrl}/cart?payment=cancelled`,
                     brand_name: 'Mil Luces',
                     locale: 'es-ES',

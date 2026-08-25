@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabaseClient';
 const FIELD = "w-full bg-gray-50 border border-gray-200 rounded-2xl px-5 py-3.5 text-xs font-mono focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all";
 const LABEL = "text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1.5 block ml-1";
 
-function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, settings, onChange, onSave, saving, onConnectOAuth, onDisconnectOAuth }) {
+function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, settings, onChange, onSave, onToggle, saving, onConnectOAuth, onDisconnectOAuth }) {
     const [show, setShow] = useState({});
     const config = settings[provider] || {};
     const mode = config.mode || 'manual';
@@ -75,7 +75,7 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                     {/* Toggle activo */}
                     <button
                         type="button"
-                        onClick={() => onChange(provider, 'enabled', !config.enabled)}
+                        onClick={() => onToggle ? onToggle(provider, !config.enabled) : onChange(provider, 'enabled', !config.enabled)}
                         className={`relative w-12 h-6 rounded-full transition-all ${config.enabled ? 'bg-primary' : 'bg-gray-200'}`}
                     >
                         <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${config.enabled ? 'translate-x-6' : ''}`}></span>
@@ -296,6 +296,27 @@ export default function PaymentSettings() {
         });
     }
 
+    async function handleToggle(provider, newEnabled) {
+        const keyMap = { stripe: 'payment_stripe', paypal: 'payment_paypal', transfer: 'payment_transfer' };
+        const currentConfig = {
+            ...settings[provider],
+            enabled: newEnabled
+        };
+
+        setSettings(prev => ({ ...prev, [provider]: currentConfig }));
+
+        const { error } = await supabase.from('app_settings').upsert([
+            { key: keyMap[provider], value: currentConfig, description: `Configuración de ${provider}` }
+        ]);
+
+        if (error) {
+            setToast({ type: 'error', text: 'Error al cambiar estado: ' + error.message });
+        } else {
+            setToast({ type: 'success', text: `¡${provider.charAt(0).toUpperCase() + provider.slice(1)} ${newEnabled ? 'activado' : 'desactivado'}!` });
+        }
+        setTimeout(() => setToast({ type: '', text: '' }), 3500);
+    }
+
     async function handleSave(provider) {
         setSaving(provider);
         const keyMap = { stripe: 'payment_stripe', paypal: 'payment_paypal', transfer: 'payment_transfer' };
@@ -309,7 +330,7 @@ export default function PaymentSettings() {
 
         const currentConfig = {
             ...providerData,
-            enabled: true, // Activar automáticamente al guardar llaves
+            enabled: providerData.enabled !== undefined ? providerData.enabled : true,
         };
 
         const { error } = await supabase.from('app_settings').upsert([
@@ -322,7 +343,7 @@ export default function PaymentSettings() {
         if (error) {
             setToast({ type: 'error', text: 'Error al guardar: ' + error.message });
         } else {
-            setToast({ type: 'success', text: `¡${provider.charAt(0).toUpperCase() + provider.slice(1)} guardado y activado!` });
+            setToast({ type: 'success', text: `¡${provider.charAt(0).toUpperCase() + provider.slice(1)} guardado!` });
         }
         setTimeout(() => setToast({ type: '', text: '' }), 3500);
     }
@@ -446,6 +467,7 @@ export default function PaymentSettings() {
                     settings={settings}
                     onChange={handleChange}
                     onSave={handleSave}
+                    onToggle={handleToggle}
                     saving={saving}
                     onConnectOAuth={handleConnectOAuth}
                     onDisconnectOAuth={handleDisconnectOAuth}
@@ -461,6 +483,7 @@ export default function PaymentSettings() {
                     settings={settings}
                     onChange={handleChange}
                     onSave={handleSave}
+                    onToggle={handleToggle}
                     saving={saving}
                     onConnectOAuth={handleConnectOAuth}
                     onDisconnectOAuth={handleDisconnectOAuth}
@@ -476,6 +499,7 @@ export default function PaymentSettings() {
                     settings={settings}
                     onChange={handleChange}
                     onSave={handleSave}
+                    onToggle={handleToggle}
                     saving={saving}
                     onConnectOAuth={handleConnectOAuth}
                     onDisconnectOAuth={handleDisconnectOAuth}

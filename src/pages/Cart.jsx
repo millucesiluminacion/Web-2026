@@ -151,7 +151,10 @@ export default function Cart() {
     };
 
     // Guardar pedido en Supabase
-    async function saveOrder() {
+    async function saveOrder(options = {}) {
+        const orderStatus = options.status || 'PENDING';
+        const paymentStatus = options.payment_status || 'pending';
+
         const { data: order, error } = await supabase
             .from('orders')
             .insert([{
@@ -167,7 +170,8 @@ export default function Cart() {
                 total: effectiveTotalPrice,
                 payment_method: formData.paymentMethod,
                 shipping_method: formData.shippingMethod || 'delivery',
-                status: 'PENDING',
+                status: orderStatus,
+                payment_status: paymentStatus,
                 user_id: user?.id || null,
             }])
             .select()
@@ -758,12 +762,14 @@ export default function Cart() {
                                                         disabled={!formData.name || !formData.email || !formData.phone || !formData.shippingMethod}
                                                         createOrder={async () => {
                                                             setPayError('');
-                                                            const order = await saveOrder();
-                                                            setCreatedOrderId(order.id);
                                                             const res = await fetch('/api/create-paypal-order', {
                                                                 method: 'POST',
                                                                 headers: { 'Content-Type': 'application/json' },
-                                                                body: JSON.stringify({ orderId: order.id }),
+                                                                body: JSON.stringify({
+                                                                    items: cart,
+                                                                    shippingCost: effectiveShippingCost,
+                                                                    appliedCoupon: appliedCoupon
+                                                                }),
                                                             });
                                                             const data = await res.json();
                                                             if (data.error) throw new Error(data.error);
@@ -777,19 +783,20 @@ export default function Cart() {
                                                                     headers: { 'Content-Type': 'application/json' },
                                                                     body: JSON.stringify({
                                                                         action: 'capture',
-                                                                        paypalOrderId: data.orderID,
-                                                                        orderId: createdOrderId
+                                                                        paypalOrderId: data.orderID
                                                                     }),
                                                                 });
                                                                 const result = await res.json();
                                                                 if (result.success) {
-                                                                    setOrderRef(createdOrderId.slice(0, 8).toUpperCase());
+                                                                    const savedOrder = await saveOrder({ status: 'PAID', payment_status: 'completed' });
+                                                                    setOrderRef(savedOrder.id.slice(0, 8).toUpperCase());
                                                                     setOrderCompleted(true);
                                                                     clearCart();
                                                                 } else {
                                                                     setPayError(result.error || 'Error completando el pago con PayPal.');
                                                                 }
                                                             } catch (err) {
+                                                                console.error('[PayPal Capture Error]:', err);
                                                                 setPayError('Error al capturar la orden de PayPal.');
                                                             } finally {
                                                                 setLoading(false);
