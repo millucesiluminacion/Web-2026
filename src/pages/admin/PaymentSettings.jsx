@@ -198,7 +198,19 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {currentFields.map(f => {
-                                const val = config[f.key] !== undefined ? config[f.key] : (f.fallbackKey ? (config[f.fallbackKey] || '') : '');
+                                let val = config[f.key];
+                                if (val === undefined) {
+                                    if (f.fallbackKey) {
+                                        if (isSandbox) {
+                                            val = config[f.fallbackKey] || '';
+                                        } else {
+                                            // In Live mode, only fallback to legacy key if test keys were not explicitly saved
+                                            val = (!config.testClientId && !config.testPublicKey) ? (config[f.fallbackKey] || '') : '';
+                                        }
+                                    } else {
+                                        val = '';
+                                    }
+                                }
                                 return (
                                     <div key={f.key} className={f.key === 'iban' || f.key === 'concepto' ? 'md:col-span-2' : ''}>
                                         <label className={LABEL}>{f.label}</label>
@@ -513,8 +525,8 @@ export default function PaymentSettings() {
                 {/* Fixed Toast Notification */}
                 {toast.text && (
                     <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl text-xs font-black uppercase italic shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-5 duration-300 ${toast.type === 'success'
-                            ? 'bg-emerald-900/90 text-emerald-100 border border-emerald-500/30'
-                            : 'bg-red-900/90 text-red-100 border border-red-500/30'
+                        ? 'bg-emerald-900/90 text-emerald-100 border border-emerald-500/30'
+                        : 'bg-red-900/90 text-red-100 border border-red-500/30'
                         }`}>
                         {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-red-400" />}
                         {toast.text}

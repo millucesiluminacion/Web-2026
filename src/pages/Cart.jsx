@@ -786,7 +786,13 @@ export default function Cart() {
                                                                 }),
                                                             });
                                                             const data = await res.json();
-                                                            if (data.error) throw new Error(data.error);
+                                                            if (data.error) {
+                                                                if (data.debug) {
+                                                                    console.error('[PayPal API Debug Info]:', data.debug);
+                                                                }
+                                                                const debugStr = data.debug ? ` [Sbx: ${data.debug.sandbox} | LiveErr: ${data.debug.paypal_error_live || 'none'} | SbxErr: ${data.debug.paypal_error_sandbox || 'none'}]` : '';
+                                                                throw new Error(data.error + debugStr);
+                                                            }
                                                             return data.orderId;
                                                         }}
                                                         onApprove={async (data) => {
