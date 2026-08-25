@@ -91,11 +91,17 @@ export default function Cart() {
                 data.forEach(row => {
                     if (row.key === 'payment_stripe' && row.value?.enabled) {
                         methods.stripe = row.value;
-                        if (row.value.publicKey) {
-                            setStripePromise(loadStripe(row.value.publicKey));
-                        }
+                        const isSandbox = !!row.value.sandbox;
+                        const pubKey = isSandbox
+                            ? (row.value.testPublicKey || row.value.publicKey || '')
+                            : (row.value.livePublicKey || row.value.publicKey || '');
+                        if (pubKey) setStripePromise(loadStripe(pubKey));
                     }
-                    if (row.key === 'payment_paypal' && row.value?.enabled && (row.value?.clientId || row.value?.secretKey || row.value?.merchantId || row.value?.connectClientId)) {
+                    if (row.key === 'payment_paypal' && row.value?.enabled && (
+                        row.value?.testClientId || row.value?.liveClientId ||
+                        row.value?.clientId || row.value?.secretKey ||
+                        row.value?.merchantId || row.value?.connectClientId
+                    )) {
                         methods.paypal = row.value;
                     }
                     if (row.key === 'payment_transfer' && row.value?.enabled) {
@@ -746,7 +752,14 @@ export default function Cart() {
                                         {formData.paymentMethod === 'paypal' && paymentMethods.paypal && (
                                             <div className="pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
                                                 <PayPalScriptProvider options={{
-                                                    "client-id": (paymentMethods.paypal.clientId || paymentMethods.paypal.connectClientId || "test")?.trim(),
+                                                    "client-id": (() => {
+                                                        const cfg = paymentMethods.paypal;
+                                                        const isSbx = !!cfg.sandbox;
+                                                        const id = isSbx
+                                                            ? (cfg.testClientId || cfg.clientId || cfg.connectClientId || '')
+                                                            : (cfg.liveClientId || cfg.clientId || cfg.connectClientId || '');
+                                                        return id.trim() || 'test';
+                                                    })(),
                                                     currency: "EUR",
                                                     intent: "capture"
                                                 }}>
