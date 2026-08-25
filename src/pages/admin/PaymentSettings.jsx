@@ -83,24 +83,41 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                 </div>
             </div>
 
-            {/* Mode Switcher for Stripe/PayPal */}
+            {/* Mode Switcher & Environment Selector for Stripe/PayPal */}
             {(provider === 'stripe' || provider === 'paypal') && (
                 <div className="px-8 py-3 bg-gray-50/70 border-t border-b border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Modo de Operación:</span>
-                    <div className="flex gap-2 p-1 bg-white rounded-xl border border-gray-200 shadow-inner">
+                    <div className="flex items-center gap-3">
+                        <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Modo:</span>
+                        <div className="flex gap-2 p-1 bg-white rounded-xl border border-gray-200 shadow-inner">
+                            <button
+                                type="button"
+                                onClick={() => onChange(provider, 'mode', 'connect')}
+                                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'connect' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-brand-carbon'}`}
+                            >
+                                ⚡ OAuth Connect
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => onChange(provider, 'mode', 'manual')}
+                                className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'manual' ? 'bg-brand-carbon text-white shadow-sm' : 'text-gray-400 hover:text-brand-carbon'}`}
+                            >
+                                🔑 Llaves Manuales
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest">Entorno:</span>
                         <button
                             type="button"
-                            onClick={() => onChange(provider, 'mode', 'connect')}
-                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'connect' ? 'bg-primary text-white shadow-sm' : 'text-gray-400 hover:text-brand-carbon'}`}
+                            onClick={() => onChange(provider, 'sandbox', !config.sandbox)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${config.sandbox
+                                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                : 'bg-green-50 text-green-700 border-green-200'
+                                }`}
                         >
-                            ⚡ OAuth Connect (Recomendado)
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => onChange(provider, 'mode', 'manual')}
-                            className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'manual' ? 'bg-brand-carbon text-white shadow-sm' : 'text-gray-400 hover:text-brand-carbon'}`}
-                        >
-                            🔑 Llaves Manuales (Fallback)
+                            <span className={`w-2 h-2 rounded-full ${config.sandbox ? 'bg-amber-500' : 'bg-green-500'}`}></span>
+                            {config.sandbox ? '🧪 Pruebas (Sandbox)' : '🚀 Producción (Live)'}
                         </button>
                     </div>
                 </div>
