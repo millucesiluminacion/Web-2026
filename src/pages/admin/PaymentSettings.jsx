@@ -121,8 +121,9 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                         <button
                             type="button"
                             onClick={() => {
-                                onChange(provider, 'sandbox', !config.sandbox);
-                                if (onToggle) onToggle(provider, config.enabled, !config.sandbox);
+                                const newSbx = !config.sandbox;
+                                onChange(provider, 'sandbox', newSbx);
+                                if (onToggle) onToggle(provider, config.enabled, newSbx);
                             }}
                             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-all ${config.sandbox
                                 ? 'bg-amber-50 text-amber-700 border-amber-200'
@@ -335,11 +336,27 @@ export default function PaymentSettings() {
 
     async function handleToggle(provider, newEnabled, newSandbox) {
         const keyMap = { stripe: 'payment_stripe', paypal: 'payment_paypal', transfer: 'payment_transfer' };
-        const currentConfig = {
+
+        let currentConfig = {
             ...settings[provider],
             enabled: newEnabled,
             ...(newSandbox !== undefined ? { sandbox: newSandbox } : {})
         };
+
+        // Always sync active environment keys to legacy fields
+        const isSandbox = !!currentConfig.sandbox;
+        if (provider === 'paypal') {
+            if (isSandbox && currentConfig.testClientId) currentConfig.clientId = currentConfig.testClientId;
+            if (!isSandbox && currentConfig.liveClientId) currentConfig.clientId = currentConfig.liveClientId;
+            if (isSandbox && currentConfig.testSecretKey) currentConfig.secretKey = currentConfig.testSecretKey;
+            if (!isSandbox && currentConfig.liveSecretKey) currentConfig.secretKey = currentConfig.liveSecretKey;
+        }
+        if (provider === 'stripe') {
+            if (isSandbox && currentConfig.testPublicKey) currentConfig.publicKey = currentConfig.testPublicKey;
+            if (!isSandbox && currentConfig.livePublicKey) currentConfig.publicKey = currentConfig.livePublicKey;
+            if (isSandbox && currentConfig.testSecretKey) currentConfig.secretKey = currentConfig.testSecretKey;
+            if (!isSandbox && currentConfig.liveSecretKey) currentConfig.secretKey = currentConfig.liveSecretKey;
+        }
 
         setSettings(prev => ({ ...prev, [provider]: currentConfig }));
 
@@ -351,11 +368,11 @@ export default function PaymentSettings() {
             setToast({ type: 'error', text: 'Error al cambiar estado: ' + error.message });
         } else {
             const msg = newSandbox !== undefined
-                ? `¡Entorno cambiado a ${newSandbox ? 'Pruebas (Sandbox)' : 'Producción (Live)'}! Guarda las claves correspondientes.`
-                : `¡${provider.charAt(0).toUpperCase() + provider.slice(1)} ${newEnabled ? 'activado' : 'desactivado'}!`;
+                ? `Entorno cambiado a ${newSandbox ? '🧪 Pruebas (Sandbox)' : '🚀 Producción (Live)'}`
+                : `${provider.toUpperCase()} ${newEnabled ? 'activado' : 'desactivado'}`;
             setToast({ type: 'success', text: msg });
         }
-        setTimeout(() => setToast({ type: '', text: '' }), 3500);
+        setTimeout(() => setToast({ type: '', text: '' }), 4000);
     }
 
     async function handleSave(provider) {
@@ -493,9 +510,13 @@ export default function PaymentSettings() {
                     <h1 className="text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Métodos de Pago</h1>
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[.3em] mt-2">Soporte dual para OAuth Connect y Llaves Manuales</p>
                 </div>
+                {/* Fixed Toast Notification */}
                 {toast.text && (
-                    <div className={`flex items-center gap-3 px-6 py-3 rounded-2xl text-[10px] font-black uppercase italic animate-in fade-in slide-in-from-right-4 ${toast.type === 'success' ? 'bg-green-50 text-green-700 border border-green-100' : 'bg-red-50 text-red-700 border border-red-100'}`}>
-                        {toast.type === 'success' ? <CheckCircle className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
+                    <div className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl text-xs font-black uppercase italic shadow-2xl backdrop-blur-md animate-in fade-in slide-in-from-top-5 duration-300 ${toast.type === 'success'
+                            ? 'bg-emerald-900/90 text-emerald-100 border border-emerald-500/30'
+                            : 'bg-red-900/90 text-red-100 border border-red-500/30'
+                        }`}>
+                        {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-emerald-400" /> : <AlertCircle className="w-5 h-5 text-red-400" />}
                         {toast.text}
                     </div>
                 )}
