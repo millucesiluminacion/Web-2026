@@ -14,10 +14,10 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
-        const supabase = createClient(
-            process.env.VITE_SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
         const { data } = await supabase
             .from('app_settings')
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'PayPal no está configurado correctamente (falta Client ID).' });
         }
 
-        let activePaypalBaseUrl = (sandbox || String(clientId).startsWith('sb') || String(secretKey).startsWith('E'))
+        let activePaypalBaseUrl = (sandbox || String(clientId).startsWith('sb'))
             ? 'https://api-m.sandbox.paypal.com'
             : 'https://api-m.paypal.com';
 
@@ -72,11 +72,12 @@ export default async function handler(req, res) {
                 authData = altData;
                 activePaypalBaseUrl = alternateUrl;
             } else {
-                return res.status(500).json({ error: 'Error de autenticación con PayPal.' });
+                console.error('[PayPal Auth Error]:', authData, altData);
+                return res.status(500).json({ error: 'Error de autenticación con PayPal. Revisa el Client ID y Secret Key.' });
             }
         }
 
-        const { action, paypalOrderId, orderId, items, shippingCost, appliedCoupon } = req.body;
+        const { action, paypalOrderId, orderId, items, shippingCost, appliedCoupon, total } = req.body;
 
         // ── ACTION 1: CAPTURE PAYPAL ORDER ──
         if (action === 'capture' || paypalOrderId) {
@@ -108,6 +109,7 @@ export default async function handler(req, res) {
 
                 return res.status(200).json({ success: true, capture: captureData });
             } else {
+                console.error('[PayPal Capture Error Details]:', captureData);
                 return res.status(400).json({ error: 'No se pudo completar el cobro en PayPal.', details: captureData });
             }
         }
@@ -116,49 +118,41 @@ export default async function handler(req, res) {
         let verifiedTotal = 0;
 
         if (items && Array.isArray(items) && items.length > 0) {
-            const productIds = items.map(item => item.id || item.product_id);
-            const { data: products, error: productsError } = await supabase
-                .from('products')
-                .select('id, price, discount_price')
-                .in('id', productIds);
+            const productIds = items.map(item => item.id || item.product_id).filter(Boolean);
+            if (productIds.length > 0) {
+                const { data: products } = await supabase
+                    .from('products')
+                    .select('id, price, discount_price')
+                    .in('id', productIds);
 
-            if (productsError || !products?.length) {
-                return res.status(400).json({ error: 'Error al verificar los precios del catálogo.' });
-            }
+                if (products && products.length > 0) {
+                    const productMap = {};
+                    products.forEach(p => {
+                        productMap[p.id] = (p.discount_price && p.discount_price > 0 && p.discount_price < p.price)
+                            ? p.discount_price
+                            : p.price;
+                    });
 
-            const productMap = {};
-            products.forEach(p => {
-                productMap[p.id] = (p.discount_price && p.discount_price > 0 && p.discount_price < p.price)
-                    ? p.discount_price
-                    : p.price;
-            });
+                    let subtotal = 0;
+                    for (const item of items) {
+                        const itemId = item.id || item.product_id;
+                        const unitPrice = productMap[itemId] !== undefined ? productMap[itemId] : (Number(item.price) || 0);
+                        subtotal += unitPrice * item.quantity;
+                    }
 
-            let subtotal = 0;
-            for (const item of items) {
-                const itemId = item.id || item.product_id;
-                const unitPrice = productMap[itemId];
-                if (unitPrice === undefined) {
-                    return res.status(400).json({ error: `Producto no encontrado.` });
+                    let discount = 0;
+                    if (appliedCoupon && appliedCoupon.discount_percentage) {
+                        discount = subtotal * (appliedCoupon.discount_percentage / 100);
+                    }
+
+                    const shipping = Number(shippingCost) || 0;
+                    verifiedTotal = Math.max(0, subtotal - discount + shipping);
                 }
-                subtotal += unitPrice * item.quantity;
             }
+        }
 
-            let discount = 0;
-            if (appliedCoupon && appliedCoupon.discount_percentage) {
-                discount = subtotal * (appliedCoupon.discount_percentage / 100);
-            }
-
-            const shipping = Number(shippingCost) || 0;
-            verifiedTotal = Math.max(0, subtotal - discount + shipping);
-        } else if (orderId) {
-            // Fallback for orders created in DB beforehand
-            const { data: orderData } = await supabase
-                .from('orders')
-                .select('total')
-                .eq('id', orderId)
-                .single();
-
-            verifiedTotal = orderData?.total || 0;
+        if (!verifiedTotal) {
+            verifiedTotal = Number(total) || 0;
         }
 
         if (!verifiedTotal || verifiedTotal <= 0) {
@@ -201,10 +195,14 @@ export default async function handler(req, res) {
             return res.status(200).json({ orderId: paypalOrder.id, approveUrl: approveLink });
         }
 
-        return res.status(500).json({ error: 'Error creando la orden en PayPal.' });
+        console.error('[PayPal Order Creation Rejected]:', paypalOrder);
+        return res.status(400).json({
+            error: paypalOrder.message || paypalOrder.name || 'PayPal rechazó la creación de la orden.',
+            details: paypalOrder
+        });
 
     } catch (err) {
-        console.error('[PayPal API] Error:', err);
-        return res.status(500).json({ error: 'Error procesando la solicitud de PayPal.' });
+        console.error('[PayPal API Catch Error]:', err);
+        return res.status(500).json({ error: err.message || 'Error procesando la solicitud de PayPal.' });
     }
 }

@@ -766,6 +766,7 @@ export default function Cart() {
                                                                 method: 'POST',
                                                                 headers: { 'Content-Type': 'application/json' },
                                                                 body: JSON.stringify({
+                                                                    total: effectiveTotalPrice,
                                                                     items: cart,
                                                                     shippingCost: effectiveShippingCost,
                                                                     appliedCoupon: appliedCoupon
