@@ -170,20 +170,16 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 intent: 'CAPTURE',
                 purchase_units: [{
-                    reference_id: orderId || 'MIL-LUCES',
                     amount: {
                         currency_code: 'EUR',
                         value: parseFloat(verifiedTotal).toFixed(2),
                     },
-                    description: 'Pedido Mil Luces',
+                    description: 'Pedido en Mil Luces',
                 }],
                 application_context: {
-                    return_url: `${baseUrl}/cart?payment=success`,
-                    cancel_url: `${baseUrl}/cart?payment=cancelled`,
                     brand_name: 'Mil Luces',
                     locale: 'es-ES',
                     user_action: 'PAY_NOW',
-                    shipping_preference: 'NO_SHIPPING',
                 },
             }),
         });
@@ -195,9 +191,10 @@ export default async function handler(req, res) {
             return res.status(200).json({ orderId: paypalOrder.id, approveUrl: approveLink });
         }
 
-        console.error('[PayPal Order Creation Rejected]:', paypalOrder);
+        console.error('[PayPal Order Creation Rejected]:', JSON.stringify(paypalOrder, null, 2));
+        const detailMsg = paypalOrder.details?.map(d => `${d.issue || ''}: ${d.description || ''}`).filter(Boolean).join(' | ');
         return res.status(400).json({
-            error: paypalOrder.message || paypalOrder.name || 'PayPal rechazó la creación de la orden.',
+            error: detailMsg || paypalOrder.message || paypalOrder.name || 'PayPal rechazó la creación de la orden.',
             details: paypalOrder
         });
 
