@@ -211,16 +211,33 @@ function ProviderCard({ color, logo, title, subtitle, docsUrl, provider, setting
                                         val = '';
                                     }
                                 }
+
+                                const cleanVal = (val || '').trim();
+                                const isStripeKey = provider === 'stripe';
+                                const isPubKeyField = f.key.toLowerCase().includes('publickey');
+                                const isSecKeyField = f.key.toLowerCase().includes('secretkey');
+                                const hasError = isStripeKey && (
+                                    (isPubKeyField && (cleanVal.startsWith('sk_') || cleanVal.startsWith('rk_'))) ||
+                                    (isSecKeyField && cleanVal.startsWith('pk_'))
+                                );
+
                                 return (
                                     <div key={f.key} className={f.key === 'iban' || f.key === 'concepto' ? 'md:col-span-2' : ''}>
-                                        <label className={LABEL}>{f.label}</label>
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <label className={LABEL}>{f.label}</label>
+                                            {hasError && (
+                                                <span className="text-[9px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-full border border-red-200 animate-pulse">
+                                                    ⚠️ {isPubKeyField ? '¡Debe empezar por pk_!' : '¡Debe empezar por sk_!'}
+                                                </span>
+                                            )}
+                                        </div>
                                         <div className="relative">
                                             <input
                                                 type={f.secret && !show[f.key] ? 'password' : 'text'}
                                                 value={val}
                                                 onChange={e => onChange(provider, f.key, e.target.value)}
                                                 placeholder={f.placeholder}
-                                                className={FIELD}
+                                                className={`${FIELD} ${hasError ? 'border-red-400 bg-red-50/50 focus:border-red-500' : ''}`}
                                             />
                                             {f.secret && (
                                                 <button type="button" onClick={() => toggle(f.key)}
@@ -428,10 +445,50 @@ export default function PaymentSettings() {
             if (!isSandbox && providerData.liveSecretKey) providerData.secretKey = providerData.liveSecretKey;
         }
         if (provider === 'stripe') {
+            let wasSwapped = false;
+
+            // Auto-detect swapped test keys
+            if (providerData.testPublicKey && (providerData.testPublicKey.startsWith('sk_') || providerData.testPublicKey.startsWith('rk_')) &&
+                providerData.testSecretKey && providerData.testSecretKey.startsWith('pk_')) {
+                const temp = providerData.testPublicKey;
+                providerData.testPublicKey = providerData.testSecretKey;
+                providerData.testSecretKey = temp;
+                wasSwapped = true;
+            } else if (providerData.testPublicKey && (providerData.testPublicKey.startsWith('sk_') || providerData.testPublicKey.startsWith('rk_')) && !providerData.testSecretKey) {
+                providerData.testSecretKey = providerData.testPublicKey;
+                providerData.testPublicKey = '';
+                wasSwapped = true;
+            } else if (providerData.testSecretKey && providerData.testSecretKey.startsWith('pk_') && !providerData.testPublicKey) {
+                providerData.testPublicKey = providerData.testSecretKey;
+                providerData.testSecretKey = '';
+                wasSwapped = true;
+            }
+
+            // Auto-detect swapped live keys
+            if (providerData.livePublicKey && (providerData.livePublicKey.startsWith('sk_') || providerData.livePublicKey.startsWith('rk_')) &&
+                providerData.liveSecretKey && providerData.liveSecretKey.startsWith('pk_')) {
+                const temp = providerData.livePublicKey;
+                providerData.livePublicKey = providerData.liveSecretKey;
+                providerData.liveSecretKey = temp;
+                wasSwapped = true;
+            } else if (providerData.livePublicKey && (providerData.livePublicKey.startsWith('sk_') || providerData.livePublicKey.startsWith('rk_')) && !providerData.liveSecretKey) {
+                providerData.liveSecretKey = providerData.livePublicKey;
+                providerData.livePublicKey = '';
+                wasSwapped = true;
+            } else if (providerData.liveSecretKey && providerData.liveSecretKey.startsWith('pk_') && !providerData.livePublicKey) {
+                providerData.livePublicKey = providerData.liveSecretKey;
+                providerData.liveSecretKey = '';
+                wasSwapped = true;
+            }
+
             if (isSandbox && providerData.testPublicKey) providerData.publicKey = providerData.testPublicKey;
             if (!isSandbox && providerData.livePublicKey) providerData.publicKey = providerData.livePublicKey;
             if (isSandbox && providerData.testSecretKey) providerData.secretKey = providerData.testSecretKey;
             if (!isSandbox && providerData.liveSecretKey) providerData.secretKey = providerData.liveSecretKey;
+
+            if (wasSwapped) {
+                setToast({ type: 'success', text: '⚠️ Las claves estaban invertidas (pk_ vs sk_) y se han corregido automáticamente.' });
+            }
         }
 
         const currentConfig = {

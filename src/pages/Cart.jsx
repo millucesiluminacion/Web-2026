@@ -77,31 +77,78 @@ export default function Cart() {
         }
     }, [searchParams]);
 
-    // Cargar métodos de pago activos del admin
+    // Cargar métodos de pago activos del admin de forma segura (sin exponer claves secretas)
     useEffect(() => {
         async function loadPaymentMethods() {
             setPaymentLoading(true);
+            const methods = { stripe: null, paypal: null, transfer: null, stripeKeyError: null };
+
+            try {
+                const res = await fetch('/api/public-payment-settings');
+                if (res.ok) {
+                    const data = await res.json();
+
+                    if (data.stripe?.enabled) {
+                        methods.stripe = data.stripe;
+                        if (data.stripe.publicKey && data.stripe.publicKey.startsWith('pk_')) {
+                            setStripePromise(loadStripe(data.stripe.publicKey));
+                        } else {
+                            methods.stripeKeyError = data.stripe.keyError || 'Clave pública de Stripe no válida (debe empezar por pk_test_ o pk_live_).';
+                        }
+                    }
+
+                    if (data.paypal?.enabled) {
+                        methods.paypal = data.paypal;
+                    }
+
+                    if (data.transfer?.enabled) {
+                        methods.transfer = data.transfer;
+                        setTransferInfo(data.transfer);
+                    }
+
+                    setPaymentMethods(methods);
+                    const firstActive = methods.stripe ? 'stripe' : methods.paypal ? 'paypal' : methods.transfer ? 'transfer' : '';
+                    setFormData(prev => ({ ...prev, paymentMethod: firstActive }));
+                    setPaymentLoading(false);
+                    return;
+                }
+            } catch (err) {
+                console.warn('[Cart] Error al consultar API de ajustes de pago públicos, aplicando fallback Supabase:', err.message);
+            }
+
+            // Fallback de seguridad mediante Supabase directo
             const { data } = await supabase
                 .from('app_settings')
                 .select('key, value')
                 .in('key', ['payment_stripe', 'payment_paypal', 'payment_transfer']);
 
-            const methods = { stripe: null, paypal: null, transfer: null };
             if (data) {
                 data.forEach(row => {
                     if (row.key === 'payment_stripe' && row.value?.enabled) {
                         methods.stripe = row.value;
                         const isSandbox = !!row.value.sandbox;
-                        const pubKey = isSandbox
+                        let rawPubKey = isSandbox
                             ? (row.value.testPublicKey || row.value.publicKey || '')
                             : (row.value.livePublicKey || row.value.publicKey || '');
-                        if (pubKey) setStripePromise(loadStripe(pubKey));
+                        let rawSecKey = isSandbox
+                            ? (row.value.testSecretKey || row.value.secretKey || '')
+                            : (row.value.liveSecretKey || row.value.secretKey || '');
+
+                        rawPubKey = (rawPubKey || '').trim().replace(/^["']|["']$/g, '');
+                        rawSecKey = (rawSecKey || '').trim().replace(/^["']|["']$/g, '');
+
+                        // Auto-correct swapped keys
+                        if ((rawPubKey.startsWith('sk_') || rawPubKey.startsWith('rk_')) && rawSecKey.startsWith('pk_')) {
+                            rawPubKey = rawSecKey;
+                        }
+
+                        if (rawPubKey && rawPubKey.startsWith('pk_')) {
+                            setStripePromise(loadStripe(rawPubKey));
+                        } else {
+                            methods.stripeKeyError = 'La clave pública de Stripe no es válida (debe empezar por pk_test_ o pk_live_).';
+                        }
                     }
-                    if (row.key === 'payment_paypal' && row.value?.enabled && (
-                        row.value?.testClientId || row.value?.liveClientId ||
-                        row.value?.clientId || row.value?.secretKey ||
-                        row.value?.merchantId || row.value?.connectClientId
-                    )) {
+                    if (row.key === 'payment_paypal' && row.value?.enabled) {
                         methods.paypal = row.value;
                     }
                     if (row.key === 'payment_transfer' && row.value?.enabled) {
@@ -728,23 +775,32 @@ export default function Cart() {
                                         </div>
 
                                         {/* Formulario Stripe Embebido */}
-                                        {formData.paymentMethod === 'stripe' && stripePromise && (
+                                        {formData.paymentMethod === 'stripe' && (
                                             <div className="pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
-                                                <Elements stripe={stripePromise}>
-                                                    <StripePaymentForm
-                                                        amount={effectiveTotalPrice}
-                                                        prePaymentHook={async () => {
-                                                            try {
-                                                                const order = await saveOrder();
-                                                                return { orderId: order.id };
-                                                            } catch (err) {
-                                                                return { error: err.message || 'Error al crear el pedido' };
-                                                            }
-                                                        }}
-                                                        onSucceeded={handlePaymentSucceeded}
-                                                        onFailed={handlePaymentFailed}
-                                                    />
-                                                </Elements>
+                                                {stripePromise ? (
+                                                    <Elements stripe={stripePromise}>
+                                                        <StripePaymentForm
+                                                            amount={effectiveTotalPrice}
+                                                            prePaymentHook={async () => {
+                                                                try {
+                                                                    const order = await saveOrder();
+                                                                    return { orderId: order.id };
+                                                                } catch (err) {
+                                                                    return { error: err.message || 'Error al crear el pedido' };
+                                                                }
+                                                            }}
+                                                            onSucceeded={handlePaymentSucceeded}
+                                                            onFailed={handlePaymentFailed}
+                                                        />
+                                                    </Elements>
+                                                ) : (
+                                                    <div className="flex items-center gap-3 bg-red-50 border border-red-100 rounded-2xl p-5 text-red-700 text-xs font-bold">
+                                                        <AlertCircle className="w-5 h-5 shrink-0 text-red-500" />
+                                                        <p>
+                                                            ⚠️ {paymentMethods.stripeKeyError || 'No se ha podido inicializar Stripe. La clave pública no es válida (debe empezar por pk_test_ o pk_live_). Por favor, verifica la configuración en el Panel Admin -> Métodos de Pago.'}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 

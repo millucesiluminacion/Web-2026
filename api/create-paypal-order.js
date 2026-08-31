@@ -209,6 +209,8 @@ export default async function handler(req, res) {
                     brand_name: 'Mil Luces',
                     locale: 'es-ES',
                     user_action: 'PAY_NOW',
+                    return_url: `${baseUrl}/cart?paypal=success`,
+                    cancel_url: `${baseUrl}/cart?paypal=cancel`,
                 },
             }),
         });

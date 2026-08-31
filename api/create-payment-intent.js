@@ -31,11 +31,22 @@ export default async function handler(req, res) {
         const stripeConfig = data?.value || {};
         const isSandbox = stripeConfig.sandbox || stripeConfig.mode === 'sandbox';
 
-        const rawSecretKey = isSandbox
+        let rawSecretKey = isSandbox
             ? (stripeConfig.testSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '')
             : (stripeConfig.liveSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '');
 
-        const secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
+        let secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
+
+        if (secretKey.startsWith('pk_')) {
+            const rawPubKey = isSandbox
+                ? (stripeConfig.testPublicKey || stripeConfig.publicKey || '')
+                : (stripeConfig.livePublicKey || stripeConfig.publicKey || '');
+            const cleanPubKey = rawPubKey.trim().replace(/^["']|["']$/g, '');
+            if (cleanPubKey.startsWith('sk_') || cleanPubKey.startsWith('rk_')) {
+                secretKey = cleanPubKey;
+                console.log('[Stripe Intent API] Keys were inverted in DB settings; auto-corrected secretKey on backend.');
+            }
+        }
 
         if (!secretKey) {
             return res.status(400).json({ error: 'Stripe no está configurado en el panel de administración.' });

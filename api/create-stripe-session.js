@@ -26,11 +26,30 @@ export default async function handler(req, res) {
             .eq('key', 'payment_stripe')
             .single();
 
-        if (error || !data?.value?.secretKey) {
+        const stripeConfig = data?.value || {};
+        const isSandbox = stripeConfig.sandbox || stripeConfig.mode === 'sandbox';
+
+        let rawSecretKey = isSandbox
+            ? (stripeConfig.testSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '')
+            : (stripeConfig.liveSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '');
+
+        let secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
+
+        if (secretKey.startsWith('pk_')) {
+            const rawPubKey = isSandbox
+                ? (stripeConfig.testPublicKey || stripeConfig.publicKey || '')
+                : (stripeConfig.livePublicKey || stripeConfig.publicKey || '');
+            const cleanPubKey = rawPubKey.trim().replace(/^["']|["']$/g, '');
+            if (cleanPubKey.startsWith('sk_') || cleanPubKey.startsWith('rk_')) {
+                secretKey = cleanPubKey;
+            }
+        }
+
+        if (!secretKey) {
             return res.status(400).json({ error: 'Stripe no está configurado en el admin.' });
         }
 
-        const stripe = new Stripe(data.value.secretKey, { apiVersion: '2024-04-10' });
+        const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10' });
 
         const { items, orderId } = req.body;
 
