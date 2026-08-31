@@ -101,8 +101,7 @@ export default async function handler(req, res) {
                 .from('orders')
                 .update({
                     status: 'PAID',
-                    payment_status: 'completed',
-                    payment_intent_id: paymentIntentId
+                    payment_status: 'PAID'
                 })
                 .eq('id', orderId)
                 .select()
@@ -110,7 +109,7 @@ export default async function handler(req, res) {
 
             if (updateErr) {
                 console.error('[Stripe Confirm API] DB update error:', updateErr.message);
-                return res.status(500).json({ error: 'Error al actualizar el estado del pedido en la base de datos.' });
+                return res.status(500).json({ error: updateErr.message || 'Error al actualizar el estado del pedido en la base de datos.' });
             }
 
             console.log(`[Stripe Confirm API] Order ${orderId} successfully marked as PAID.`);
@@ -181,12 +180,6 @@ export default async function handler(req, res) {
                 enabled: true,
             },
         }, stripeOptions);
-
-        // Update order with payment intent ID for tracking
-        await supabase
-            .from('orders')
-            .update({ payment_intent_id: paymentIntent.id })
-            .eq('id', orderId);
 
         return res.status(200).json({
             clientSecret: paymentIntent.client_secret,
