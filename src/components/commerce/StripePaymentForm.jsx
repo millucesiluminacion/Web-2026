@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { PaymentElement, ExpressCheckoutElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { Loader2, ShieldCheck, AlertCircle, Lock } from 'lucide-react';
 
 export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePaymentHook }) {
@@ -7,6 +7,63 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
     const elements = useElements();
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const processPayment = async (orderIdOverride) => {
+        let orderId = orderIdOverride || null;
+
+        if (!orderId && prePaymentHook) {
+            const result = await prePaymentHook();
+            if (result.error) throw new Error(result.error);
+            orderId = result.orderId;
+        }
+
+        const response = await fetch('/api/create-payment-intent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                orderId: orderId,
+                metadata: { orderId: orderId || '' }
+            }),
+        });
+
+        const data = await response.json();
+        if (!response.ok || data.error) {
+            throw new Error(data.error || 'Error al conectar con el servidor de pago.');
+        }
+
+        const { clientSecret } = data;
+
+        const result = await stripe.confirmPayment({
+            elements,
+            clientSecret,
+            confirmParams: {
+                return_url: `${window.location.origin}/cart?payment=success&order=${orderId}`,
+            },
+            redirect: 'if_required',
+        });
+
+        if (result.error) {
+            setError(result.error.message);
+            if (onFailed) await onFailed(result.error.message, orderId);
+        } else {
+            if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+                if (onSucceeded) await onSucceeded(result.paymentIntent, orderId);
+            }
+        }
+    };
+
+    const handleExpressConfirm = async (event) => {
+        setLoading(true);
+        setError(null);
+        try {
+            await processPayment();
+        } catch (err) {
+            setError(err.message || 'Error con Apple Pay / Google Pay.');
+            if (onFailed) await onFailed(err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSubmit = async (event) => {
         event.preventDefault();
@@ -19,7 +76,6 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
         setError(null);
 
         try {
-            // 0. Validar formulario de Stripe antes de crear el pedido en Supabase
             const { error: submitError } = await elements.submit();
             if (submitError) {
                 setError(submitError.message);
@@ -27,50 +83,7 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                 return;
             }
 
-            // 1. Ejecutar validaciones y creación de borrador de pedido previo
-            let orderId = null;
-            if (prePaymentHook) {
-                const result = await prePaymentHook();
-                if (result.error) throw new Error(result.error);
-                orderId = result.orderId;
-            }
-
-            // 2. Crear el PaymentIntent en nuestro servidor
-            const response = await fetch('/api/create-payment-intent', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    orderId: orderId,
-                    metadata: { orderId: orderId || '' }
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok || data.error) {
-                throw new Error(data.error || 'Error al conectar con el servidor de pago.');
-            }
-
-            const { clientSecret } = data;
-
-            // 3. Confirmar el pago (soporta Tarjetas, Google Pay, Apple Pay, Bizum)
-            const result = await stripe.confirmPayment({
-                elements,
-                clientSecret,
-                confirmParams: {
-                    return_url: `${window.location.origin}/cart?payment=success&order=${orderId}`,
-                },
-                redirect: 'if_required',
-            });
-
-            if (result.error) {
-                setError(result.error.message);
-                if (onFailed) await onFailed(result.error.message, orderId);
-            } else {
-                if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-                    if (onSucceeded) await onSucceeded(result.paymentIntent, orderId);
-                }
-            }
+            await processPayment();
         } catch (err) {
             setError(err.message || 'Error al procesar el pago.');
             if (onFailed) await onFailed(err.message);
@@ -81,13 +94,25 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
 
     return (
         <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 shadow-sm transition-all">
-                <div className="flex items-center justify-between mb-4">
+            <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 shadow-sm transition-all space-y-4">
+                <div className="flex items-center justify-between mb-2">
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
-                        <Lock className="w-3 h-3 text-primary" /> Métodos de Pago Seguros (Tarjetas, Google Pay, Apple Pay, Bizum)
+                        <Lock className="w-3 h-3 text-primary" /> Métodos de Pago Seguros
                     </label>
                 </div>
 
+                {/* Botón Exprés (Apple Pay / Google Pay) */}
+                <div className="rounded-2xl overflow-hidden">
+                    <ExpressCheckoutElement onConfirm={handleExpressConfirm} options={{ buttonHeight: 50 }} />
+                </div>
+
+                <div className="relative flex py-2 items-center">
+                    <div className="flex-grow border-t border-gray-200"></div>
+                    <span className="flex-shrink mx-4 text-[9px] font-black uppercase text-gray-400 tracking-widest">o paga con tarjeta / Bizum</span>
+                    <div className="flex-grow border-t border-gray-200"></div>
+                </div>
+
+                {/* Formulario completo de Tarjetas y Bizum */}
                 <div className="p-4 bg-white rounded-2xl border border-gray-100 transition-all">
                     <PaymentElement options={{ layout: 'tabs' }} />
                 </div>
