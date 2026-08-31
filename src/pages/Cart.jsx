@@ -331,7 +331,7 @@ export default function Cart() {
     // Guardar pedido en Supabase
     async function saveOrder(options = {}) {
         const isOnlinePayment = formData.paymentMethod === 'stripe' || formData.paymentMethod === 'paypal';
-        const defaultStatus = isOnlinePayment ? 'PAYMENT_PENDING' : 'PENDING';
+        const defaultStatus = 'PENDING';
         const defaultPaymentStatus = isOnlinePayment ? 'unpaid' : 'pending';
 
         const orderStatus = options.status || defaultStatus;
