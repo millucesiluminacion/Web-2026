@@ -70,7 +70,15 @@ export default async function handler(req, res) {
             stripeOptions.stripeAccount = stripeConfig.connectAccountId;
         }
 
-        const { orderId, metadata = {} } = req.body || {};
+        let body = req.body || {};
+        if (typeof body === 'string') {
+            try {
+                body = JSON.parse(body);
+            } catch (e) {
+                console.error('[Stripe Intent] Could not parse string body:', e.message);
+            }
+        }
+        const { orderId, metadata = {} } = body;
 
         if (!orderId) {
             return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
@@ -155,8 +163,10 @@ export default async function handler(req, res) {
 
     } catch (err) {
         console.error('[Stripe PaymentIntent Catch Error]:', err);
-        return res.status(500).json({
-            error: err.message || 'Error al procesar el pago en Stripe.',
+        const isStripeErr = err.type && (err.type.startsWith('Stripe') || err.type.includes('Error'));
+        const statusCode = err.statusCode || (isStripeErr ? 400 : 500);
+        return res.status(statusCode).json({
+            error: err.raw?.message || err.message || 'Error al procesar el pago en Stripe.',
             code: err.code || null,
             type: err.type || null
         });
