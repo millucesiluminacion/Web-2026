@@ -65,9 +65,9 @@ export default async function handler(req, res) {
         const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10' });
 
         // Determinar si usar cuenta conectada (Stripe Connect)
-        const stripeOptions = {};
+        let stripeOptions = undefined;
         if (stripeConfig.mode === 'connect' && stripeConfig.connectAccountId) {
-            stripeOptions.stripeAccount = stripeConfig.connectAccountId;
+            stripeOptions = { stripeAccount: stripeConfig.connectAccountId };
         }
 
         let body = req.body || {};
