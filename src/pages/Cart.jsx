@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +32,7 @@ export default function Cart() {
     const [orderCompleted, setOrderCompleted] = useState(false);
     const [orderRef, setOrderRef] = useState('');
     const [createdOrderId, setCreatedOrderId] = useState('');
+    const createdOrderIdRef = useRef('');
     const [showOrderSummary, setShowOrderSummary] = useState(true);
     const [paymentMethods, setPaymentMethods] = useState({ stripe: null, paypal: null, transfer: null });
     const [payError, setPayError] = useState('');
@@ -361,6 +362,7 @@ export default function Cart() {
             .maybeSingle();
 
         if (error) throw error;
+        createdOrderIdRef.current = order.id;
         setCreatedOrderId(order.id);
 
         const orderItems = cart.map(item => ({
@@ -380,8 +382,8 @@ export default function Cart() {
         return order;
     }
 
-    const handlePaymentSucceeded = async (paymentIntent) => {
-        const orderIdToUpdate = createdOrderId;
+    const handlePaymentSucceeded = async (paymentIntent, overrideOrderId) => {
+        const orderIdToUpdate = overrideOrderId || createdOrderIdRef.current || createdOrderId;
 
         if (orderIdToUpdate) {
             // Actualizar pedido a PAGADO
@@ -408,14 +410,16 @@ export default function Cart() {
         setLoading(false);
     };
 
-    const handlePaymentFailed = async (error) => {
+    const handlePaymentFailed = async (error, overrideOrderId) => {
         setPayError(error?.message || error || 'Error en el pago');
+        const idToDelete = overrideOrderId || createdOrderIdRef.current || createdOrderId;
 
-        if (createdOrderId) {
+        if (idToDelete) {
             // Eliminar pedido borrador si el pago no se completó
             try {
-                await supabase.from('order_items').delete().eq('order_id', createdOrderId);
-                await supabase.from('orders').delete().eq('id', createdOrderId);
+                await supabase.from('order_items').delete().eq('order_id', idToDelete);
+                await supabase.from('orders').delete().eq('id', idToDelete);
+                createdOrderIdRef.current = '';
                 setCreatedOrderId('');
             } catch (e) {
                 console.error('Error al limpiar pedido tras fallo de pago:', e);
