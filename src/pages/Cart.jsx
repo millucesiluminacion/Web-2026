@@ -67,14 +67,32 @@ export default function Cart() {
     const baseImponible = effectiveTotalPrice / (1 + IVA_RATE);
     const iva = effectiveTotalPrice - baseImponible;
 
-    // Verificar si venimos de un pago exitoso
+    // Verificar si venimos de un pago exitoso (incluyendo redirecciones como Bizum o 3DSecure)
     useEffect(() => {
         const paymentStatus = searchParams.get('payment');
         const orderId = searchParams.get('order');
-        if (paymentStatus === 'success' && orderId) {
-            setOrderRef(orderId.slice(0, 8).toUpperCase());
-            setOrderCompleted(true);
-            clearCart();
+        const paymentIntentId = searchParams.get('payment_intent');
+
+        if ((paymentStatus === 'success' || paymentIntentId) && orderId) {
+            async function confirmRedirectPayment() {
+                try {
+                    await fetch('/api/create-payment-intent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'confirm',
+                            orderId: orderId,
+                            paymentIntentId: paymentIntentId
+                        })
+                    });
+                } catch (e) {
+                    console.error('Error al confirmar pago tras redirección:', e);
+                }
+                setOrderRef(orderId.slice(0, 8).toUpperCase());
+                setOrderCompleted(true);
+                clearCart();
+            }
+            confirmRedirectPayment();
         }
     }, [searchParams]);
 
@@ -849,7 +867,24 @@ export default function Cart() {
                                         {formData.paymentMethod === 'stripe' && (
                                             <div className="pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
                                                 {stripePromise ? (
-                                                    <Elements stripe={stripePromise}>
+                                                    <Elements
+                                                        stripe={stripePromise}
+                                                        options={{
+                                                            mode: 'payment',
+                                                            amount: Math.max(100, Math.round(effectiveTotalPrice * 100)),
+                                                            currency: 'eur',
+                                                            appearance: {
+                                                                theme: 'stripe',
+                                                                variables: {
+                                                                    colorPrimary: '#1a1a1a',
+                                                                    colorBackground: '#ffffff',
+                                                                    colorText: '#1a1a1a',
+                                                                    borderRadius: '16px',
+                                                                    fontFamily: '"Outfit", sans-serif',
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
                                                         <StripePaymentForm
                                                             amount={effectiveTotalPrice}
                                                             prePaymentHook={async () => {

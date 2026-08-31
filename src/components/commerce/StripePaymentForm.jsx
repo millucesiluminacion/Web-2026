@@ -1,24 +1,6 @@
 import React, { useState } from 'react';
-import { CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import { Loader2, ShieldCheck, AlertCircle, CheckCircle2, Lock } from 'lucide-react';
-
-const CARD_ELEMENT_OPTIONS = {
-    style: {
-        base: {
-            color: '#1a1a1a',
-            fontFamily: '"Outfit", sans-serif',
-            fontSmoothing: 'antialiased',
-            fontSize: '16px',
-            '::placeholder': {
-                color: '#a1a1aa',
-            },
-        },
-        invalid: {
-            color: '#ef4444',
-            iconColor: '#ef4444',
-        },
-    },
-};
+import { PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { Loader2, ShieldCheck, AlertCircle, Lock } from 'lucide-react';
 
 export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePaymentHook }) {
     const stripe = useStripe();
@@ -37,7 +19,15 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
         setError(null);
 
         try {
-            // 0. Ejecutar validaciones y creación de pedido previa
+            // 0. Validar formulario de Stripe antes de crear el pedido en Supabase
+            const { error: submitError } = await elements.submit();
+            if (submitError) {
+                setError(submitError.message);
+                setLoading(false);
+                return;
+            }
+
+            // 1. Ejecutar validaciones y creación de borrador de pedido previo
             let orderId = null;
             if (prePaymentHook) {
                 const result = await prePaymentHook();
@@ -45,7 +35,7 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                 orderId = result.orderId;
             }
 
-            // 1. Crear el PaymentIntent en nuestro servidor (con verificación de precio)
+            // 2. Crear el PaymentIntent en nuestro servidor
             const response = await fetch('/api/create-payment-intent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -63,44 +53,43 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
 
             const { clientSecret } = data;
 
-            // 2. Confirmar el pago en el cliente
-            const result = await stripe.confirmCardPayment(clientSecret, {
-                payment_method: {
-                    card: elements.getElement(CardElement),
+            // 3. Confirmar el pago (soporta Tarjetas, Google Pay, Apple Pay, Bizum)
+            const result = await stripe.confirmPayment({
+                elements,
+                clientSecret,
+                confirmParams: {
+                    return_url: `${window.location.origin}/cart?payment=success&order=${orderId}`,
                 },
+                redirect: 'if_required',
             });
 
             if (result.error) {
                 setError(result.error.message);
                 if (onFailed) await onFailed(result.error.message, orderId);
             } else {
-                if (result.paymentIntent.status === 'succeeded') {
+                if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
                     if (onSucceeded) await onSucceeded(result.paymentIntent, orderId);
                 }
             }
         } catch (err) {
             setError(err.message || 'Error al procesar el pago.');
-            if (onFailed) await onFailed(err.message, orderId);
+            if (onFailed) await onFailed(err.message);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="space-y-6">
-            <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 shadow-sm group focus-within:border-primary/20 transition-all">
+        <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 shadow-sm transition-all">
                 <div className="flex items-center justify-between mb-4">
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
-                        <Lock className="w-3 h-3 text-primary" /> Datos de Tarjeta Seguros
+                        <Lock className="w-3 h-3 text-primary" /> Métodos de Pago Seguros (Tarjetas, Google Pay, Apple Pay, Bizum)
                     </label>
-                    <div className="flex gap-1.5 grayscale opacity-50">
-                        <span className="text-xl">💳</span>
-                        <span className="text-xl">🏦</span>
-                    </div>
                 </div>
 
-                <div className="p-4 bg-white rounded-xl border border-gray-100 group-focus-within:shadow-luxury transition-all">
-                    <CardElement options={CARD_ELEMENT_OPTIONS} />
+                <div className="p-4 bg-white rounded-2xl border border-gray-100 transition-all">
+                    <PaymentElement options={{ layout: 'tabs' }} />
                 </div>
             </div>
 
@@ -112,9 +101,8 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
             )}
 
             <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={!stripe || loading}
+                type="submit"
+                disabled={!stripe || !elements || loading}
                 className="w-full h-16 bg-brand-carbon text-white rounded-[2rem] font-black uppercase italic tracking-widest hover:bg-primary transition-all shadow-xl shadow-brand-carbon/20 flex items-center justify-center gap-4 group disabled:opacity-50"
             >
                 {loading ? (
@@ -130,6 +118,6 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
             <p className="text-[9px] text-center text-gray-400 font-bold uppercase tracking-widest">
                 Tu pago se procesa de forma segura a través de Stripe con encriptación SSL de 256 bits.
             </p>
-        </div>
+        </form>
     );
 }
