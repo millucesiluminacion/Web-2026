@@ -84,6 +84,39 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
         }
 
+        // CONFIRMAR PAGO EN SERVIDOR (service_role bypasses RLS)
+        if (body.action === 'confirm') {
+            const { paymentIntentId } = body;
+            if (!paymentIntentId) {
+                return res.status(400).json({ error: 'Se requiere paymentIntentId para confirmar el pago.' });
+            }
+
+            const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId, stripeOptions);
+
+            if (paymentIntent.status !== 'succeeded') {
+                return res.status(400).json({ error: `El pago no está completado en Stripe. Estado actual: ${paymentIntent.status}` });
+            }
+
+            const { data: updatedOrder, error: updateErr } = await supabase
+                .from('orders')
+                .update({
+                    status: 'PAID',
+                    payment_status: 'completed',
+                    payment_intent_id: paymentIntentId
+                })
+                .eq('id', orderId)
+                .select()
+                .maybeSingle();
+
+            if (updateErr) {
+                console.error('[Stripe Confirm API] DB update error:', updateErr.message);
+                return res.status(500).json({ error: 'Error al actualizar el estado del pedido en la base de datos.' });
+            }
+
+            console.log(`[Stripe Confirm API] Order ${orderId} successfully marked as PAID.`);
+            return res.status(200).json({ success: true, order: updatedOrder });
+        }
+
         // SERVER-SIDE PRICE VERIFICATION
         // 1. Fetch order items from the database
         const { data: orderItems, error: itemsError } = await supabase

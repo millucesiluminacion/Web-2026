@@ -386,17 +386,42 @@ export default function Cart() {
         const orderIdToUpdate = overrideOrderId || createdOrderIdRef.current || createdOrderId;
 
         if (orderIdToUpdate) {
-            // Actualizar pedido a PAGADO
-            const { data: updatedOrder } = await supabase
-                .from('orders')
-                .update({
-                    status: 'PAID',
-                    payment_status: 'completed',
-                    payment_intent_id: paymentIntent?.id || null
-                })
-                .eq('id', orderIdToUpdate)
-                .select()
-                .maybeSingle();
+            let updatedOrder = null;
+
+            try {
+                // 1. Confirmar pago en el servidor con service_role (bypasses RLS)
+                const res = await fetch('/api/create-payment-intent', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'confirm',
+                        orderId: orderIdToUpdate,
+                        paymentIntentId: paymentIntent?.id
+                    })
+                });
+
+                if (res.ok) {
+                    const confirmData = await res.json();
+                    updatedOrder = confirmData.order;
+                }
+            } catch (e) {
+                console.error('[Cart] Error confirming payment on server API:', e);
+            }
+
+            // Fallback a actualización cliente en Supabase si fuera necesario
+            if (!updatedOrder) {
+                const { data: directOrder } = await supabase
+                    .from('orders')
+                    .update({
+                        status: 'PAID',
+                        payment_status: 'completed',
+                        payment_intent_id: paymentIntent?.id || null
+                    })
+                    .eq('id', orderIdToUpdate)
+                    .select()
+                    .maybeSingle();
+                updatedOrder = directOrder;
+            }
 
             // Enviar emails de confirmación AHORA que el pago se ha confirmado
             if (updatedOrder) {
