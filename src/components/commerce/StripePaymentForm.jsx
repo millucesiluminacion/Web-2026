@@ -55,11 +55,13 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                 }),
             });
 
-            const { clientSecret, error: backendError } = await response.json();
+            const data = await response.json();
 
-            if (backendError) {
-                throw new Error(backendError);
+            if (!response.ok || data.error) {
+                throw new Error(data.error || 'Error al conectar con el servidor de pago.');
             }
+
+            const { clientSecret } = data;
 
             // 2. Confirmar el pago en el cliente
             const result = await stripe.confirmCardPayment(clientSecret, {

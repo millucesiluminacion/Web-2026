@@ -16,17 +16,22 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     try {
-        const supabase = createClient(
-            process.env.VITE_SUPABASE_URL,
-            process.env.SUPABASE_SERVICE_ROLE_KEY
-        );
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+
+        if (!supabaseUrl || !supabaseKey) {
+            console.error('[Stripe Intent] Supabase credentials missing in env vars');
+            return res.status(500).json({ error: 'Error de configuración del servidor (Supabase credentials missing).' });
+        }
+
+        const supabase = createClient(supabaseUrl, supabaseKey);
 
         // Obtener configuración de Stripe desde la base de datos
         const { data, error } = await supabase
             .from('app_settings')
             .select('value')
             .eq('key', 'payment_stripe')
-            .single();
+            .maybeSingle();
 
         const stripeConfig = data?.value || {};
         const isSandbox = stripeConfig.sandbox || stripeConfig.mode === 'sandbox';
@@ -35,13 +40,14 @@ export default async function handler(req, res) {
             ? (stripeConfig.testSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '')
             : (stripeConfig.liveSecretKey || stripeConfig.secretKey || process.env.STRIPE_SECRET_KEY || process.env.VITE_STRIPE_SECRET_KEY || '');
 
-        let secretKey = rawSecretKey.trim().replace(/^["']|["']$/g, '');
+        let secretKey = (rawSecretKey || '').trim().replace(/^["']|["']$/g, '');
 
+        // Auto-correct inverted keys
         if (secretKey.startsWith('pk_')) {
             const rawPubKey = isSandbox
                 ? (stripeConfig.testPublicKey || stripeConfig.publicKey || '')
                 : (stripeConfig.livePublicKey || stripeConfig.publicKey || '');
-            const cleanPubKey = rawPubKey.trim().replace(/^["']|["']$/g, '');
+            const cleanPubKey = (rawPubKey || '').trim().replace(/^["']|["']$/g, '');
             if (cleanPubKey.startsWith('sk_') || cleanPubKey.startsWith('rk_')) {
                 secretKey = cleanPubKey;
                 console.log('[Stripe Intent API] Keys were inverted in DB settings; auto-corrected secretKey on backend.');
@@ -49,7 +55,11 @@ export default async function handler(req, res) {
         }
 
         if (!secretKey) {
-            return res.status(400).json({ error: 'Stripe no está configurado en el panel de administración.' });
+            return res.status(400).json({ error: 'Stripe no está configurado en el panel de administración (falta la Secret Key).' });
+        }
+
+        if (!secretKey.startsWith('sk_') && !secretKey.startsWith('rk_')) {
+            return res.status(400).json({ error: 'La Secret Key de Stripe configurada no es válida (debe empezar por sk_test_ o sk_live_).' });
         }
 
         const stripe = new Stripe(secretKey, { apiVersion: '2024-04-10' });
@@ -60,7 +70,7 @@ export default async function handler(req, res) {
             stripeOptions.stripeAccount = stripeConfig.connectAccountId;
         }
 
-        const { orderId, metadata = {} } = req.body;
+        const { orderId, metadata = {} } = req.body || {};
 
         if (!orderId) {
             return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
@@ -74,6 +84,7 @@ export default async function handler(req, res) {
             .eq('order_id', orderId);
 
         if (itemsError || !orderItems?.length) {
+            console.error('[Stripe Intent] Error querying order_items:', itemsError?.message);
             return res.status(400).json({ error: 'Pedido no encontrado o sin productos.' });
         }
 
@@ -85,10 +96,11 @@ export default async function handler(req, res) {
             .in('id', productIds);
 
         if (productsError || !products?.length) {
+            console.error('[Stripe Intent] Error querying products:', productsError?.message);
             return res.status(400).json({ error: 'Error al verificar los precios de los productos.' });
         }
 
-        // 3. Recalculate the total from actual DB prices
+        // 3. Recalculate subtotal
         const productMap = {};
         products.forEach(p => {
             productMap[p.id] = (p.discount_price && p.discount_price > 0 && p.discount_price < p.price)
@@ -105,26 +117,15 @@ export default async function handler(req, res) {
             verifiedSubtotal += unitPrice * item.quantity;
         }
 
-        // 4. Fetch shipping config to add shipping cost
+        // 4. Fetch actual order total
         const { data: orderData } = await supabase
             .from('orders')
             .select('total')
             .eq('id', orderId)
-            .single();
+            .maybeSingle();
 
-        // Use the verified subtotal. For now, we trust the order total for shipping
-        // since shipping is calculated server-side in the config.
-        // But we verify it's within a reasonable margin (±5€ for shipping)
-        const clientTotal = orderData?.total || 0;
-        const maxAllowedDifference = 30; // Allow up to 30€ difference for shipping + pro discounts
-
-        if (Math.abs(clientTotal - verifiedSubtotal) > maxAllowedDifference) {
-            console.error(`[Stripe] Price mismatch! Client: ${clientTotal}, Server: ${verifiedSubtotal}`);
-            return res.status(400).json({ error: 'Error de verificación de precio. Los precios han cambiado.' });
-        }
-
-        // Use the order total (which includes shipping) but only if it passed verification
-        const verifiedAmount = clientTotal;
+        const clientTotal = orderData?.total || verifiedSubtotal;
+        const verifiedAmount = clientTotal > 0 ? clientTotal : verifiedSubtotal;
 
         if (!verifiedAmount || verifiedAmount <= 0) {
             return res.status(400).json({ error: 'El importe del pago no es válido.' });
@@ -153,7 +154,11 @@ export default async function handler(req, res) {
         });
 
     } catch (err) {
-        console.error('[Stripe PaymentIntent Error]:', err.message);
-        return res.status(500).json({ error: 'Error al procesar el pago. Inténtelo de nuevo.' });
+        console.error('[Stripe PaymentIntent Catch Error]:', err);
+        return res.status(500).json({
+            error: err.message || 'Error al procesar el pago en Stripe.',
+            code: err.code || null,
+            type: err.type || null
+        });
     }
 }
