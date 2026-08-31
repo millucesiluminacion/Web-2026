@@ -203,48 +203,9 @@ export default function Cart() {
         });
     };
 
-    // Guardar pedido en Supabase
-    async function saveOrder(options = {}) {
-        const orderStatus = options.status || 'PENDING';
-        const paymentStatus = options.payment_status || 'pending';
-
-        const { data: order, error } = await supabase
-            .from('orders')
-            .insert([{
-                customer_name: formData.name,
-                customer_email: formData.email,
-                customer_phone: formData.phone,
-                shipping_address: formData.address,
-                shipping_city: formData.city,
-                shipping_zip: formData.zip,
-                notes: appliedCoupon
-                    ? `${formData.notes}${formData.notes ? ' | ' : ''}CUPÓN: ${appliedCoupon.code} (-${appliedCoupon.discount_percentage}%)`
-                    : formData.notes,
-                total: effectiveTotalPrice,
-                payment_method: formData.paymentMethod,
-                shipping_method: formData.shippingMethod || 'delivery',
-                status: orderStatus,
-                payment_status: paymentStatus,
-                user_id: user?.id || null,
-            }])
-            .select()
-            .maybeSingle();
-
-        if (error) throw error;
-
-        const orderItems = cart.map(item => ({
-            order_id: order.id,
-            product_id: item.id,
-            quantity: item.quantity,
-            unit_price: item.price,
-            product_name: item.name,
-        }));
-        const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-        if (itemsError) throw itemsError;
-
-        // Trigger Order Confirmation Email
+    // Enviar correos de confirmación (únicamente cuando el pedido está confirmado o pagado)
+    async function sendOrderConfirmationEmails(order) {
         try {
-            // Build detailed HTML for both Customer and Admin
             const itemsHtml = cart.map(item => `
                 <tr style="border-bottom: 1px solid #f0f0f0;">
                     <td style="padding: 12px 0; font-size: 14px;">
@@ -256,7 +217,7 @@ export default function Cart() {
                 </tr>
             `).join('');
 
-            const ivaAmount = effectiveTotalPrice * 0.17355; // 21% inclusive is approx 17.355% of total
+            const ivaAmount = effectiveTotalPrice * 0.17355;
             const basePrice = effectiveTotalPrice - ivaAmount;
 
             const orderDetailsHtml = `
@@ -308,7 +269,7 @@ export default function Cart() {
             `;
 
             // 1. Send to Customer
-            const customerResp = await fetch('/api/send-email', {
+            await fetch('/api/send-email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -325,16 +286,15 @@ export default function Cart() {
                     }
                 })
             });
-            console.log('[Cart] Customer Email Status:', customerResp.status);
 
-            // 2. Send to Admin (Notification of New Order)
+            // 2. Send to Admin
             let adminEmail = 'milluces@millucesiluminacion.com';
             try {
                 const { data: brandData } = await supabase.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
                 if (brandData?.value?.contact_email) adminEmail = brandData.value.contact_email;
             } catch (e) { }
 
-            const adminResp = await fetch('/api/send-email', {
+            await fetch('/api/send-email', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -363,23 +323,105 @@ export default function Cart() {
                     }
                 })
             });
-            console.log('[Cart] Admin Notification Status:', adminResp.status);
         } catch (emailErr) {
             console.error('Error triggering order confirmation emails:', emailErr);
+        }
+    }
+
+    // Guardar pedido en Supabase
+    async function saveOrder(options = {}) {
+        const isOnlinePayment = formData.paymentMethod === 'stripe' || formData.paymentMethod === 'paypal';
+        const defaultStatus = isOnlinePayment ? 'PAYMENT_PENDING' : 'PENDING';
+        const defaultPaymentStatus = isOnlinePayment ? 'unpaid' : 'pending';
+
+        const orderStatus = options.status || defaultStatus;
+        const paymentStatus = options.payment_status || defaultPaymentStatus;
+        const shouldSendEmail = options.sendEmail !== undefined ? options.sendEmail : !isOnlinePayment;
+
+        const { data: order, error } = await supabase
+            .from('orders')
+            .insert([{
+                customer_name: formData.name,
+                customer_email: formData.email,
+                customer_phone: formData.phone,
+                shipping_address: formData.address,
+                shipping_city: formData.city,
+                shipping_zip: formData.zip,
+                notes: appliedCoupon
+                    ? `${formData.notes}${formData.notes ? ' | ' : ''}CUPÓN: ${appliedCoupon.code} (-${appliedCoupon.discount_percentage}%)`
+                    : formData.notes,
+                total: effectiveTotalPrice,
+                payment_method: formData.paymentMethod,
+                shipping_method: formData.shippingMethod || 'delivery',
+                status: orderStatus,
+                payment_status: paymentStatus,
+                user_id: user?.id || null,
+            }])
+            .select()
+            .maybeSingle();
+
+        if (error) throw error;
+        setCreatedOrderId(order.id);
+
+        const orderItems = cart.map(item => ({
+            order_id: order.id,
+            product_id: item.id,
+            quantity: item.quantity,
+            unit_price: item.price,
+            product_name: item.name,
+        }));
+        const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+        if (itemsError) throw itemsError;
+
+        if (shouldSendEmail) {
+            await sendOrderConfirmationEmails(order);
         }
 
         return order;
     }
 
-    const handlePaymentSucceeded = (paymentIntent) => {
-        setOrderRef(paymentIntent.id.slice(-8).toUpperCase());
+    const handlePaymentSucceeded = async (paymentIntent) => {
+        const orderIdToUpdate = createdOrderId;
+
+        if (orderIdToUpdate) {
+            // Actualizar pedido a PAGADO
+            const { data: updatedOrder } = await supabase
+                .from('orders')
+                .update({
+                    status: 'PAID',
+                    payment_status: 'completed',
+                    payment_intent_id: paymentIntent?.id || null
+                })
+                .eq('id', orderIdToUpdate)
+                .select()
+                .maybeSingle();
+
+            // Enviar emails de confirmación AHORA que el pago se ha confirmado
+            if (updatedOrder) {
+                await sendOrderConfirmationEmails(updatedOrder);
+            }
+        }
+
+        setOrderRef(paymentIntent?.id ? paymentIntent.id.slice(-8).toUpperCase() : (orderIdToUpdate ? orderIdToUpdate.slice(0, 8).toUpperCase() : 'OK'));
         setOrderCompleted(true);
         clearCart();
         setLoading(false);
     };
 
-    const handlePaymentFailed = (error) => {
-        setPayError(error);
+    const handlePaymentFailed = async (error) => {
+        setPayError(error?.message || error || 'Error en el pago');
+
+        if (createdOrderId) {
+            // Marcar pedido como CANCELADO por fallo de pago (no se envían emails)
+            await supabase
+                .from('orders')
+                .update({
+                    status: 'CANCELLED',
+                    payment_status: 'failed'
+                })
+                .eq('id', createdOrderId);
+        }
+
         setLoading(false);
     };
 
