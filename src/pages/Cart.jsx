@@ -412,14 +412,14 @@ export default function Cart() {
         setPayError(error?.message || error || 'Error en el pago');
 
         if (createdOrderId) {
-            // Marcar pedido como CANCELADO por fallo de pago (no se envían emails)
-            await supabase
-                .from('orders')
-                .update({
-                    status: 'CANCELLED',
-                    payment_status: 'failed'
-                })
-                .eq('id', createdOrderId);
+            // Eliminar pedido borrador si el pago no se completó
+            try {
+                await supabase.from('order_items').delete().eq('order_id', createdOrderId);
+                await supabase.from('orders').delete().eq('id', createdOrderId);
+                setCreatedOrderId('');
+            } catch (e) {
+                console.error('Error al limpiar pedido tras fallo de pago:', e);
+            }
         }
 
         setLoading(false);

@@ -72,15 +72,15 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
 
             if (result.error) {
                 setError(result.error.message);
-                onFailed && onFailed(result.error.message);
+                if (onFailed) await onFailed(result.error.message);
             } else {
                 if (result.paymentIntent.status === 'succeeded') {
-                    onSucceeded && onSucceeded(result.paymentIntent);
+                    if (onSucceeded) await onSucceeded(result.paymentIntent);
                 }
             }
         } catch (err) {
             setError(err.message || 'Error al procesar el pago.');
-            onFailed && onFailed(err.message);
+            if (onFailed) await onFailed(err.message);
         } finally {
             setLoading(false);
         }
