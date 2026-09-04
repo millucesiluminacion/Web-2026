@@ -73,6 +73,18 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
         e.preventDefault();
         setRegLoading(true);
         setRegError(null);
+
+        // Anti-Bot Protection Check
+        if (isBotRegistration(regEmail, regFullName, regHoneypot)) {
+            // Silently pretend registration succeeded to fool bots
+            setTimeout(() => {
+                setRegLoading(false);
+                onClose();
+                alert('Registro exitoso. Revisa tu email para confirmar tu cuenta.');
+            }, 600);
+            return;
+        }
+
         try {
             const { error: signUpError } = await supabase.auth.signUp({
                 email: regEmail,
@@ -287,6 +299,17 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                             </div>
 
                             <form onSubmit={handleRegister} className="space-y-3">
+                                {/* Invisible Honeypot Anti-Bot Field */}
+                                <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                                    <input
+                                        type="text"
+                                        name="confirm_website_hp"
+                                        tabIndex={-1}
+                                        autoComplete="off"
+                                        value={regHoneypot}
+                                        onChange={(e) => setRegHoneypot(e.target.value)}
+                                    />
+                                </div>
                                 {regError && (
                                     <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600">
                                         <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

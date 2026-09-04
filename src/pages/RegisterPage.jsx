@@ -11,8 +11,24 @@ export default function RegisterPage({ isPro = false }) {
     const [fullName, setFullName] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [vatId, setVatId] = useState('');
+    const [honeypot, setHoneypot] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+
+    const isBotRegistration = (emailVal, fullNameVal, hpVal) => {
+        if (hpVal && hpVal.trim().length > 0) return true;
+        if (emailVal && emailVal.includes('@')) {
+            const username = emailVal.split('@')[0];
+            const dotCount = (username.match(/\./g) || []).length;
+            if (dotCount >= 4) return true;
+        }
+        if (fullNameVal && fullNameVal.length > 15 && !fullNameVal.includes(' ')) {
+            const uppercaseCount = (fullNameVal.match(/[A-Z]/g) || []).length;
+            const lowercaseCount = (fullNameVal.match(/[a-z]/g) || []).length;
+            if (uppercaseCount > 4 && lowercaseCount > 4) return true;
+        }
+        return false;
+    };
 
     const translateError = (message) => {
         const msg = message.toLowerCase();
@@ -38,6 +54,16 @@ export default function RegisterPage({ isPro = false }) {
         e.preventDefault();
         setLoading(true);
         setError(null);
+
+        // Anti-Bot Protection Check
+        if (isBotRegistration(email, fullName, honeypot)) {
+            setTimeout(() => {
+                setLoading(false);
+                alert('Registro exitoso. Revisa tu email para confirmar tu cuenta.');
+                navigate('/');
+            }, 600);
+            return;
+        }
 
         // Validaciones locales previas
         if (password.length < 6) {
@@ -156,6 +182,17 @@ export default function RegisterPage({ isPro = false }) {
                         )}
 
                         <form onSubmit={handleRegister} className="space-y-6">
+                            {/* Invisible Honeypot Anti-Bot Field */}
+                            <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                                <input
+                                    type="text"
+                                    name="website_confirm_hp"
+                                    tabIndex={-1}
+                                    autoComplete="off"
+                                    value={honeypot}
+                                    onChange={(e) => setHoneypot(e.target.value)}
+                                />
+                            </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Nombre Completo</label>
