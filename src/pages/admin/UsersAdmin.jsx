@@ -39,7 +39,8 @@ export default function UsersAdmin() {
             setLoading(true);
             let query = supabase
                 .from('profiles')
-                .select('*', { count: 'exact' });
+                .select('*', { count: 'exact' })
+                .in('role', ['admin', 'manager', 'editor']);
 
             if (searchQuery) {
                 query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -393,7 +394,7 @@ export default function UsersAdmin() {
                     </button>
                     <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-6 h-14 rounded-2xl border border-blue-100 uppercase italic tracking-widest font-outfit flex items-center gap-2 shadow-sm">
                         <UserCheck className="w-4 h-4" />
-                        {users.length} Administradores
+                        {totalCount} Miembros del Equipo
                     </div>
                 </div>
             </div>

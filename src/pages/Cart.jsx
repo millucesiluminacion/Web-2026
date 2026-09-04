@@ -393,6 +393,22 @@ export default function Cart() {
         const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
         if (itemsError) throw itemsError;
 
+        if (appliedCoupon) {
+            try {
+                const customerEmail = formData.email?.trim().toLowerCase() || user?.email?.trim().toLowerCase();
+                if (customerEmail) {
+                    await supabase.from('coupon_uses').insert([{
+                        offer_id: appliedCoupon.id,
+                        user_email: customerEmail,
+                        user_id: user?.id || null,
+                        order_id: order.id
+                    }]);
+                }
+            } catch (couponUseErr) {
+                console.error('Error al registrar uso del cupón:', couponUseErr);
+            }
+        }
+
         if (shouldSendEmail) {
             await sendOrderConfirmationEmails(order);
         }
@@ -460,6 +476,7 @@ export default function Cart() {
         if (idToDelete) {
             // Eliminar pedido borrador si el pago no se completó
             try {
+                await supabase.from('coupon_uses').delete().eq('order_id', idToDelete);
                 await supabase.from('order_items').delete().eq('order_id', idToDelete);
                 await supabase.from('orders').delete().eq('id', idToDelete);
                 createdOrderIdRef.current = '';
@@ -535,6 +552,36 @@ export default function Cart() {
                 setCouponError('El cupón ha expirado');
                 setAppliedCoupon(null);
             } else {
+                // Validar límites de uso por cliente o total si existen
+                const customerEmail = formData.email?.trim().toLowerCase() || user?.email?.trim().toLowerCase();
+
+                if (data.max_uses_per_user && customerEmail) {
+                    const { count, error: countErr } = await supabase
+                        .from('coupon_uses')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('offer_id', data.id)
+                        .ilike('user_email', customerEmail);
+
+                    if (!countErr && count >= data.max_uses_per_user) {
+                        setCouponError(`Ya has utilizado este cupón anteriormente (máximo ${data.max_uses_per_user} uso${data.max_uses_per_user > 1 ? 's' : ''} por cliente).`);
+                        setAppliedCoupon(null);
+                        return;
+                    }
+                }
+
+                if (data.max_uses_total) {
+                    const { count: totalCount, error: totalErr } = await supabase
+                        .from('coupon_uses')
+                        .select('id', { count: 'exact', head: true })
+                        .eq('offer_id', data.id);
+
+                    if (!totalErr && totalCount >= data.max_uses_total) {
+                        setCouponError('Este cupón ha alcanzado el límite máximo global de usos.');
+                        setAppliedCoupon(null);
+                        return;
+                    }
+                }
+
                 setAppliedCoupon(data);
                 setCouponCode('');
             }

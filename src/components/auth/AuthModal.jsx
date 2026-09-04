@@ -83,7 +83,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                         user_type: userType,
                         company_name: userType === 'profesional' ? regCompanyName : null,
                         vat_id: userType === 'profesional' ? regVatId : null,
-                        role: 'editor'
+                        role: 'customer'
                     }
                 }
             });
