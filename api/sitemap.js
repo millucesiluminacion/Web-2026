@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SITE_URL = 'https://2026.millucesiluminacion.com';
+const SITE_URL = 'https://millucesiluminacion.com';
 const CACHE_SECONDS = 86400; // 24h
 
 const staticRoutes = [

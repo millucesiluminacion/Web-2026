@@ -51,6 +51,7 @@ import QualitySealsAdmin from './pages/admin/QualitySealsAdmin';
 import EnergyLabelsAdmin from './pages/admin/EnergyLabelsAdmin';
 import PagesAdmin from './pages/admin/PagesAdmin';
 import CMSPage from './pages/CMSPage';
+import NotFoundPage from './pages/NotFoundPage';
 import CookieBanner from './components/common/CookieBanner';
 import SEOManager from './components/common/SEOManager';
 
@@ -120,6 +121,8 @@ function App() {
               <Route path="statistics" element={<Statistics />} />
               <Route path="filters" element={<FiltersAdmin />} />
             </Route>
+
+            <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </BrowserRouter>
       </CartProvider>

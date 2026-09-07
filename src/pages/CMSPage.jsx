@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import SEOManager from '../components/common/SEOManager';
+import NotFoundPage from './NotFoundPage';
 
 export default function CMSPage() {
     const { slug } = useParams();
@@ -51,25 +52,7 @@ export default function CMSPage() {
     }
 
     if (error || !page) {
-        return (
-            <div className="min-h-[60vh] flex flex-col items-center justify-center p-12 text-center max-w-2xl mx-auto">
-                <div className="w-20 h-20 bg-red-50 rounded-[2.5rem] flex items-center justify-center text-red-500 mb-8 border border-red-100">
-                    <AlertCircle className="w-8 h-8" />
-                </div>
-                <h2 className="text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4 font-outfit">
-                    {error || 'Secuencia Interrumpida'}
-                </h2>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-10 leading-loose">
-                    La página que buscas no está disponible en nuestra base de datos actual o ha sido desactivada.
-                </p>
-                <button
-                    onClick={() => navigate('/')}
-                    className="h-14 px-10 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[11px] tracking-widest hover:bg-primary transition-all flex items-center gap-3 shadow-xl shadow-brand-carbon/10 font-outfit"
-                >
-                    <ChevronLeft className="w-4 h-4" /> Volver al Inicio
-                </button>
-            </div>
-        );
+        return <NotFoundPage />;
     }
 
     return (

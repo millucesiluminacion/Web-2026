@@ -3,4 +3,4 @@ Disallow: /admin/
 Disallow: /api/
 Allow: /api/sitemap
 
-Sitemap: https://2026.millucesiluminacion.com/api/sitemap
+Sitemap: https://millucesiluminacion.com/api/sitemap

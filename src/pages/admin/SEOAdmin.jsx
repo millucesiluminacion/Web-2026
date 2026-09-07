@@ -18,8 +18,8 @@ const TABS = [
     { id: 'cms_pages', label: 'Páginas CMS', icon: FileText },
 ];
 
-const SITEMAP_URL = 'https://2026.millucesiluminacion.com/api/sitemap';
-const ROBOTS_URL = 'https://2026.millucesiluminacion.com/robots.txt';
+const SITEMAP_URL = 'https://millucesiluminacion.com/api/sitemap';
+const ROBOTS_URL = 'https://millucesiluminacion.com/robots.txt';
 
 export default function SEOAdmin() {
     const [activeTab, setActiveTab] = useState('global');
@@ -332,7 +332,7 @@ export default function SEOAdmin() {
                             </h3>
                             <ol className="space-y-2 text-[11px] text-blue-900 font-medium leading-relaxed list-decimal list-inside">
                                 <li>Accede a <a href="https://search.google.com/search-console" target="_blank" rel="noopener noreferrer" className="underline font-bold">Google Search Console</a></li>
-                                <li>Selecciona tu propiedad <strong>2026.millucesiluminacion.com</strong></li>
+                                <li>Selecciona tu propiedad <strong>millucesiluminacion.com</strong></li>
                                 <li>En el menú lateral, haz clic en <strong>Sitemaps</strong></li>
                                 <li>Pega la URL del sitemap y pulsa <strong>Enviar</strong></li>
                             </ol>

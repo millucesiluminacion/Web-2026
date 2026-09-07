@@ -60,15 +60,16 @@ export default function SEOManager() {
 
                 if (path.startsWith('/product/')) {
                     const slugOrId = path.split('/').pop();
-                    let { data } = await supabase.from('products').select('meta_title, meta_description, name, image_url').eq('slug', slugOrId).maybeSingle();
+                    let { data } = await supabase.from('products').select('id, name, slug, price, offer_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('slug', slugOrId).maybeSingle();
                     if (!data) {
-                        const { data: dataById } = await supabase.from('products').select('meta_title, meta_description, name, image_url').eq('id', slugOrId).maybeSingle();
+                        const { data: dataById } = await supabase.from('products').select('id, name, slug, price, offer_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('id', slugOrId).maybeSingle();
                         data = dataById;
                     }
                     if (data) seoData = {
                         title: data.meta_title || `${data.name} | Mil Luces`,
-                        description: data.meta_description,
-                        image: data.image_url
+                        description: data.meta_description || data.description,
+                        image: data.image_url,
+                        productRaw: data
                     };
                 } else if (path.startsWith('/blog/')) {
                     const slug = path.split('/').pop();
@@ -168,11 +169,88 @@ export default function SEOManager() {
                 if (!document.querySelector('link[rel="canonical"]')) {
                     document.head.appendChild(canonical);
                 }
+
+                // Inject Schema.org JSON-LD Structured Data
+                injectSchemaOrg(path, seoData, siteName);
             }
 
         } catch (error) {
             console.error('SEO Manager Error:', error);
         }
+    }
+
+    function injectSchemaOrg(path, seoData, siteName) {
+        // Remove existing dynamic JSON-LD scripts
+        document.querySelectorAll('script[data-seo-jsonld]').forEach(el => el.remove());
+
+        const origin = window.location.origin;
+
+        // 1. Global WebSite & Organization Schema
+        const siteSchema = {
+            "@context": "https://schema.org",
+            "@graph": [
+                {
+                    "@type": "WebSite",
+                    "@id": `${origin}/#website`,
+                    "url": origin,
+                    "name": siteName || "Mil Luces Boutique",
+                    "description": "Boutique de Iluminación de Diseño, Techo, Apliques y Tiras LED",
+                    "potentialAction": {
+                        "@type": "SearchAction",
+                        "target": `${origin}/catalogo?q={search_term_string}`,
+                        "query-input": "required name=search_term_string"
+                    }
+                },
+                {
+                    "@type": "Organization",
+                    "@id": `${origin}/#organization`,
+                    "name": siteName || "Mil Luces Boutique",
+                    "url": origin,
+                    "logo": `${origin}/logo.png`,
+                    "sameAs": [
+                        "https://facebook.com",
+                        "https://instagram.com"
+                    ]
+                }
+            ]
+        };
+
+        createJsonLdScript('global-schema', siteSchema);
+
+        // 2. Product Schema for Product Detail Pages
+        if (path.startsWith('/product/') && seoData.productRaw) {
+            const prod = seoData.productRaw;
+            const productSchema = {
+                "@context": "https://schema.org",
+                "@type": "Product",
+                "name": prod.name,
+                "description": prod.meta_description || prod.description || prod.name,
+                "image": prod.image_url ? [prod.image_url] : [],
+                "sku": prod.id,
+                "brand": {
+                    "@type": "Brand",
+                    "name": prod.brand_name || "Mil Luces"
+                },
+                "offers": {
+                    "@type": "Offer",
+                    "url": `${origin}${path}`,
+                    "priceCurrency": "EUR",
+                    "price": prod.offer_price || prod.price || "0.00",
+                    "availability": prod.stock > 0 || prod.stock === null ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+                    "itemCondition": "https://schema.org/NewCondition"
+                }
+            };
+
+            createJsonLdScript('product-schema', productSchema);
+        }
+    }
+
+    function createJsonLdScript(id, schemaObj) {
+        const script = document.createElement('script');
+        script.type = 'application/ld+json';
+        script.setAttribute('data-seo-jsonld', id);
+        script.textContent = JSON.stringify(schemaObj);
+        document.head.appendChild(script);
     }
 
     function updateOrCreateMeta(name, content) {
