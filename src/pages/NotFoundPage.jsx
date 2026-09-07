@@ -180,7 +180,7 @@ export default function NotFoundPage() {
 
                         <div className="space-y-1">
                             <h3 className="text-lg font-black uppercase italic text-brand-carbon leading-tight">
-                                10% Dto. en tu pedido
+                                5% Dto. en tu pedido
                             </h3>
                             <p className="text-xs text-gray-600 font-medium leading-snug">
                                 Por los cambios en nuestra web, usa este código al finalizar tu compra:
@@ -191,7 +191,7 @@ export default function NotFoundPage() {
                         <div className="bg-brand-carbon text-white rounded-2xl p-3 flex items-center justify-between shadow-md border border-brand-carbon">
                             <span className="text-[9px] font-black uppercase tracking-widest text-gray-300">Código Cupón:</span>
                             <code className="text-white font-mono font-black text-xs tracking-wider px-2 py-0.5 rounded-lg bg-white/10">
-                                NUEVAWEB10
+                                MILLUCES2026
                             </code>
                         </div>
 
