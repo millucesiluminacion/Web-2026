@@ -22,6 +22,18 @@ const SNIPPETS = [
         label: '📌 Resumen',
         template: `\n<!-- CALLOUT:summary -->\n📌 Resumen: Escribe aquí los puntos clave.\n<!-- /CALLOUT -->\n`
     },
+    {
+        label: '• Lista <ul>',
+        template: `\n<ul>\n  <li>Primer elemento de la lista</li>\n  <li>Segundo elemento de la lista</li>\n  <li>Tercer elemento de la lista</li>\n</ul>\n`
+    },
+    {
+        label: '1. Lista <ol>',
+        template: `\n<ol>\n  <li>Primer paso numerado</li>\n  <li>Segundo paso numerado</li>\n</ol>\n`
+    },
+    {
+        label: '❓ FAQ <details>',
+        template: `\n<details>\n  <summary>¿Título de la pregunta frecuente?</summary>\n  <p>Respuesta detallada a la pregunta...</p>\n</details>\n`
+    },
 ];
 
 const SNIPPET_BLOCKS = [
@@ -32,6 +44,26 @@ const SNIPPET_BLOCKS = [
     {
         label: '🔢 Pasos',
         template: `\n{"type":"pasos","pasos":[{"titulo":"Primer paso","descripcion":"Descripción del primer paso."},{"titulo":"Segundo paso","descripcion":"Descripción del segundo paso."}]}\n`
+    },
+    {
+        label: '📷 Imagen + Pie',
+        template: `\n{"type":"imagen","url":"https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200","alt":"Descripción","caption":"Pie de foto descriptivo del proyecto"}\n`
+    },
+    {
+        label: '🌡️ Escala Kelvin',
+        template: `\n{"type":"kelvinScale"}\n`
+    },
+    {
+        label: '✓/✕ Pros & Contras',
+        template: `\n{"type":"prosCons","pros":["Ventaja 1","Ventaja 2"],"cons":["Inconveniente 1","Inconveniente 2"]}\n`
+    },
+    {
+        label: '❓ Preguntas FAQ',
+        template: `\n{"type":"faq","items":[{"pregunta":"¿Pregunta frecuente 1?","respuesta":"Respuesta detallada 1."},{"pregunta":"¿Pregunta frecuente 2?","respuesta":"Respuesta detallada 2."}]}\n`
+    },
+    {
+        label: '⭐ Producto Destacado',
+        template: `\n{"type":"destacadoProducto","titulo":"Nombre del Producto","desc":"Descripción breve del producto recomendado","imagen":"https://images.unsplash.com/photo-1572635148818-ef6fd45eb394?w=400","badge":"Recomendado","url":"/catalogo"}\n`
     },
     {
         label: '🛒 CTA Producto',

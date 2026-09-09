@@ -4,47 +4,105 @@
 export const BLOG_POSTS_INICIALES = [
 
     // ══════════════════════════════════════════
-    // GUÍAS DE ILUMINACIÓN
+    // GUÍAS DE ILUMINACIÓN — ARTÍCULO MAESTRO
     // ══════════════════════════════════════════
     {
-        title: 'Cómo elegir la iluminación LED adecuada para tu hogar',
+        title: 'Cómo elegir la iluminación LED adecuada para tu hogar (Guía Completa 2026)',
         slug: 'como-elegir-iluminacion-led',
-        excerpt: 'Elegir la iluminación LED correcta puede parecer complicado, pero con unos pocos conceptos claros conseguirás la luz perfecta para cada rincón de tu hogar.',
+        excerpt: 'Elegir la iluminación LED correcta transforma por completo tu hogar. En esta guía profesional explicamos lúmenes, Kelvin, IRC, casquillos y distribuciones lumínicas con ejemplos reales.',
         image_url: 'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?q=80&w=1200&auto=format&fit=crop',
-        author: 'Equipo Mil Luces',
+        author: 'Equipo Técnico Mil Luces',
         category: 'guias-iluminacion',
         subcategory: 'como-elegir-iluminacion-led',
-        meta_title: 'Cómo elegir iluminación LED para tu hogar | Guía Mil Luces',
-        meta_description: 'Aprende a elegir la iluminación LED perfecta: tipos de bombilla, temperatura de color, lúmenes y eficiencia energética explicados de forma sencilla.',
+        meta_title: 'Cómo Elegir Iluminación LED para Tu Hogar: Guía Definitiva | Mil Luces',
+        meta_description: 'Guía técnica definitiva para elegir iluminación LED en el hogar: cálculo de lúmenes, escala Kelvin, índice IRC, tipos de casquillo, tablas comparativas y FAQs.',
         content: JSON.stringify([
-            { type: 'callout', subtipo: 'summary', content: 'Antes de comprar una bombilla LED, necesitas conocer tres datos: los lúmenes (brillo), la temperatura de color (ambiente) y el casquillo (compatibilidad). El resto son extras.' },
-            { type: 'h2', content: '1. Lúmenes: la medida real del brillo' },
-            { type: 'p', content: 'Los vatios solo miden el consumo energético. Los lúmenes miden la cantidad de luz que emite una bombilla. Una LED de 9W puede emitir los mismos lúmenes que una incandescente de 60W.' },
+            { type: 'callout', subtipo: 'summary', content: 'Regla de oro de Mil Luces: La iluminación perfecta combina 3 capas: luz general (downlights/plafones), luz de trabajo (bajo muebles/escritorio) y luz de acento (tiras LED/ambiente). Nunca dependas de un único punto de luz central.' },
+
+            { type: 'h2', content: '1. Lúmenes vs Vatios: La medida real del brillo' },
+            { type: 'p', content: 'Los vatios (W) solo indican el consumo eléctrico. Para saber cuánta luz dará una luminaria, debes mirar siempre los lúmenes (lm). Un LED moderno consume hasta un 85% menos de potencia para la misma emisión de luz.' },
             {
-                type: 'tabla', cols: ['Incandescente', 'LED equivalente', 'Lúmenes'], filas: [
-                    ['25W', '3-4W', '~250 lm'],
-                    ['40W', '5-6W', '~450 lm'],
-                    ['60W', '8-10W', [{ texto: '~800 lm', recomendado: true }]],
-                    ['75W', '11-13W', '~1050 lm'],
-                    ['100W', '14-17W', '~1500 lm'],
+                type: 'tabla', cols: ['Halógena / Incandescente', 'LED Equivalente', 'Lúmenes reales', 'Ahorro estimado'], filas: [
+                    ['25W', '3-4W', '~250 lm', '84%'],
+                    ['40W', '5-6W', '~450 lm', '85%'],
+                    ['60W', '8-10W', [{ texto: '~800 lm', recomendado: true }], '85%'],
+                    ['75W', '11-13W', '~1050 lm', '83%'],
+                    ['100W', '14-17W', '~1500 lm', '85%'],
                 ]
             },
-            { type: 'h2', content: '2. Temperatura de color: el ambiente de la estancia' },
-            { type: 'p', content: 'La temperatura de color se mide en Kelvin (K) e indica si la luz tiende al blanco cálido, neutro o frío.' },
+            { type: 'callout', subtipo: 'tech', titulo: 'Dato de eficiencia', content: 'Busca luminarias con una eficiencia de al menos 90-100 lm/W. Las bombillas LED de alta gama de Mil Luces alcanzan hasta 120 lm/W.' },
+
+            { type: 'h2', content: '2. Temperatura de Color: El secreto del ambiente' },
+            { type: 'p', content: 'La temperatura de color se mide en grados Kelvin (K). Determina si la atmósfera de la estancia será cálida, neutra o fría.' },
+
+            // Escala Kelvin visual
+            { type: 'kelvinScale' },
+
             {
-                type: 'ul', items: [
-                    '2700K – 3000K → Blanco cálido. Ideal para salones, dormitorios y zonas de relax.',
-                    '3500K – 4000K → Blanco neutro. Perfecto para cocinas y baños.',
-                    '5000K – 6500K → Blanco frío. Recomendado para garajes, oficinas y talleres.',
+                type: 'imagen',
+                url: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=1200&auto=format&fit=crop',
+                alt: 'Iluminación cálida en un salón moderno',
+                caption: 'Iluminación cálida (2700K) en salón: crea sensación de confort y relajación perfecta para el descanso evening.'
+            },
+
+            { type: 'callout', subtipo: 'tip', content: 'En salones y dormitorios, mantente siempre en el rango de 2700K a 3000K. La luz blanca cálida estimula la producción natural de melatonina antes de dormir.' },
+
+            { type: 'h2', content: '3. Índice de Reproducción Cromática (IRC / CRI)' },
+            { type: 'p', content: 'El IRC (CRI en inglés) mide del 0 al 100 cómo de reales y vivos se ven los colores bajo esa luz en comparación con la luz del sol natural (CRI 100).' },
+            {
+                type: 'especCard', titulo: 'Recomendaciones de IRC por uso', specs: [
+                    { label: 'Hogar general', value: 'CRI ≥ 80' },
+                    { label: 'Cocinas y Espejos', value: 'CRI ≥ 90' },
+                    { label: 'Tiendas y Arte', value: 'CRI ≥ 95' },
+                    { label: 'Exteriores', value: 'CRI ≥ 75' },
                 ]
             },
-            { type: 'callout', subtipo: 'tip', content: 'Para el salón y el dormitorio, quédate siempre en el rango 2700K–3000K. Dar luz cálida en espacios de descanso mejora la melatonina y el sueño.' },
-            { type: 'h2', content: '3. Índice de Reproducción Cromática (IRC)' },
-            { type: 'p', content: 'El IRC indica con qué fidelidad la luz reproduce los colores reales. Se valora de 0 a 100. Para el hogar necesitas un IRC ≥ 80. Para zonas de maquillaje, cocina o arte, busca IRC ≥ 90.' },
-            { type: 'h2', content: '4. Tipos de casquillo habituales' },
-            { type: 'ul', items: ['E27 → Casquillo gordo estándar, el más común.', 'E14 → Casquillo pequeño, para lámparas de diseño.', 'GU10 → Dicroica de encastre para focos.', 'GU5.3 / MR16 → Dicroica de bajo voltaje (12V).'] },
-            { type: 'productoCTA', texto: 'Encuentra tu bombilla LED perfecta en nuestro catálogo', url: '/catalogo' },
-            { type: 'callout', subtipo: 'summary', content: 'Regla de oro: elige lúmenes en función del espacio, temperatura de color según el ambiente que quieras crear, e IRC ≥ 80 para colores fieles siempre.' },
+
+            { type: 'h2', content: '4. Ventajas de planificar con iluminación LED' },
+            {
+                type: 'prosCons',
+                pros: [
+                    'Ahorro energético de hasta el 85% en la factura de la luz.',
+                    'Vida útil superior a 25.000–50.000 horas de uso.',
+                    'Encendido instantáneo al 100% sin parpadeos.',
+                    'Disponible en todas las temperaturas y colores (CCT y RGBW).',
+                ],
+                cons: [
+                    'Inversión inicial ligeramente superior frente a bombillas halógenas obsoletas.',
+                    'Requiere comprobar la compatibilidad de los reguladores dimmer.',
+                ]
+            },
+
+            { type: 'h2', content: '5. Planifica tu estancia en 4 pasos simples' },
+            {
+                type: 'pasos', pasos: [
+                    { titulo: 'Calcula la superficie y uso', descripcion: 'Multiplica largo por ancho para obtener los m². Define si es zona de descanso (200 lm/m²) o trabajo (400 lm/m²).' },
+                    { titulo: 'Selecciona la temperatura Kelvin', descripcion: 'Dormitorios/Salón = 2700-3000K. Cocinas/Baños = 4000K. Garajes/Taller = 6000K.' },
+                    { titulo: 'Combina luces generales y de acento', descripcion: 'Usa focos empotrables para luz ambiental y tiras LED bajo muebles o repisas para luz indirecta.' },
+                    { titulo: 'Revisa casquillos y conectores', descripcion: 'Verifica si tus lámparas usan E27, E14, GU10 o alimentación directa a 24V.' },
+                ]
+            },
+
+            // Producto recomendado
+            {
+                type: 'destacadoProducto',
+                titulo: 'Pack Focos Downlight LED Empotrables 8W 4000K',
+                desc: 'Foco técnico extraplano con reflector difusor, ideal para cocinas, pasillos y baños. CRI > 90.',
+                imagen: 'https://images.unsplash.com/photo-1572635148818-ef6fd45eb394?q=80&w=400&auto=format&fit=crop',
+                badge: 'Top Ventas 2026',
+                url: '/catalogo'
+            },
+
+            // Preguntas frecuentes
+            {
+                type: 'faq', items: [
+                    { pregunta: '¿Puedo cambiar una bombilla halógena por una LED directamente?', respuesta: 'En la mayoría de casos sí, siempre que coincida el casquillo (E27, E14, GU10). Si es un foco a 12V con transformador antiguo, es recomendable actualizar también el transformador a uno especial para LED para evitar parpadeos.' },
+                    { pregunta: '¿Por qué parpadea una bombilla LED al apagar el interruptor?', respuesta: 'Suele ocurrir por una pequeña corriente residual en interruptores con luz piloto o por una instalación con neutro cortado. Se soluciona instalando un condensador antiparpadeo o eliminando la luz piloto del interruptor.' },
+                    { pregunta: '¿Qué es una tira LED COB y en qué se diferencia de una SMD?', respuesta: 'Las tiras LED COB tienen los diodos integrados continuamente bajo una capa de silicona, creando una línea de luz homogénea sin puntos oscuros visibles, ideal para perfiles vistos.' },
+                ]
+            },
+
+            { type: 'productoCTA', texto: 'Explora nuestro catálogo completo de iluminación técnica LED', url: '/catalogo' },
         ])
     },
 
@@ -102,15 +160,7 @@ export const BLOG_POSTS_INICIALES = [
         content: JSON.stringify([
             { type: 'callout', subtipo: 'summary', content: 'La temperatura de color determina si la luz es cálida (amarilla), neutra (blanca) o fría (azulada). Se mide en Kelvin. Cuanto mayor sea el número, más fría y "diurna" es la luz.' },
             { type: 'h2', content: 'La escala Kelvin de un vistazo' },
-            {
-                type: 'especCard', titulo: 'Rangos de temperatura de color', specs: [
-                    { label: 'Cálida', value: '2200–3000K' },
-                    { label: 'Neutra', value: '3500–4000K' },
-                    { label: 'Fría', value: '5000–6500K' },
-                    { label: 'Típ. luz solar', value: '5500K' },
-                    { label: 'Cielo nublado', value: '6500–7500K' },
-                ]
-            },
+            { type: 'kelvinScale' },
             { type: 'h2', content: 'Temperatura recomendada por estancia' },
             {
                 type: 'tabla', cols: ['Estancia', 'Temperatura', 'Por qué'], filas: [

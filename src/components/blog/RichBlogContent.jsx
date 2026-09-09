@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, ArrowRight } from 'lucide-react';
+import { ArrowRight, ChevronDown, Camera, Check, X, Sparkles } from 'lucide-react';
 import '../../styles/blogRichStyles.css';
 
 // ── Índice de Contenidos (TOC) ──────────────────────────────────────
@@ -48,7 +48,7 @@ function Callout({ tipo, titulo, children }) {
 // ── Tabla Comparativa ───────────────────────────────────────────────
 function TablaComparativa({ cols, filas }) {
     return (
-        <div style={{ overflowX: 'auto', margin: '2rem 0' }}>
+        <div className="blog-table-wrapper">
             <table className="blog-comparison-table">
                 <thead>
                     <tr>{cols.map(c => <th key={c}>{c}</th>)}</tr>
@@ -119,16 +119,122 @@ function ProductoCTA({ texto, url }) {
     );
 }
 
+// ── Imagen con Pie Editorial ────────────────────────────────────────
+function BlogImage({ url, alt, caption }) {
+    return (
+        <figure className="blog-content-image">
+            <img src={url} alt={alt || caption || ''} loading="lazy" />
+            {caption && (
+                <figcaption>
+                    <Camera className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    <span>{caption}</span>
+                </figcaption>
+            )}
+        </figure>
+    );
+}
+
+// ── Escala Visual Kelvin ────────────────────────────────────────────
+function KelvinScale() {
+    return (
+        <div className="kelvin-scale-card">
+            <div className="scale-header">
+                <span className="scale-title">🌡️ Escala de Temperatura Kelvin (K)</span>
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Tono de luz</span>
+            </div>
+            <div className="kelvin-scale-bar" />
+            <div className="kelvin-markers">
+                <div className="kelvin-marker-item">
+                    <span className="k-temp">2700K – 3000K</span>
+                    <span className="k-name">Blanco Cálido (Acogedor)</span>
+                </div>
+                <div className="kelvin-marker-item">
+                    <span className="k-temp">4000K</span>
+                    <span className="k-name">Blanco Neutro (Trabajo)</span>
+                </div>
+                <div className="kelvin-marker-item">
+                    <span className="k-temp">6000K – 6500K</span>
+                    <span className="k-name">Blanco Frío (Técnico)</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Pros vs Contras ──────────────────────────────────────────────────
+function ProsCons({ pros = [], cons = [] }) {
+    return (
+        <div className="pros-cons-grid">
+            <div className="pros-box">
+                <p className="box-title">✓ Ventajas</p>
+                <ul>
+                    {pros.map((p, i) => (
+                        <li key={i}><Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" /> {p}</li>
+                    ))}
+                </ul>
+            </div>
+            <div className="cons-box">
+                <p className="box-title">✕ Inconvenientes</p>
+                <ul>
+                    {cons.map((c, i) => (
+                        <li key={i}><X className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" /> {c}</li>
+                    ))}
+                </ul>
+            </div>
+        </div>
+    );
+}
+
+// ── Acordeón FAQ ─────────────────────────────────────────────────────
+function FaqSection({ items = [] }) {
+    const [openIndex, setOpenIndex] = useState(null);
+    return (
+        <div className="blog-faq-section">
+            <p className="faq-header-title">❓ Preguntas Frecuentes</p>
+            {items.map((item, i) => {
+                const isOpen = openIndex === i;
+                return (
+                    <div key={i} className="faq-item">
+                        <button type="button" className="faq-question" onClick={() => setOpenIndex(isOpen ? null : i)}>
+                            <span>{item.pregunta}</span>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        </button>
+                        {isOpen && <div className="faq-answer">{item.respuesta}</div>}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
+// ── Tarjeta Destacada de Producto ────────────────────────────────────
+function ProductShowcaseCard({ titulo, desc, imagen, badge, url }) {
+    return (
+        <div className="blog-product-card-showcase">
+            {imagen && (
+                <div className="prod-img-box">
+                    <img src={imagen} alt={titulo} />
+                </div>
+            )}
+            <div className="prod-details">
+                {badge && <span className="prod-badge"><Sparkles className="w-3 h-3 inline mr-1" />{badge}</span>}
+                <h4 className="prod-title">{titulo}</h4>
+                <p className="prod-desc">{desc}</p>
+                <Link to={url || '/catalogo'} className="inline-flex items-center gap-2 bg-brand-carbon text-white text-[10px] font-black uppercase tracking-widest px-4 py-2.5 rounded-xl hover:bg-primary transition-all">
+                    Ver en catálogo <ArrowRight className="w-3 h-3" />
+                </Link>
+            </div>
+        </div>
+    );
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // Componente principal: renderiza bloques de contenido estructurado.
-// Los artículos del blog pueden pasar `blocks` (array estructurado)
-// o `html` (texto HTML heredado).
 // ─────────────────────────────────────────────────────────────────────
 export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
     const [headings, setHeadings] = useState([]);
     const containerRef = useRef(null);
 
-    // Extrae headings del HTML heredado o de los bloques estructurados.
     useEffect(() => {
         const hs = [];
         if (blocks) {
@@ -145,7 +251,6 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
         setHeadings(hs);
     }, [blocks, html]);
 
-    // ── Renderizado de bloques estructurados ─
     if (blocks) {
         return (
             <div className="blog-rich-content" ref={containerRef}>
@@ -175,6 +280,16 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
                             return <EspecCard key={i} titulo={block.titulo} specs={block.specs} />;
                         case 'productoCTA':
                             return <ProductoCTA key={i} texto={block.texto} url={block.url} />;
+                        case 'imagen':
+                            return <BlogImage key={i} url={block.url} alt={block.alt} caption={block.caption} />;
+                        case 'kelvinScale':
+                            return <KelvinScale key={i} />;
+                        case 'prosCons':
+                            return <ProsCons key={i} pros={block.pros} cons={block.cons} />;
+                        case 'faq':
+                            return <FaqSection key={i} items={block.items} />;
+                        case 'destacadoProducto':
+                            return <ProductShowcaseCard key={i} titulo={block.titulo} desc={block.desc} imagen={block.imagen} badge={block.badge} url={block.url} />;
                         case 'html':
                             return <div key={i} dangerouslySetInnerHTML={{ __html: block.content }} />;
                         default:
@@ -185,7 +300,6 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
         );
     }
 
-    // ── Modo heredado: HTML directo ─
     return (
         <div className="blog-rich-content" ref={containerRef}>
             {mostrarTOC && headings.length > 1 && <TableOfContents headings={headings} />}
@@ -194,5 +308,4 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
     );
 }
 
-// Re-exportamos subcomponentes por si se usan individualmente.
-export { Callout, TablaComparativa, GuidePasos, EspecCard, ProductoCTA, TableOfContents };
+export { Callout, TablaComparativa, GuidePasos, EspecCard, ProductoCTA, BlogImage, KelvinScale, ProsCons, FaqSection, ProductShowcaseCard, TableOfContents };
