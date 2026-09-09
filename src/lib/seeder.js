@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import BLOG_POSTS_INICIALES from '../data/blogInitialPosts';
 
 const STATIC_CATEGORIES = [
     { name: 'Bombillas', slug: 'bombillas', image_url: 'https://www.efectoled.com/img/core/global/lighting/2024/home/categories/category_img-6_desktop.png', description: 'Todo tipo de bombillas LED para el hogar y la industria.', order_index: 0 },
@@ -60,17 +61,7 @@ const STATIC_ROOMS = [
     { name: 'Pasillos', slug: 'pasillos', image_url: 'https://images.unsplash.com/photo-1600585152220-90363fe7e115?w=400&h=500&fit=crop', description: 'Luz de paso eficiente y decorativa.', order_index: 4 },
 ];
 
-const STATIC_BLOG = [
-    {
-        title: 'Tendencias en Iluminación 2026: El minimalismo cálido',
-        slug: 'tendencias-iluminacion-2026',
-        excerpt: 'Descubre cómo la iluminación técnica se fusiona con el diseño de interiores para crear espacios acogedores.',
-        content: 'El minimalismo cálido es la gran tendencia de este año. Se trata de usar la luz no solo para ver, sino para sentir...',
-        image_url: 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=1200',
-        author: 'Marco Rossi',
-        category: 'Diseño'
-    }
-];
+// Artículos del blog: gestionados en src/data/blogInitialPosts.js
 
 const STATIC_PROJECTS = [
     {
@@ -124,10 +115,10 @@ export async function seedDatabase() {
         .upsert(STATIC_SLIDERS, { onConflict: 'image_url' });
     if (sliderError) console.error('Error seeding sliders:', sliderError);
 
-    // Seed Blog
+    // Seed Blog — artículos ricos con taxonomía
     const { error: blogError } = await supabase
         .from('blog_posts')
-        .upsert(STATIC_BLOG, { onConflict: 'slug' });
+        .upsert(BLOG_POSTS_INICIALES, { onConflict: 'slug' });
     if (blogError) console.error('Error seeding blog:', blogError);
 
     // Seed Projects

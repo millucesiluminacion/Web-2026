@@ -1,0 +1,428 @@
+/* =========================================================
+   SISTEMA DE FORMATEO RICO PARA ARTÍCULOS — MIL LUCES BLOG
+   ========================================================= */
+
+/* Contenedor principal del artículo */
+.blog-rich-content {
+    font-family: 'Outfit', 'Inter', sans-serif;
+    color: #2D2D2D;
+    line-height: 1.8;
+}
+
+/* ── TIPOGRAFÍA ─────────────────────────────────────── */
+.blog-rich-content h2 {
+    font-size: 1.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    font-style: italic;
+    letter-spacing: -0.04em;
+    color: #1A1A2E;
+    margin: 3rem 0 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #F3F4F6;
+    scroll-margin-top: 100px;
+}
+
+.blog-rich-content h3 {
+    font-size: 1.25rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #1A1A2E;
+    margin: 2rem 0 0.75rem;
+    scroll-margin-top: 100px;
+}
+
+.blog-rich-content p {
+    margin-bottom: 1.25rem;
+    font-size: 1rem;
+    color: #4B5563;
+    font-weight: 500;
+}
+
+.blog-rich-content strong {
+    color: #1A1A2E;
+    font-weight: 800;
+}
+
+.blog-rich-content ul,
+.blog-rich-content ol {
+    margin: 1.25rem 0 1.5rem 1.5rem;
+}
+
+.blog-rich-content li {
+    margin-bottom: 0.5rem;
+    color: #4B5563;
+    font-weight: 500;
+}
+
+/* ── CALLOUTS / CAJAS DE AVISO ──────────────────────── */
+.blog-callout {
+    border-radius: 1.5rem;
+    padding: 1.5rem 1.75rem;
+    margin: 2rem 0;
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    border: 1px solid transparent;
+}
+
+.blog-callout .callout-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.blog-callout .callout-body {}
+
+.blog-callout .callout-title {
+    font-size: 0.65rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    margin-bottom: 0.4rem;
+}
+
+.blog-callout .callout-text {
+    font-size: 0.9rem;
+    font-weight: 500;
+    margin: 0;
+    line-height: 1.65;
+}
+
+/* Consejo */
+.blog-callout--tip {
+    background: linear-gradient(135deg, #FFFBEB, #FEF3C7);
+    border-color: #FCD34D;
+}
+
+.blog-callout--tip .callout-title {
+    color: #92400E;
+}
+
+.blog-callout--tip .callout-text {
+    color: #78350F;
+}
+
+/* Advertencia */
+.blog-callout--warning {
+    background: linear-gradient(135deg, #FFF7ED, #FFEDD5);
+    border-color: #FB923C;
+}
+
+.blog-callout--warning .callout-title {
+    color: #9A3412;
+}
+
+.blog-callout--warning .callout-text {
+    color: #7C2D12;
+}
+
+/* Ficha técnica */
+.blog-callout--tech {
+    background: linear-gradient(135deg, #EEF2FF, #E0E7FF);
+    border-color: #818CF8;
+}
+
+.blog-callout--tech .callout-title {
+    color: #3730A3;
+}
+
+.blog-callout--tech .callout-text {
+    color: #312E81;
+}
+
+/* Resumen clave */
+.blog-callout--summary {
+    background: linear-gradient(135deg, #F0FDF4, #DCFCE7);
+    border-color: #4ADE80;
+}
+
+.blog-callout--summary .callout-title {
+    color: #14532D;
+}
+
+.blog-callout--summary .callout-text {
+    color: #166534;
+}
+
+/* ── TABLAS COMPARATIVAS ────────────────────────────── */
+.blog-comparison-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 2rem 0;
+    overflow: hidden;
+    border-radius: 1.25rem;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    font-size: 0.875rem;
+}
+
+.blog-comparison-table thead {
+    background: #1A1A2E;
+    color: white;
+}
+
+.blog-comparison-table thead th {
+    padding: 1rem 1.25rem;
+    font-size: 0.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    text-align: left;
+}
+
+.blog-comparison-table tbody tr {
+    border-bottom: 1px solid #F3F4F6;
+    transition: background 0.15s;
+}
+
+.blog-comparison-table tbody tr:hover {
+    background: #FAFAFA;
+}
+
+.blog-comparison-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.blog-comparison-table tbody td {
+    padding: 0.85rem 1.25rem;
+    color: #4B5563;
+    font-weight: 500;
+    vertical-align: middle;
+}
+
+.blog-comparison-table tbody td:first-child {
+    font-weight: 800;
+    color: #1A1A2E;
+}
+
+.blog-comparison-table .badge-recomendado {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--color-primary, #E8611A), #F59E0B);
+    color: white;
+    font-size: 0.55rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    margin-left: 0.5rem;
+}
+
+/* ── GUÍAS PASO A PASO ──────────────────────────────── */
+.blog-steps {
+    list-style: none;
+    padding: 0;
+    margin: 2rem 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+}
+
+.blog-step {
+    display: flex;
+    gap: 1.25rem;
+    position: relative;
+}
+
+.blog-step:not(:last-child) .step-line {
+    position: absolute;
+    left: 1.25rem;
+    top: 3rem;
+    width: 2px;
+    height: calc(100% - 1rem);
+    background: #F3F4F6;
+}
+
+.blog-step .step-number {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background: #1A1A2E;
+    color: white;
+    font-size: 0.7rem;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+}
+
+.blog-step .step-content {
+    padding-bottom: 2rem;
+    flex: 1;
+}
+
+.blog-step .step-title {
+    font-size: 0.875rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #1A1A2E;
+    margin: 0 0 0.4rem;
+    padding-top: 0.35rem;
+}
+
+.blog-step .step-desc {
+    font-size: 0.875rem;
+    color: #6B7280;
+    font-weight: 500;
+    margin: 0;
+    line-height: 1.65;
+}
+
+/* ── FICHA TÉCNICA / SPEC CARD ──────────────────────── */
+.blog-spec-card {
+    background: linear-gradient(135deg, #1A1A2E, #2D2D50);
+    border-radius: 2rem;
+    padding: 2rem;
+    margin: 2rem 0;
+    color: white;
+}
+
+.blog-spec-card .spec-card-title {
+    font-size: 0.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    color: rgba(255, 255, 255, 0.5);
+    margin-bottom: 1.25rem;
+}
+
+.blog-spec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+}
+
+.blog-spec-item {
+    background: rgba(255, 255, 255, 0.07);
+    border-radius: 1rem;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.blog-spec-item .spec-label {
+    font-size: 0.55rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.45);
+    margin-bottom: 0.4rem;
+}
+
+.blog-spec-item .spec-value {
+    font-size: 1.1rem;
+    font-weight: 900;
+    color: white;
+}
+
+/* ── ÍNDICE DE CONTENIDOS (TOC) ─────────────────────── */
+.blog-toc {
+    background: #FAFAFA;
+    border: 1px solid #F3F4F6;
+    border-radius: 1.5rem;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.blog-toc .toc-title {
+    font-size: 0.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: #9CA3AF;
+    margin-bottom: 1rem;
+}
+
+.blog-toc ol {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    counter-reset: toc-counter;
+}
+
+.blog-toc li {
+    counter-increment: toc-counter;
+    margin-bottom: 0.5rem;
+}
+
+.blog-toc a {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #4B5563;
+    text-decoration: none;
+    padding: 0.4rem 0.6rem;
+    border-radius: 0.75rem;
+    transition: all 0.2s;
+}
+
+.blog-toc a:hover {
+    color: var(--color-primary, #E8611A);
+    background: rgba(232, 97, 26, 0.06);
+}
+
+.blog-toc a::before {
+    content: counter(toc-counter, decimal-leading-zero);
+    font-size: 0.55rem;
+    font-weight: 900;
+    color: #D1D5DB;
+    min-width: 1.5rem;
+}
+
+/* ── BLOCKQUOTE / CITA DESTACADA ────────────────────── */
+.blog-rich-content blockquote {
+    border-left: 4px solid var(--color-primary, #E8611A);
+    padding: 1rem 1.5rem;
+    margin: 2rem 0;
+    background: #FFFBF8;
+    border-radius: 0 1rem 1rem 0;
+    font-style: italic;
+    color: #6B7280;
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+/* ── CTA DE PRODUCTO ────────────────────────────────── */
+.blog-product-cta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: linear-gradient(135deg, #FFF7F3, #FFF1E8);
+    border: 1px solid rgba(232, 97, 26, 0.2);
+    border-radius: 1.5rem;
+    padding: 1.25rem 1.5rem;
+    margin: 2rem 0;
+    text-decoration: none;
+    transition: all 0.25s;
+}
+
+.blog-product-cta:hover {
+    box-shadow: 0 8px 24px rgba(232, 97, 26, 0.15);
+    transform: translateY(-2px);
+}
+
+.blog-product-cta .cta-text {
+    font-size: 0.75rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    color: #1A1A2E;
+    letter-spacing: 0.05em;
+}
+
+.blog-product-cta .cta-btn {
+    background: var(--color-primary, #E8611A);
+    color: white;
+    font-size: 0.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 0.6rem 1.25rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
