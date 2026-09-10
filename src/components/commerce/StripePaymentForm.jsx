@@ -53,6 +53,7 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
     };
 
     const [hasExpressMethods, setHasExpressMethods] = useState(true);
+    const [expressMethodsInfo, setExpressMethodsInfo] = useState(null);
 
     const handleExpressConfirm = async (event) => {
         setLoading(true);
@@ -118,7 +119,7 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                             paymentMethodOrder: ['applePay', 'googlePay', 'link', 'amazonPay'],
                             paymentMethods: {
                                 applePay: 'always',
-                                googlePay: 'always',
+                                googlePay: 'auto',
                                 link: 'auto',
                                 amazonPay: 'auto',
                             }
@@ -126,12 +127,22 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                         onReady={({ availablePaymentMethods }) => {
                             if (availablePaymentMethods) {
                                 console.log('[Stripe Express] Métodos detectados en este navegador:', availablePaymentMethods);
+                                setExpressMethodsInfo(availablePaymentMethods);
                                 const hasAny = Object.values(availablePaymentMethods).some(Boolean);
                                 setHasExpressMethods(hasAny);
                             }
                         }}
+                        onLoadError={(err) => {
+                            console.error('[Stripe Express] Error de carga:', err);
+                        }}
                     />
                 </div>
+
+                {expressMethodsInfo && !expressMethodsInfo.applePay && (
+                    <div className="text-[10px] text-gray-500 bg-gray-100/70 border border-gray-200 rounded-xl px-3 py-1.5 text-center font-mono">
+                        Estado detectado por Stripe: Apple Pay: ❌ | Google Pay: {expressMethodsInfo.googlePay ? '✅' : '❌'} | Link: {expressMethodsInfo.link ? '✅' : '❌'}
+                    </div>
+                )}
 
                 {hasExpressMethods && (
                     <div className="relative flex py-2 items-center">
