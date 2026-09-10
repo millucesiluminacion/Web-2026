@@ -52,10 +52,18 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
         }
     };
 
+    const [hasExpressMethods, setHasExpressMethods] = useState(true);
+
     const handleExpressConfirm = async (event) => {
         setLoading(true);
         setError(null);
         try {
+            const { error: submitError } = await elements.submit();
+            if (submitError) {
+                setError(submitError.message);
+                setLoading(false);
+                return;
+            }
             await processPayment();
         } catch (err) {
             setError(err.message || 'Error con Apple Pay / Google Pay.');
@@ -101,16 +109,37 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
                     </label>
                 </div>
 
-                {/* Botón Exprés (Apple Pay / Google Pay) */}
+                {/* Botón Exprés (Apple Pay / Google Pay / Link) */}
                 <div className="rounded-2xl overflow-hidden">
-                    <ExpressCheckoutElement onConfirm={handleExpressConfirm} options={{ buttonHeight: 50 }} />
+                    <ExpressCheckoutElement
+                        onConfirm={handleExpressConfirm}
+                        options={{
+                            buttonHeight: 50,
+                            paymentMethodOrder: ['applePay', 'googlePay', 'link', 'amazonPay'],
+                            paymentMethods: {
+                                applePay: 'always',
+                                googlePay: 'always',
+                                link: 'auto',
+                                amazonPay: 'auto',
+                            }
+                        }}
+                        onReady={({ availablePaymentMethods }) => {
+                            if (availablePaymentMethods) {
+                                console.log('[Stripe Express] Métodos detectados en este navegador:', availablePaymentMethods);
+                                const hasAny = Object.values(availablePaymentMethods).some(Boolean);
+                                setHasExpressMethods(hasAny);
+                            }
+                        }}
+                    />
                 </div>
 
-                <div className="relative flex py-2 items-center">
-                    <div className="flex-grow border-t border-gray-200"></div>
-                    <span className="flex-shrink mx-4 text-[9px] font-black uppercase text-gray-400 tracking-widest">o paga con tarjeta / Bizum</span>
-                    <div className="flex-grow border-t border-gray-200"></div>
-                </div>
+                {hasExpressMethods && (
+                    <div className="relative flex py-2 items-center">
+                        <div className="flex-grow border-t border-gray-200"></div>
+                        <span className="flex-shrink mx-4 text-[9px] font-black uppercase text-gray-400 tracking-widest">o paga con tarjeta / Bizum</span>
+                        <div className="flex-grow border-t border-gray-200"></div>
+                    </div>
+                )}
 
                 {/* Formulario completo de Tarjetas y Bizum */}
                 <div className="p-4 bg-white rounded-2xl border border-gray-100 transition-all">

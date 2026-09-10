@@ -39,7 +39,7 @@ function Callout({ tipo, titulo, children }) {
             <span className="callout-icon">{emoji}</span>
             <div className="callout-body">
                 <p className="callout-title">{label}</p>
-                <p className="callout-text">{children}</p>
+                <div className="callout-text">{children}</div>
             </div>
         </div>
     );
@@ -51,12 +51,12 @@ function TablaComparativa({ cols, filas }) {
         <div className="blog-table-wrapper">
             <table className="blog-comparison-table">
                 <thead>
-                    <tr>{cols.map(c => <th key={c}>{c}</th>)}</tr>
+                    <tr>{(cols || []).map(c => <th key={c}>{c}</th>)}</tr>
                 </thead>
                 <tbody>
-                    {filas.map((f, i) => (
+                    {(filas || []).map((f, i) => (
                         <tr key={i}>
-                            {f.map((cel, j) => (
+                            {(f || []).map((cel, j) => (
                                 <td key={j}>
                                     {typeof cel === 'object' ? (
                                         <>
@@ -78,7 +78,7 @@ function TablaComparativa({ cols, filas }) {
 function GuidePasos({ pasos }) {
     return (
         <ul className="blog-steps">
-            {pasos.map((paso, i) => (
+            {(pasos || []).map((paso, i) => (
                 <li key={i} className="blog-step">
                     <div className="step-line" />
                     <div className="step-number">{String(i + 1).padStart(2, '0')}</div>
@@ -98,7 +98,7 @@ function EspecCard({ titulo, specs }) {
         <div className="blog-spec-card">
             <p className="spec-card-title">⚡ {titulo || 'Ficha Técnica'}</p>
             <div className="blog-spec-grid">
-                {specs.map((s, i) => (
+                {(specs || []).map((s, i) => (
                     <div key={i} className="blog-spec-item">
                         <p className="spec-label">{s.label}</p>
                         <p className="spec-value">{s.value}</p>
@@ -185,7 +185,7 @@ function ProsCons({ pros = [], cons = [] }) {
     );
 }
 
-// ── Acordeón FAQ ─────────────────────────────────────────────────────
+// ── Acordeón FAQ Interactivo ──────────────────────────────────────────
 function FaqSection({ items = [] }) {
     const [openIndex, setOpenIndex] = useState(null);
     return (
@@ -229,19 +229,148 @@ function ProductShowcaseCard({ titulo, desc, imagen, badge, url }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Componente principal: renderiza bloques de contenido estructurado.
+// PARSER HÍBRIDO: extrae JSONs y Callouts de textos HTML arbitrarios
+// ─────────────────────────────────────────────────────────────────────
+function parseHtmlWithEmbeddedBlocks(str) {
+    if (!str) return [];
+
+    // 1. Reemplazar comentarios CALLOUT por JSON
+    let processed = str.replace(
+        /<!--\s*CALLOUT:([a-z]+)\s*-->([\s\S]*?)<!--\s*\/CALLOUT\s*-->/gi,
+        (m, tipo, content) => {
+            const clean = content.trim().replace(/^💡|^\⚠️|^\⚡|^\📌/, '').trim();
+            return JSON.stringify({ type: 'callout', subtipo: tipo, content: clean });
+        }
+    );
+
+    const segments = [];
+    let currentIndex = 0;
+    const regex = /\{\s*"type"\s*:/g;
+    let match;
+
+    while ((match = regex.exec(processed)) !== null) {
+        const startIdx = match.index;
+        let braceCount = 0;
+        let endIdx = -1;
+        let inString = false;
+        let escapeNext = false;
+
+        for (let i = startIdx; i < processed.length; i++) {
+            const char = processed[i];
+            if (escapeNext) {
+                escapeNext = false;
+                continue;
+            }
+            if (char === '\\') {
+                escapeNext = true;
+                continue;
+            }
+            if (char === '"') {
+                inString = !inString;
+                continue;
+            }
+            if (!inString) {
+                if (char === '{') braceCount++;
+                else if (char === '}') {
+                    braceCount--;
+                    if (braceCount === 0) {
+                        endIdx = i + 1;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (endIdx !== -1) {
+            const jsonStr = processed.substring(startIdx, endIdx);
+            try {
+                const parsed = JSON.parse(jsonStr);
+                if (parsed && parsed.type) {
+                    const htmlBefore = processed.substring(currentIndex, startIdx).trim();
+                    if (htmlBefore) segments.push({ type: 'html', content: htmlBefore });
+                    segments.push(parsed);
+                    currentIndex = endIdx;
+                    regex.lastIndex = endIdx;
+                }
+            } catch {
+                // Si no parsea, continúa normalmente
+            }
+        }
+    }
+
+    const remainingHtml = processed.substring(currentIndex).trim();
+    if (remainingHtml) {
+        segments.push({ type: 'html', content: remainingHtml });
+    }
+
+    return segments;
+}
+
+function RenderSingleBlock({ block, index }) {
+    const id = `seccion-${index}`;
+    switch (block.type) {
+        case 'h2':
+            return <h2 id={id}>{block.content}</h2>;
+        case 'h3':
+            return <h3 id={id}>{block.content}</h3>;
+        case 'p':
+            return <p>{block.content}</p>;
+        case 'ul':
+            return <ul>{(block.items || []).map((it, j) => <li key={j}>{it}</li>)}</ul>;
+        case 'ol':
+            return <ol>{(block.items || []).map((it, j) => <li key={j}>{it}</li>)}</ol>;
+        case 'quote':
+            return <blockquote>{block.content}</blockquote>;
+        case 'callout':
+            return <Callout tipo={block.subtipo} titulo={block.titulo}>{block.content}</Callout>;
+        case 'tabla':
+            return <TablaComparativa cols={block.cols} filas={block.filas} />;
+        case 'pasos':
+            return <GuidePasos pasos={block.pasos} />;
+        case 'especCard':
+            return <EspecCard titulo={block.titulo} specs={block.specs} />;
+        case 'productoCTA':
+            return <ProductoCTA texto={block.texto} url={block.url} />;
+        case 'imagen':
+            return <BlogImage url={block.url} alt={block.alt} caption={block.caption} />;
+        case 'kelvinScale':
+            return <KelvinScale />;
+        case 'prosCons':
+            return <ProsCons pros={block.pros} cons={block.cons} />;
+        case 'faq':
+            return <FaqSection items={block.items} />;
+        case 'destacadoProducto':
+            return <ProductShowcaseCard titulo={block.titulo} desc={block.desc} imagen={block.imagen} badge={block.badge} url={block.url} />;
+        case 'html':
+            return <div dangerouslySetInnerHTML={{ __html: block.content }} />;
+        default:
+            return null;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// Componente principal: renderiza bloques de contenido estructurado o HTML
 // ─────────────────────────────────────────────────────────────────────
 export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
     const [headings, setHeadings] = useState([]);
     const containerRef = useRef(null);
 
+    // Determinar la lista de bloques
+    let finalBlocks = null;
+    if (blocks && Array.isArray(blocks)) {
+        finalBlocks = blocks;
+    } else if (html) {
+        finalBlocks = parseHtmlWithEmbeddedBlocks(html);
+    }
+
     useEffect(() => {
         const hs = [];
-        if (blocks) {
-            blocks.forEach((b, i) => {
+        if (finalBlocks) {
+            finalBlocks.forEach((b, i) => {
                 if (b.type === 'h2') hs.push({ id: `seccion-${i}`, text: b.content });
             });
-        } else if (containerRef.current) {
+        }
+        if (hs.length === 0 && containerRef.current) {
             containerRef.current.querySelectorAll('h2').forEach((el, i) => {
                 const id = el.id || `seccion-${i}`;
                 el.id = id;
@@ -249,61 +378,18 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
             });
         }
         setHeadings(hs);
-    }, [blocks, html]);
-
-    if (blocks) {
-        return (
-            <div className="blog-rich-content" ref={containerRef}>
-                {mostrarTOC && headings.length > 1 && <TableOfContents headings={headings} />}
-                {blocks.map((block, i) => {
-                    const id = `seccion-${i}`;
-                    switch (block.type) {
-                        case 'h2':
-                            return <h2 key={i} id={id}>{block.content}</h2>;
-                        case 'h3':
-                            return <h3 key={i} id={id}>{block.content}</h3>;
-                        case 'p':
-                            return <p key={i}>{block.content}</p>;
-                        case 'ul':
-                            return <ul key={i}>{block.items.map((it, j) => <li key={j}>{it}</li>)}</ul>;
-                        case 'ol':
-                            return <ol key={i}>{block.items.map((it, j) => <li key={j}>{it}</li>)}</ol>;
-                        case 'quote':
-                            return <blockquote key={i}>{block.content}</blockquote>;
-                        case 'callout':
-                            return <Callout key={i} tipo={block.subtipo} titulo={block.titulo}>{block.content}</Callout>;
-                        case 'tabla':
-                            return <TablaComparativa key={i} cols={block.cols} filas={block.filas} />;
-                        case 'pasos':
-                            return <GuidePasos key={i} pasos={block.pasos} />;
-                        case 'especCard':
-                            return <EspecCard key={i} titulo={block.titulo} specs={block.specs} />;
-                        case 'productoCTA':
-                            return <ProductoCTA key={i} texto={block.texto} url={block.url} />;
-                        case 'imagen':
-                            return <BlogImage key={i} url={block.url} alt={block.alt} caption={block.caption} />;
-                        case 'kelvinScale':
-                            return <KelvinScale key={i} />;
-                        case 'prosCons':
-                            return <ProsCons key={i} pros={block.pros} cons={block.cons} />;
-                        case 'faq':
-                            return <FaqSection key={i} items={block.items} />;
-                        case 'destacadoProducto':
-                            return <ProductShowcaseCard key={i} titulo={block.titulo} desc={block.desc} imagen={block.imagen} badge={block.badge} url={block.url} />;
-                        case 'html':
-                            return <div key={i} dangerouslySetInnerHTML={{ __html: block.content }} />;
-                        default:
-                            return null;
-                    }
-                })}
-            </div>
-        );
-    }
+    }, [finalBlocks, html]);
 
     return (
         <div className="blog-rich-content" ref={containerRef}>
             {mostrarTOC && headings.length > 1 && <TableOfContents headings={headings} />}
-            <div dangerouslySetInnerHTML={{ __html: html }} />
+            {finalBlocks && finalBlocks.length > 0 ? (
+                finalBlocks.map((block, i) => (
+                    <RenderSingleBlock key={i} block={block} index={i} />
+                ))
+            ) : (
+                <div dangerouslySetInnerHTML={{ __html: html }} />
+            )}
         </div>
     );
 }
