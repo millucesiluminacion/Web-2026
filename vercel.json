@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/feed/productos.xml",
-      "destination": "/api/product-feed"
+      "destination": "/api/sitemap?type=google-merchant"
     },
     {
       "source": "/api/(.*)",
