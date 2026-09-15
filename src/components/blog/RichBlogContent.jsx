@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ChevronDown, Camera, Check, X, Sparkles } from 'lucide-react';
 import '../../styles/blogRichStyles.css';
@@ -355,13 +355,12 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
     const [headings, setHeadings] = useState([]);
     const containerRef = useRef(null);
 
-    // Determinar la lista de bloques
-    let finalBlocks = null;
-    if (blocks && Array.isArray(blocks)) {
-        finalBlocks = blocks;
-    } else if (html) {
-        finalBlocks = parseHtmlWithEmbeddedBlocks(html);
-    }
+    // Estabilizar finalBlocks con useMemo para evitar bucle infinito
+    const finalBlocks = useMemo(() => {
+        if (blocks && Array.isArray(blocks)) return blocks;
+        if (html) return parseHtmlWithEmbeddedBlocks(html);
+        return null;
+    }, [blocks, html]);
 
     useEffect(() => {
         const hs = [];
@@ -378,7 +377,7 @@ export default function RichBlogContent({ blocks, html, mostrarTOC = true }) {
             });
         }
         setHeadings(hs);
-    }, [finalBlocks, html]);
+    }, [finalBlocks]);
 
     return (
         <div className="blog-rich-content" ref={containerRef}>

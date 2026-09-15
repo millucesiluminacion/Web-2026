@@ -101,7 +101,7 @@ export default function BlogPostDetail() {
     return (
         <div className="bg-[#FDFDFD] min-h-screen pb-20">
             {/* ── HERO ── */}
-            <section className="relative h-[60vh] md:h-[70vh] overflow-hidden bg-brand-carbon">
+            <section className="relative z-0 h-[60vh] md:h-[70vh] overflow-hidden bg-brand-carbon">
                 <img
                     src={post.image_url || 'https://images.unsplash.com/photo-1513506003901-1e6a229e2d15?q=80&w=2000&auto=format&fit=crop'}
                     className="w-full h-full object-cover opacity-60 scale-105"

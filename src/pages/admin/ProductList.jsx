@@ -54,6 +54,8 @@ export default function ProductList() {
     const [bulkValue, setBulkValue] = useState('');
     const [isBulkSaving, setIsBulkSaving] = useState(false);
     const [bulkToast, setBulkToast] = useState('');
+    const [isSelectingAllPages, setIsSelectingAllPages] = useState(false); // true when ALL pages are selected
+    const [isFetchingAllIds, setIsFetchingAllIds] = useState(false);
 
     // Quick-edit inline state
     const [quickEditId, setQuickEditId] = useState(null);
@@ -124,6 +126,12 @@ export default function ProductList() {
     useEffect(() => {
         setFilterSubCategory('');
     }, [filterCategory]);
+
+    // Reset cross-page selection when filters or page change
+    useEffect(() => {
+        setIsSelectingAllPages(false);
+        setSelectedIds(new Set());
+    }, [page, filterCategory, filterSubCategory, filterBrand, filterStatus, searchQuery, sortBy]);
 
     async function fetchAllData() {
         try {
@@ -328,135 +336,198 @@ export default function ProductList() {
             let processed = 0;
             let errors = 0;
 
-            // 1. Separate Parents (Originals) and Variants (Children)
+            // --- Column name resolver: new names first, fallback to old names ---
+            const col = (row, ...names) => {
+                for (const name of names) {
+                    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+                        return String(row[name]).trim();
+                    }
+                }
+                return '';
+            };
+
+            // --- Price parser: strips € symbol, handles comma decimals ---
+            const parsePrice = (val) => {
+                if (!val && val !== 0) return null;
+                const n = parseFloat(String(val).replace(/[€\s]/g, '').replace(',', '.'));
+                return isNaN(n) ? null : n;
+            };
+
+            // --- Category resolver: subcategory takes priority, then parent category ---
+            const resolveCategoryId = (catName, subCatName) => {
+                // First try subcategory (more specific)
+                if (subCatName) {
+                    const sub = categories.find(c => c.name.toLowerCase() === subCatName.toLowerCase());
+                    if (sub) return sub.id;
+                }
+                // Then try the category name (could be parent or standalone)
+                if (catName) {
+                    const cat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
+                    if (cat) return cat.id;
+                }
+                return null;
+            };
+
+            // --- Energy label resolver: name → id from local state ---
+            const resolveEnergyLabelId = (labelName) => {
+                if (!labelName) return null;
+                const label = allEnergyLabels.find(l => l.name.toLowerCase() === labelName.toLowerCase());
+                return label ? label.id : null;
+            };
+
+            // --- Build a product payload from a CSV row (shared for parents & variants) ---
+            const buildPayload = (row, parentId = null) => {
+                const name = col(row, 'Nombre');
+                const reference = col(row, 'SKU');
+
+                // Prices (new names → old names fallback)
+                const price = parsePrice(col(row, 'Precio (€)', 'Precio de venta', 'Precio'));
+                const discount_price = parsePrice(col(row, 'Precio Oferta (€)', 'Precio Oferta'));
+                const original_price = parsePrice(col(row, 'Precio PVP Original (€)', 'Precio Original'));
+                const partner_price = parsePrice(col(row, 'Precio Socio (€)', 'Precio Socio'));
+                const professional_price = parsePrice(col(row, 'Precio Profesional (€)', 'Precio Profesional'));
+
+                // Inventory
+                const stock = parseInt(col(row, 'Stock', 'CANT.') || 0);
+                const estadoRaw = col(row, 'Estado');
+                const is_active = estadoRaw
+                    ? estadoRaw.toLowerCase() !== 'borrador'
+                    : undefined; // undefined = don't override if not present
+
+                // Category
+                const catName = col(row, 'Categoría', 'Categorías');
+                const subCatName = col(row, 'Subcategoría');
+                const category_id = resolveCategoryId(catName, subCatName);
+
+                // Descriptions
+                const description = col(row, 'Descripción corta', 'Descripción');
+                const long_description = col(row, 'Descripción larga (HTML)', 'Descripción larga (texto)', 'Descripción larga');
+
+                // Images
+                const image_url = col(row, 'Imagen principal', 'URL de la imagen');
+                const galleryRaw = col(row, 'Galería de imágenes');
+                const extra_images = galleryRaw
+                    ? galleryRaw.split('|').map(s => s.trim()).filter(Boolean)
+                    : undefined;
+
+                // Attributes
+                const attributes = parseAttributes(col(row, 'Atributos', 'Opciones'));
+
+                // Meter sale fields
+                const isByMeterRaw = col(row, 'Venta por metro');
+                const is_by_meter = isByMeterRaw ? isByMeterRaw.toLowerCase() === 'sí' || isByMeterRaw.toLowerCase() === 'si' : undefined;
+
+                // Energy label
+                const energyLabelName = col(row, 'Etiqueta energética');
+                const energy_label_id = resolveEnergyLabelId(energyLabelName);
+
+                const payload = {
+                    reference,
+                    name,
+                    description,
+                    price: price ?? 0,
+                    partner_price: partner_price ?? 0,
+                    stock,
+                    image_url: image_url || null,
+                    category_id,
+                    attributes,
+                    parent_id: parentId,
+                    slug: generateSlug(name, reference),
+                };
+
+                // Only include optional fields if they have a value (avoid overwriting with null)
+                if (discount_price !== null) payload.discount_price = discount_price;
+                if (original_price !== null) payload.original_price = original_price;
+                if (professional_price !== null) payload.professional_price = professional_price;
+                if (long_description) payload.long_description = long_description;
+                if (extra_images !== undefined) payload.extra_images = extra_images;
+                if (is_active !== undefined) payload.is_active = is_active;
+                if (is_by_meter !== undefined) {
+                    payload.is_by_meter = is_by_meter;
+                    if (is_by_meter) {
+                        const minM = parseFloat(col(row, 'Mínimo metros'));
+                        const maxM = parseFloat(col(row, 'Máximo metros'));
+                        const stepM = parseFloat(col(row, 'Paso metros'));
+                        if (!isNaN(minM)) payload.min_meters = minM;
+                        if (!isNaN(maxM)) payload.max_meters = maxM;
+                        if (!isNaN(stepM)) payload.meter_step = stepM;
+                    }
+                }
+                if (energy_label_id) payload.energy_label_id = energy_label_id;
+
+                return payload;
+            };
+
+            // --- Resilient upsert: retries without is_active if DB column missing ---
+            const upsertProduct = async (payload, existingId = null) => {
+                const run = (p) => existingId
+                    ? supabase.from('products').update(p).eq('id', existingId)
+                    : supabase.from('products').insert([p]).select().maybeSingle();
+
+                let res = await run(payload);
+                if (res.error?.message?.includes('is_active')) {
+                    const { is_active, ...safe } = payload;
+                    res = await run(safe);
+                }
+                if (res.error) throw res.error;
+                return existingId || res.data?.id;
+            };
+
+            // 1. Separate parents and variants
             const parents = [];
             const variants = [];
-
             rows.forEach(row => {
-                // Assuming "SKU de productos originales" is empty for parents, or matches their own SKU
-                const skuOriginal = row['SKU de productos originales']?.trim();
-                const sku = row['SKU']?.trim();
-
-                if (!skuOriginal || skuOriginal === sku) {
+                // New format: SKU Padre | Old format: SKU de productos originales
+                const parentSku = col(row, 'SKU Padre', 'SKU de productos originales');
+                const sku = col(row, 'SKU');
+                if (!parentSku || parentSku === sku) {
                     parents.push(row);
                 } else {
                     variants.push(row);
                 }
             });
 
-            // Helper to find category ID by name
-            const getCategoryId = (catName) => {
-                if (!catName) return null;
-                const cat = categories.find(c => c.name.toLowerCase() === catName.toLowerCase());
-                return cat ? cat.id : null;
-            };
-
-            // 2. Insert Parents First
-            const parentMap = new Map(); // SKU -> Database ID
-
+            // 2. Insert / update parents
+            const parentSkuToId = new Map();
             for (const row of parents) {
                 try {
-                    const price = parseFloat(row['Precio de venta']?.replace(',', '.') || row['Precio']?.replace('€', '').replace(',', '.').trim() || 0);
-                    const partner_price = parseFloat(row['Precio Socio']?.replace(',', '.') || 0);
-                    const payload = {
-                        reference: row['SKU'],
-                        name: row['Nombre'],
-                        description: row['Descripción'],
-                        price: isNaN(price) ? 0 : price,
-                        partner_price: isNaN(partner_price) ? 0 : partner_price,
-                        stock: parseInt(row['CANT.'] || 0),
-                        image_url: row['URL de la imagen'],
-                        category_id: getCategoryId(row['Categorías']),
-                        attributes: parseAttributes(row['Opciones']),
-                        parent_id: null,
-                        slug: generateSlug(row['Nombre'], row['SKU'])
-                    };
-
-                    // Check if exists to update or insert
-                    const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).maybeSingle();
-
-                    let productId;
-                    if (existing) {
-                        // Update existing parent
-                        let res = await supabase.from('products').update(payload).eq('id', existing.id);
-                        if (res.error && res.error.message.includes('is_active')) {
-                            const { is_active, ...resilientPayload } = payload;
-                            res = await supabase.from('products').update(resilientPayload).eq('id', existing.id);
-                        }
-                        productId = existing.id;
-                    } else {
-                        let res = await supabase.from('products').insert([payload]).select().maybeSingle();
-                        if (res.error && res.error.message.includes('is_active')) {
-                            const { is_active, ...resilientPayload } = payload;
-                            res = await supabase.from('products').insert([resilientPayload]).select().maybeSingle();
-                        }
-                        if (res.error) throw res.error;
-                        productId = res.data.id;
-                    }
-
-                    parentMap.set(payload.reference, productId);
+                    const payload = buildPayload(row, null);
+                    const { data: existing } = await supabase
+                        .from('products').select('id').eq('reference', payload.reference).maybeSingle();
+                    const productId = await upsertProduct(payload, existing?.id);
+                    parentSkuToId.set(payload.reference, productId);
                     processed++;
                 } catch (err) {
-                    console.error('Error importing parent:', row['SKU'], err);
+                    console.error('Error importing parent:', col(row, 'SKU'), err);
                     errors++;
                 }
             }
 
-            // 3. Insert Variants linked to Parents
+            // 3. Insert / update variants
             for (const row of variants) {
                 try {
-                    const parentSku = row['SKU de productos originales']?.trim();
-                    let finalParentId = parentMap.get(parentSku);
+                    const parentSku = col(row, 'SKU Padre', 'SKU de productos originales');
+                    let finalParentId = parentSkuToId.get(parentSku);
 
-                    // If not found in current batch map, try searching in DB
                     if (!finalParentId) {
-                        const { data: dbParent } = await supabase.from('products').select('id').eq('reference', parentSku).maybeSingle();
+                        const { data: dbParent } = await supabase
+                            .from('products').select('id').eq('reference', parentSku).maybeSingle();
                         finalParentId = dbParent?.id;
                     }
 
                     if (!finalParentId) {
-                        console.warn(`Parent not found for variant ${row['SKU']} (Parent SKU: ${parentSku})`);
+                        console.warn(`Parent not found for variant ${col(row, 'SKU')} (Parent SKU: ${parentSku})`);
                         errors++;
                         continue;
                     }
 
-                    const price = parseFloat(row['Precio de venta']?.replace(',', '.') || row['Precio']?.replace('€', '').replace(',', '.').trim() || 0);
-                    const partner_price = parseFloat(row['Precio Socio']?.replace(',', '.') || 0);
-                    const payload = {
-                        reference: row['SKU'],
-                        name: row['Nombre'],
-                        description: row['Descripción'],
-                        price: isNaN(price) ? 0 : price,
-                        partner_price: isNaN(partner_price) ? 0 : partner_price,
-                        stock: parseInt(row['CANT.'] || 0),
-                        image_url: row['URL de la imagen'],
-                        category_id: getCategoryId(row['Categorías']), // Inherit category?
-                        parent_id: finalParentId,
-                        attributes: parseAttributes(row['Opciones']),
-                        slug: generateSlug(row['Nombre'], row['SKU'])
-                    };
-
-                    // Check if exists
-                    const { data: existing } = await supabase.from('products').select('id').eq('reference', payload.reference).maybeSingle();
-
-                    if (existing) {
-                        let res = await supabase.from('products').update(payload).eq('id', existing.id);
-                        if (res.error && res.error.message.includes('is_active')) {
-                            const { is_active, ...resilientPayload } = payload;
-                            await supabase.from('products').update(resilientPayload).eq('id', existing.id);
-                        }
-                    } else {
-                        let res = await supabase.from('products').insert([payload]);
-                        if (res.error && res.error.message.includes('is_active')) {
-                            const { is_active, ...resilientPayload } = payload;
-                            await supabase.from('products').insert([resilientPayload]);
-                        }
-                    }
-
+                    const payload = buildPayload(row, finalParentId);
+                    const { data: existing } = await supabase
+                        .from('products').select('id').eq('reference', payload.reference).maybeSingle();
+                    await upsertProduct(payload, existing?.id);
                     processed++;
-
                 } catch (err) {
-                    console.error('Error importing variant:', row['SKU'], err);
+                    console.error('Error importing variant:', col(row, 'SKU'), err);
                     errors++;
                 }
             }
@@ -472,16 +543,18 @@ export default function ProductList() {
     }
 
     function parseAttributes(optionsString) {
-        // format: "Color: Rojo; Talla: XL" or similar
-        // Adjust regex based on real data if needed
+        // Supports: "Color: Rojo; Talla: XL" and values with multiple items "Color: Rojo, Azul"
         if (!optionsString) return {};
         const attrs = {};
-        // Split by ';' or newlines if any
-        optionsString.split(/[;\n]+/).forEach(pair => {
-            if (!pair.includes(':')) return;
-            const [key, value] = pair.split(':');
-            if (key && value) {
-                attrs[key.trim()] = value.trim();
+        String(optionsString).split(/;|\n/).forEach(pair => {
+            const colonIdx = pair.indexOf(':');
+            if (colonIdx === -1) return;
+            const key = pair.slice(0, colonIdx).trim();
+            const val = pair.slice(colonIdx + 1).trim();
+            if (key && val) {
+                // If value has commas, store as array; otherwise as string
+                const parts = val.split(',').map(s => s.trim()).filter(Boolean);
+                attrs[key] = parts.length > 1 ? parts : val;
             }
         });
         return attrs;
@@ -507,49 +580,188 @@ export default function ProductList() {
         });
     };
 
-    // --- CSV EXPORT LOGIC ---
-    const handleExport = () => {
-        // Convert products to CSV format
-        // We want to export ALL products, flattened
-        const csvData = products.map(p => {
-            // Find parent SKU if exists (from local state 'products' which has all)
-            // Optimization: Create a map for faster lookup if list is huge, but map loop is fine for now
-            const parent = p.parent_id ? products.find(parent => parent.id === p.parent_id) : null;
+    // --- HELPER: Build a Supabase query with current filters applied (no pagination) ---
+    function buildFilteredQuery(baseSelect) {
+        let q = supabase.from('products').select(baseSelect);
+        const search = searchQuery?.trim();
+        if (search) q = q.or(`name.ilike.%${search}%,reference.ilike.%${search}%`);
+        if (filterSubCategory) {
+            q = q.eq('category_id', filterSubCategory);
+        } else if (filterCategory) {
+            const categoryIds = getChildIds(filterCategory, categories);
+            q = q.in('category_id', categoryIds);
+        }
+        if (filterBrand) q = q.eq('brand_id', filterBrand);
+        if (filterStatus === 'published') q = q.eq('is_active', true);
+        else if (filterStatus === 'draft') q = q.eq('is_active', false);
+        else if (filterStatus === 'low_stock') q = q.lte('stock', 5).gt('stock', 0);
+        else if (filterStatus === 'no_stock') q = q.eq('stock', 0);
+        else if (filterStatus === 'on_offer') q = q.gt('discount_price', 0);
+        else if (filterStatus === 'no_image') q = q.is('image_url', null);
+        if (sortBy === 'name_asc') q = q.order('name', { ascending: true });
+        else if (sortBy === 'name_desc') q = q.order('name', { ascending: false });
+        else if (sortBy === 'price_asc') q = q.order('price', { ascending: true });
+        else if (sortBy === 'price_desc') q = q.order('price', { ascending: false });
+        else if (sortBy === 'stock_asc') q = q.order('stock', { ascending: true });
+        else if (sortBy === 'stock_desc') q = q.order('stock', { ascending: false });
+        else q = q.order('created_at', { ascending: false });
+        return q;
+    }
 
-            // Format attributes back to string "Key: Value; Key2: Value2"
-            let optionsStr = "";
+    // --- Fetch all IDs (all pages) matching current filters ---
+    async function fetchAllFilteredIds() {
+        setIsFetchingAllIds(true);
+        try {
+            const { data, error } = await buildFilteredQuery('id');
+            if (error) throw error;
+            return (data || []).map(p => p.id);
+        } catch (err) {
+            console.error('Error fetching all IDs:', err);
+            return [];
+        } finally {
+            setIsFetchingAllIds(false);
+        }
+    }
+
+    // --- Fetch ALL products (all pages) matching current filters for CSV export ---
+    async function fetchAllProductsForExport() {
+        try {
+            const { data, error } = await buildFilteredQuery(
+                '*, categories(id, name, parent_id), brands(name), energy_labels(name)'
+            );
+            if (error) {
+                // Fallback without joins if error
+                const fallback = await buildFilteredQuery('*');
+                if (fallback.error) throw fallback.error;
+                return fallback.data || [];
+            }
+            return data || [];
+        } catch (err) {
+            console.error('Error fetching all products for export:', err);
+            return [];
+        }
+    }
+
+    // Strip HTML tags for plain-text version of long_description
+    function stripHtml(html) {
+        if (!html) return '';
+        return html
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<\/p>/gi, '\n')
+            .replace(/<[^>]+>/g, '')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&nbsp;/g, ' ')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
+    // --- CSV EXPORT LOGIC ---
+    const handleExport = async () => {
+        setBulkToast('Preparando exportación...');
+        // Always export ALL products matching the current filters (all pages)
+        const allProducts = await fetchAllProductsForExport();
+
+        // Build a quick map for parent lookups and category lookups
+        const parentMap = {};
+        allProducts.forEach(p => { parentMap[p.id] = p; });
+
+        // Build a category map from local state for parent name resolution
+        const categoryMap = {};
+        categories.forEach(c => { categoryMap[c.id] = c; });
+
+        const csvData = allProducts.map(p => {
+            const parent = p.parent_id ? parentMap[p.parent_id] : null;
+
+            // Resolve category hierarchy
+            const cat = p.categories;
+            let catParentName = '';
+            let catName = '';
+            if (cat) {
+                if (cat.parent_id) {
+                    // This is a subcategory — look up parent name
+                    const parentCat = categoryMap[cat.parent_id];
+                    catParentName = parentCat?.name || '';
+                    catName = cat.name;
+                } else {
+                    // Top-level category
+                    catParentName = cat.name;
+                    catName = '';
+                }
+            }
+
+            // Format attributes
+            let optionsStr = '';
             if (p.attributes) {
                 optionsStr = Object.entries(p.attributes)
-                    .map(([k, v]) => `${k}: ${v}`)
+                    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
                     .join('; ');
             }
 
+            // Gallery images as pipe-separated string
+            const galleryStr = Array.isArray(p.extra_images)
+                ? p.extra_images.filter(Boolean).join('|')
+                : '';
+
+            // Long description
+            const longDescHtml = p.long_description || '';
+            const longDescPlain = stripHtml(longDescHtml);
+
             return {
-                "SKU": p.reference || "",
-                "Nombre": p.name || "",
-                "ID alternativa": "",
-                "Opciones": optionsStr,
-                "Categorías": p.categories?.name || "",
-                "SKU de productos originales": parent ? parent.reference : "",
-                "Precio": `${p.price} €`,
-                "Precio de venta": p.price,
-                "Precio Socio": p.partner_price || 0,
-                "Moneda": "EUR",
-                "Descripción": p.description || "",
-                "Inventario de seguimiento": "by product",
-                "CANT.": p.stock,
-                "Pedido pendiente": "0",
-                "Oculto": "0",
-                "URL de la imagen": p.image_url || ""
+                // --- Identificación ---
+                "SKU": p.reference || '',
+                "Nombre": p.name || '',
+                "Slug/URL": p.slug || '',
+                "SKU Padre": parent ? (parent.reference || '') : '',
+
+                // --- Categorización ---
+                "Categoría": catParentName,
+                "Subcategoría": catName,
+                "Marca": p.brands?.name || '',
+
+                // --- Precios ---
+                "Precio (€)": p.price ?? '',
+                "Precio Oferta (€)": p.discount_price || '',
+                "Precio PVP Original (€)": p.original_price || '',
+                "Precio Socio (€)": p.partner_price || '',
+                "Precio Profesional (€)": p.professional_price || '',
+                "Moneda": 'EUR',
+
+                // --- Inventario ---
+                "Stock": p.stock ?? 0,
+                "Estado": p.is_active !== false ? 'Publicado' : 'Borrador',
+
+                // --- Descripción ---
+                "Descripción corta": p.description || '',
+                "Descripción larga (texto)": longDescPlain,
+                "Descripción larga (HTML)": longDescHtml,
+
+                // --- Imágenes ---
+                "Imagen principal": p.image_url || '',
+                "Galería de imágenes": galleryStr,
+
+                // --- Atributos / Variantes ---
+                "Atributos": optionsStr,
+
+                // --- Venta por metro ---
+                "Venta por metro": p.is_by_meter ? 'Sí' : 'No',
+                "Mínimo metros": p.is_by_meter ? (p.min_meters ?? '') : '',
+                "Máximo metros": p.is_by_meter ? (p.max_meters ?? '') : '',
+                "Paso metros": p.is_by_meter ? (p.meter_step ?? '') : '',
+
+                // --- Otros ---
+                "Etiqueta energética": p.energy_labels?.name || '',
+                "Fecha creación": p.created_at ? new Date(p.created_at).toLocaleDateString('es-ES') : ''
             };
         });
 
         const csv = Papa.unparse(csvData, {
-            quotes: true, // Force quotes to avoid delimiter issues
-            delimiter: ",",
+            quotes: true,
+            delimiter: ',',
         });
 
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -557,6 +769,9 @@ export default function ProductList() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setBulkToast(`✓ ${csvData.length} productos exportados correctamente`);
+        setTimeout(() => setBulkToast(''), 3500);
     };
 
 
@@ -908,11 +1123,14 @@ export default function ProductList() {
     };
 
     // Bulk selection helpers
-    const allFilteredIds = products.map(p => p.id);
-    const allSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id));
+    const allFilteredIds = products.map(p => p.id); // IDs of the current page
+    const allPageSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedIds.has(id));
+    const allSelected = isSelectingAllPages; // legacy alias used in UI
     const someSelected = selectedIds.size > 0;
 
     function toggleSelect(id) {
+        // Deselect all-pages mode when manually toggling
+        setIsSelectingAllPages(false);
         setSelectedIds(prev => {
             const next = new Set(prev);
             next.has(id) ? next.delete(id) : next.add(id);
@@ -921,11 +1139,25 @@ export default function ProductList() {
     }
 
     function toggleSelectAll() {
-        if (allSelected) {
+        // If all-pages were selected, clear everything
+        if (isSelectingAllPages) {
+            setIsSelectingAllPages(false);
+            setSelectedIds(new Set());
+            return;
+        }
+        if (allPageSelected) {
+            // Current page already all selected → clear all
             setSelectedIds(new Set());
         } else {
+            // Select current page
             setSelectedIds(new Set(allFilteredIds));
         }
+    }
+
+    async function selectAllPages() {
+        const ids = await fetchAllFilteredIds();
+        setSelectedIds(new Set(ids));
+        setIsSelectingAllPages(true);
     }
 
     async function executeBulkAction() {
@@ -965,6 +1197,7 @@ export default function ProductList() {
             }
             await fetchAllData();
             setSelectedIds(new Set());
+            setIsSelectingAllPages(false);
             setBulkAction('');
             setBulkValue('');
             setTimeout(() => setBulkToast(''), 3500);
@@ -1028,6 +1261,26 @@ export default function ProductList() {
                                 {selectedIds.size} seleccionado{selectedIds.size !== 1 ? 's' : ''}
                             </span>
                         </div>
+
+                        {/* Banner: Select all across pages */}
+                        {allPageSelected && !isSelectingAllPages && totalCount > products.length && (
+                            <button
+                                onClick={selectAllPages}
+                                disabled={isFetchingAllIds}
+                                className="flex items-center gap-2 bg-primary/10 border border-primary/30 text-primary px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary/20 transition-all disabled:opacity-50"
+                            >
+                                {isFetchingAllIds
+                                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    : <CheckSquare className="w-3.5 h-3.5" />}
+                                Seleccionar los {totalCount} productos
+                            </button>
+                        )}
+                        {isSelectingAllPages && (
+                            <span className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                <CheckSquare className="w-3.5 h-3.5" />
+                                Todos los {totalCount} productos seleccionados
+                            </span>
+                        )}
 
                         {/* Cambiar categoría */}
                         <div className="flex items-center gap-2 bg-white rounded-xl border border-gray-100 px-3 py-2 shadow-sm">
@@ -1238,9 +1491,9 @@ export default function ProductList() {
                                         <button
                                             onClick={toggleSelectAll}
                                             className="text-gray-300 hover:text-primary transition-colors"
-                                            title={allSelected ? 'Deseleccionar todo' : 'Seleccionar todo'}
+                                            title={isSelectingAllPages ? 'Deseleccionar todo' : allPageSelected ? 'Deseleccionar página' : 'Seleccionar página'}
                                         >
-                                            {allSelected
+                                            {(isSelectingAllPages || allPageSelected)
                                                 ? <CheckSquare className="w-4 h-4 text-primary" />
                                                 : <Square className="w-4 h-4" />
                                             }
