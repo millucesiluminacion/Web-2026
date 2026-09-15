@@ -1,16 +1,16 @@
-﻿{
-    "rewrites": [
-        {
-            "source": "/feed/productos.xml",
-            "destination": "/api/product-feed"
-        },
-        {
-            "source": "/api/(.*)",
-            "destination": "/api/$1"
-        },
-        {
-            "source": "/((?!api/).*)",
-            "destination": "/index.html"
-        }
-    ]
+{
+  "rewrites": [
+    {
+      "source": "/feed/productos.xml",
+      "destination": "/api/product-feed"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
 }
