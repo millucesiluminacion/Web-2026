@@ -52,29 +52,34 @@ function urlEntry({ loc, lastmod, changefreq, priority }) {
 
 // Google Merchant Center Feed generator
 async function generateGoogleMerchantFeed(res, supabase) {
-    const { data: products, error } = await supabase
-        .from('products')
-        .select(`
-            id, name, slug, description,
-            price, discount_price,
-            stock, image_url,
-            brand_name, reference,
-            categories ( name )
-        `)
-        .is('parent_id', null)
-        .neq('is_active', false)
-        .order('created_at', { ascending: false });
+    const [productsRes, categoriesRes, brandsRes] = await Promise.all([
+        supabase
+            .from('products')
+            .select('id, name, slug, description, price, discount_price, stock, image_url, reference, category_id, brand_id')
+            .is('parent_id', null)
+            .neq('is_active', false)
+            .order('created_at', { ascending: false }),
+        supabase
+            .from('categories')
+            .select('id, name'),
+        supabase
+            .from('brands')
+            .select('id, name')
+    ]);
 
-    if (error) throw error;
+    if (productsRes.error) throw productsRes.error;
 
-    const items = (products ?? []).map(p => {
+    const categoryMap = new Map((categoriesRes.data || []).map(c => [c.id, c.name]));
+    const brandMap = new Map((brandsRes.data || []).map(b => [b.id, b.name]));
+
+    const items = (productsRes.data ?? []).map(p => {
         const url = `${SITE_URL}/product/${xmlEscape(p.slug || p.id)}`;
         const salePrice = p.discount_price ? parseFloat(p.discount_price).toFixed(2) : null;
         const basePrice = parseFloat(p.price || 0).toFixed(2);
         const displayPrice = salePrice || basePrice;
         const avail = getAvailability(p.stock);
-        const catName = xmlEscape(p.categories?.name || 'Iluminación');
-        const brand = xmlEscape(p.brand_name || STORE_NAME);
+        const catName = xmlEscape(categoryMap.get(p.category_id) || 'Iluminación');
+        const brand = xmlEscape(brandMap.get(p.brand_id) || STORE_NAME);
         const desc = xmlEscape(stripHtml(p.description || p.name));
         const title = xmlEscape(p.name);
 
@@ -238,7 +243,8 @@ export default async function handler(req, res) {
         }
     } catch (err) {
         console.error('Feed generation error:', err);
+        const errMsg = err?.message || err?.details || (typeof err === 'object' ? JSON.stringify(err) : String(err));
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
-        return res.status(500).send(`<?xml version="1.0"?><error>${xmlEscape(String(err))}</error>`);
+        return res.status(500).send(`<?xml version="1.0"?><error>${xmlEscape(errMsg)}</error>`);
     }
 }
