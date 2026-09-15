@@ -235,9 +235,12 @@ export default function SEOManager() {
                     "@type": "Offer",
                     "url": `${origin}${path}`,
                     "priceCurrency": "EUR",
-                    "price": prod.offer_price || prod.price || "0.00",
-                    "availability": prod.stock > 0 || prod.stock === null ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-                    "itemCondition": "https://schema.org/NewCondition"
+                    "price": String(parseFloat(prod.offer_price || prod.price || 0).toFixed(2)),
+                    "availability": (prod.stock === null || prod.stock === undefined || prod.stock > 0)
+                        ? "https://schema.org/InStock"
+                        : "https://schema.org/OutOfStock",
+                    "itemCondition": "https://schema.org/NewCondition",
+                    "seller": { "@type": "Organization", "name": "Mil Luces" }
                 }
             };
 
