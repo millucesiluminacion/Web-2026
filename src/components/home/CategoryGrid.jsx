@@ -66,7 +66,7 @@ export function CategoryGrid() {
                 <div className="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
                     <div className="max-w-3xl">
                         <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block">Nuestras Categorías</span>
-                        <h2 className="text-4xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Explora nuestro <span className="text-primary/60 font-black">Universo de Luz</span></h2>
+                        <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter">Explora nuestro <span className="text-primary/60 font-black">Universo de Luz</span></h2>
                     </div>
                 </div>
 
@@ -75,7 +75,7 @@ export function CategoryGrid() {
                         <Loader2 className="w-10 h-10 animate-spin text-primary opacity-20" />
                     </div>
                 ) : (
-                    <ul className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 xl:gap-10">
+                    <ul className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3.5 sm:gap-6 xl:gap-10">
                         {categories.map((cat, i) => (
                             <li key={i} className="group relative">
                                 <Link to={cat.link} className="block text-center">

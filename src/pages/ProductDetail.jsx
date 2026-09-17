@@ -599,7 +599,7 @@ export default function ProductDetail() {
                                 {parentProduct.category || "Colección"}
                             </span>
 
-                            <h1 className="text-4xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4">
+                            <h1 className="text-2xl sm:text-3xl lg:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4">
                                 {parentProduct.name}
                             </h1>
 
@@ -678,7 +678,7 @@ export default function ProductDetail() {
                                         </span>
                                     </div>
                                     <div className="flex items-baseline gap-2 flex-wrap">
-                                        <span className={`text-4xl sm:text-5xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
+                                        <span className={`text-3xl sm:text-4xl lg:text-5xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>
                                             {finalPrice.toFixed(2)}
                                         </span>
                                         <span className={`text-2xl font-black italic tracking-tighter ${isPartnerPrice ? 'text-indigo-600' : isShowingProDiscount ? 'text-brand-carbon' : 'text-red-600'}`}>€</span>
@@ -689,7 +689,7 @@ export default function ProductDetail() {
                                 </div>
                             ) : (
                                 <div className="flex items-baseline gap-2 flex-wrap">
-                                    <span className="text-4xl sm:text-5xl font-black text-brand-carbon italic tracking-tighter">
+                                    <span className="text-3xl sm:text-4xl lg:text-5xl font-black text-brand-carbon italic tracking-tighter">
                                         {displayProduct ? originalPrice.toFixed(2) : '---'}
                                     </span>
                                     <span className="text-2xl font-black text-brand-carbon italic tracking-tighter">€</span>
@@ -1162,7 +1162,7 @@ export default function ProductDetail() {
                             <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] block mb-2">Explorar Más</span>
                             <h2 className="text-3xl font-black text-brand-carbon uppercase italic tracking-tight">Piezas de la Misma Colección</h2>
                         </div>
-                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                             {relatedProducts.map(rp => {
                                 const rpHasDiscount = rp.discount_price && parseFloat(rp.discount_price) > 0 && parseFloat(rp.discount_price) < parseFloat(rp.price);
                                 return (

@@ -402,13 +402,12 @@ export function Header({ onOpenAuthModal }) {
                     </div>
                 )}
 
-                {/* Mobile menu */}
                 {isMenuOpen && (
-                    <div className="xl:hidden absolute top-full left-0 right-0 bg-white border-t border-gray-100 shadow-2xl p-6 sm:p-8 z-50 overflow-x-hidden">
-                        <div className="max-w-[1600px] mx-auto">
+                    <div className="xl:hidden absolute top-full left-0 right-0 bg-white border-t border-gray-100 shadow-2xl z-50 overflow-x-hidden overflow-y-auto max-h-[85vh] animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="max-w-[1600px] mx-auto p-6 sm:p-8">
 
                             {/* Mobile search bar */}
-                            <form onSubmit={(e) => { handleSearch(e); setIsMenuOpen(false); }} className="flex relative mb-6">
+                            <form onSubmit={(e) => { handleSearch(e); setIsMenuOpen(false); }} className="flex relative mb-7">
                                 <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
                                     <Search className="w-4 h-4 text-gray-400" />
                                 </div>
@@ -417,38 +416,62 @@ export function Header({ onOpenAuthModal }) {
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     placeholder="Buscar productos..."
-                                    className="w-full pl-10 pr-4 py-3 bg-gray-50 rounded-2xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border-none"
+                                    className="w-full pl-10 pr-4 py-3.5 bg-gray-50 rounded-2xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 border-none"
                                 />
-                                <button type="submit" className="ml-3 px-4 py-3 bg-primary text-white rounded-2xl text-xs font-black uppercase">
+                                <button type="submit" className="ml-3 px-5 py-3 bg-primary text-white rounded-2xl text-xs font-black uppercase">
                                     Buscar
                                 </button>
                             </form>
 
-                            <p className="text-[9px] font-black text-primary uppercase tracking-[.4em] mb-5">Categorías</p>
-                            <div className="grid grid-cols-2 gap-y-3 gap-x-6 mb-8">
+                            {/* Categorías */}
+                            <p className="text-[9px] font-black text-primary uppercase tracking-[.4em] mb-4">Categorías</p>
+                            <div className="grid grid-cols-2 gap-y-1 gap-x-3 mb-2">
                                 {categories.map((cat) => (
                                     <Link key={cat.slug} to={`/catalogo?category=${cat.slug}`} onClick={() => setIsMenuOpen(false)}
-                                        className="text-[11px] font-bold text-gray-500 hover:text-brand-carbon uppercase italic tracking-wide transition-colors flex items-center gap-2">
+                                        className="text-[11px] font-bold text-gray-500 hover:text-brand-carbon uppercase italic tracking-wide transition-colors flex items-center gap-2 py-2.5">
                                         <span className="w-1 h-1 rounded-full bg-gray-200 flex-shrink-0"></span>
                                         {cat.name}
                                     </Link>
                                 ))}
                             </div>
-                            <div className="border-t border-gray-100 pt-6 flex flex-col gap-5">
+                            <Link to="/catalogo" onClick={() => setIsMenuOpen(false)}
+                                className="inline-flex items-center gap-2 text-[9px] font-black text-primary uppercase tracking-widest italic mb-7 hover:text-primary/70 transition-colors">
+                                Ver todo el catálogo
+                                <ArrowRight className="w-3 h-3" />
+                            </Link>
+
+                            {/* Navegación principal */}
+                            <div className="border-t border-gray-100 pt-6 grid grid-cols-2 gap-x-3 gap-y-1 mb-6">
                                 {[
                                     { label: 'Inspirate', path: '/inspirate' },
-                                    { label: 'Ofertas', path: '/ofertas' },
+                                    { label: 'Ofertas', path: '/ofertas', highlight: true },
                                     { label: 'Blog', path: '/blog' },
+                                    { label: 'Estancias', path: '/estancias' },
+                                    { label: 'Marcas', path: '/marcas' },
+                                    { label: 'Profesionales', path: '/profesionales' },
                                 ].map((item) => (
                                     <Link key={item.label} to={item.path} onClick={() => setIsMenuOpen(false)}
-                                        className="text-[11px] font-black text-gray-500 hover:text-brand-carbon uppercase italic tracking-[.2em] transition-colors">
+                                        className={`text-[11px] font-black uppercase italic tracking-[.2em] transition-colors py-2.5 flex items-center gap-2 ${item.highlight ? 'text-primary' : 'text-gray-500 hover:text-brand-carbon'}`}>
+                                        <span className="w-1 h-1 rounded-full bg-gray-200 flex-shrink-0"></span>
                                         {item.label}
                                     </Link>
                                 ))}
                             </div>
+
+                            {/* Admin link */}
+                            {isAdmin && (
+                                <div className="border-t border-gray-100 pt-5">
+                                    <Link to="/admin" onClick={() => setIsMenuOpen(false)}
+                                        className="flex items-center gap-3 h-11 px-5 bg-brand-carbon text-white rounded-2xl text-[9px] font-black uppercase italic tracking-widest hover:bg-primary transition-all shadow-lg w-full justify-center">
+                                        <LayoutDashboard className="w-3.5 h-3.5 text-primary" />
+                                        Panel de Administración
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
+
             </header>
             <MiniCart />
         </>

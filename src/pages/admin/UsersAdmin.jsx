@@ -269,13 +269,25 @@ export default function UsersAdmin() {
     async function sendPasswordReset(email) {
         if (!confirm(`¿Enviar email de restablecimiento de contraseña a ${email}?`)) return;
         try {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/reset-password`,
+            const res = await fetch('/api/auth/recover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
             });
-            if (error) throw error;
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al enviar');
             alert('Email de restablecimiento enviado correctamente.');
         } catch (error) {
-            alert('Error al enviar email: ' + error.message);
+            // Fallback al método nativo de Supabase
+            try {
+                const { error: sbErr } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: `${window.location.origin}/reset-password`,
+                });
+                if (sbErr) throw sbErr;
+                alert('Email de restablecimiento enviado correctamente (vía Supabase).');
+            } catch (err2) {
+                alert('Error al enviar email: ' + (error.message || err2.message));
+            }
         }
     }
 

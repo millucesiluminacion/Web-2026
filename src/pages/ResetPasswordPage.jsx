@@ -14,20 +14,84 @@ export default function ResetPasswordPage() {
     const [checkingSession, setCheckingSession] = useState(true);
 
     useEffect(() => {
-        // Listen for recovery event or check current session
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            if (event === 'PASSWORD_RECOVERY' || session) {
-                setHasSession(true);
+        let isMounted = true;
+
+        async function initRecovery() {
+            // 1. Comprobar si Supabase devolvió un error en el hash (#error=...&error_description=...)
+            if (window.location.hash) {
+                const hashClean = window.location.hash.startsWith('#') ? window.location.hash.substring(1) : window.location.hash;
+                const hashParams = new URLSearchParams(hashClean);
+                const errorDesc = hashParams.get('error_description') || hashParams.get('error');
+                if (errorDesc) {
+                    const cleanMsg = decodeURIComponent(errorDesc.replace(/\+/g, ' '));
+                    if (isMounted) {
+                        setError(`El enlace no es válido o ha caducado (${cleanMsg}). Solicita uno nuevo.`);
+                        setCheckingSession(false);
+                    }
+                    return;
+                }
             }
-            setCheckingSession(false);
-        });
 
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) setHasSession(true);
-            setCheckingSession(false);
-        });
+            // 2. Comprobar si viene token_hash en la query (?token_hash=...&type=recovery)
+            const searchParams = new URLSearchParams(window.location.search);
+            const tokenHash = searchParams.get('token_hash');
+            const type = searchParams.get('type') || 'recovery';
 
-        return () => subscription.unsubscribe();
+            if (tokenHash) {
+                try {
+                    const { data, error: verifyErr } = await supabase.auth.verifyOtp({
+                        token_hash: tokenHash,
+                        type: type
+                    });
+
+                    if (verifyErr) {
+                        console.error('[ResetPassword] Error en verifyOtp:', verifyErr);
+                        if (isMounted) {
+                            setError('El enlace de recuperación es inválido o ya ha sido utilizado. Por favor, solicita uno nuevo.');
+                            setHasSession(false);
+                            setCheckingSession(false);
+                        }
+                        return;
+                    }
+
+                    if (isMounted && (data?.session || data?.user)) {
+                        setHasSession(true);
+                        setCheckingSession(false);
+                        return;
+                    }
+                } catch (err) {
+                    console.error('[ResetPassword] Exception en verifyOtp:', err);
+                    if (isMounted) {
+                        setError('Ocurrió un error al verificar el enlace de seguridad.');
+                        setCheckingSession(false);
+                    }
+                    return;
+                }
+            }
+
+            // 3. Escuchar evento PASSWORD_RECOVERY o comprobar sesión existente
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+                if (!isMounted) return;
+                if (event === 'PASSWORD_RECOVERY' || session) {
+                    setHasSession(true);
+                }
+                setCheckingSession(false);
+            });
+
+            const { data: { session } } = await supabase.auth.getSession();
+            if (isMounted) {
+                if (session) setHasSession(true);
+                setCheckingSession(false);
+            }
+
+            return () => subscription.unsubscribe();
+        }
+
+        initRecovery();
+
+        return () => {
+            isMounted = false;
+        };
     }, []);
 
     const handleResetPassword = async (e) => {
@@ -104,6 +168,20 @@ export default function ResetPasswordPage() {
                             className="mt-4 inline-flex items-center gap-2 text-xs font-black text-primary uppercase tracking-widest hover:underline"
                         >
                             Ir a Iniciar Sesión ahora <ArrowRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                ) : !hasSession ? (
+                    <div className="text-center py-4 space-y-4 animate-in fade-in">
+                        <p className="text-xs text-gray-500 font-semibold leading-relaxed">
+                            Por motivos de seguridad, los enlaces de recuperación solo pueden utilizarse una única vez y expiran tras un tiempo determinado.
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => navigate('/login')}
+                            className="w-full h-12 bg-brand-carbon text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-primary transition-all shadow-lg flex items-center justify-center gap-2"
+                        >
+                            <span>Solicitar un nuevo enlace</span>
+                            <ArrowRight className="w-4 h-4 text-primary" />
                         </button>
                     </div>
                 ) : (

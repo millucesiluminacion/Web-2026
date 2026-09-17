@@ -13,6 +13,15 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        // Interceptar si el usuario llega con un hash de recuperación de Supabase fuera de /reset-password
+        if (typeof window !== 'undefined' && window.location.hash) {
+            const hash = window.location.hash;
+            if (hash.includes('type=recovery') && !window.location.pathname.includes('reset-password')) {
+                window.location.href = '/reset-password' + hash;
+                return;
+            }
+        }
+
         // Get initial session
         supabase.auth.getSession().then(({ data: { session } }) => {
             setUser(session?.user ?? null);
@@ -24,7 +33,7 @@ export function AuthProvider({ children }) {
         });
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
             const currentUser = session?.user ?? null;
             setUser(currentUser);
             if (currentUser) {
@@ -32,6 +41,11 @@ export function AuthProvider({ children }) {
             } else {
                 setProfile(null);
                 setLoading(false);
+            }
+
+            // Redirigir si se recibe un evento de PASSWORD_RECOVERY
+            if (event === 'PASSWORD_RECOVERY' && typeof window !== 'undefined' && !window.location.pathname.includes('reset-password')) {
+                window.location.href = '/reset-password' + (window.location.hash || '');
             }
         });
 

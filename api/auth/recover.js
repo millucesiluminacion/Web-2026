@@ -28,7 +28,7 @@ export default async function handler(req, res) {
         const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
         // 1. Determinar URL de redirección
-        const appUrl = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
+        const appUrl = process.env.VITE_APP_URL || 'https://millucesiluminacion.com';
         let baseUrl = appUrl;
 
         if (req.headers.host && !req.headers.host.includes('localhost') && !req.headers.host.includes('127.0.0.1')) {
@@ -52,16 +52,21 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'No pudimos generar el enlace. Verifica que el correo exista.' });
         }
 
-        let resetUrl = linkData?.properties?.action_link;
+        // Construir enlace usando el token_hash directo para coincidir con el dominio del remitente
+        // Esto elimina la advertencia de Resend de "Ensure link URLs match sending domain"
+        // y evita los filtros de spam agresivos al no apuntar a subdominios externos de supabase.co
+        const tokenHash = linkData?.properties?.hashed_token;
+        let resetUrl = '';
 
-        if (resetUrl) {
-            // Reemplazar cualquier referencia a localhost en la URL de retorno de Supabase
-            resetUrl = resetUrl
+        if (tokenHash) {
+            resetUrl = `${redirectUrl}?token_hash=${encodeURIComponent(tokenHash)}&type=recovery`;
+        } else if (linkData?.properties?.action_link) {
+            resetUrl = linkData.properties.action_link
                 .replace(/redirect_to=http%3A%2F%2Flocalhost%3A\d+/gi, `redirect_to=${encodeURIComponent(redirectUrl)}`)
                 .replace(/redirect_to=http%3A%2F%2F127\.0\.0\.1%3A\d+/gi, `redirect_to=${encodeURIComponent(redirectUrl)}`)
                 .replace(/redirect_to=http:\/\/localhost:\d+/gi, `redirect_to=${encodeURIComponent(redirectUrl)}`);
         } else {
-            resetUrl = `${redirectUrl}#access_token=${linkData?.properties?.hashed_token}&type=recovery`;
+            resetUrl = `${redirectUrl}#access_token=${encodeURIComponent(tokenHash || '')}&type=recovery`;
         }
 
         // 3. Obtener el nombre del usuario para la plantilla

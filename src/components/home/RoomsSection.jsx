@@ -81,7 +81,7 @@ export function RoomsSection() {
         : rooms;
 
     return (
-        <section className="mb-12 max-w-[1440px] mx-auto px-4" style={{ width: 'calc(100% - 60px)' }}>
+        <section className="mb-12 max-w-[1440px] mx-auto px-6 sm:px-8">
             <div className="flex justify-between mb-6 items-center">
                 <div>
                     <h2 className="max-sm:max-w-[70%] text-xl xl:text-3xl">Iluminación por estancias</h2>
@@ -92,13 +92,15 @@ export function RoomsSection() {
                         <div className="flex items-center gap-2 mr-4">
                             <button
                                 onClick={() => handleManualAction(prevRoom)}
-                                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm"
+                                className="p-3 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                aria-label="Estancia anterior"
                             >
                                 <ChevronLeft className="w-4 h-4" />
                             </button>
                             <button
                                 onClick={() => handleManualAction(nextRoom)}
-                                className="p-2 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm"
+                                className="p-3 rounded-full border border-gray-200 hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-400 hover:text-blue-600 shadow-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
+                                aria-label="Siguiente estancia"
                             >
                                 <ChevronRight className="w-4 h-4" />
                             </button>

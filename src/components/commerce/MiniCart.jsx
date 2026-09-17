@@ -24,21 +24,21 @@ export function MiniCart() {
             {/* Sidebar */}
             <div className="absolute inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl animate-in slide-in-from-right duration-500 ease-out border-l border-gray-100 flex flex-col">
                 {/* Header */}
-                <div className="p-8 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                <div className="p-5 sm:p-8 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
                     <div>
                         <h3 className="text-xl font-black text-brand-carbon uppercase italic leading-none mb-1">Tu Carrito</h3>
                         <p className="text-[10px] font-black text-primary uppercase tracking-widest">{cart.length} Artículos Seleccionados</p>
                     </div>
                     <button
                         onClick={() => setIsSideCartOpen(false)}
-                        className="w-12 h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-brand-carbon hover:text-white transition-all shadow-sm"
+                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-brand-carbon hover:text-white transition-all shadow-sm"
                     >
                         <X className="w-5 h-5" />
                     </button>
                 </div>
 
                 {/* Items List */}
-                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto p-5 sm:p-8 space-y-6 custom-scrollbar">
                     {cart.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-center space-y-6">
                             <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center">
@@ -59,8 +59,8 @@ export function MiniCart() {
                         </div>
                     ) : (
                         cart.map((item, idx) => (
-                            <div key={item.id} className="flex gap-6 group animate-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
-                                <div className="w-24 h-24 bg-gray-50 rounded-2xl border border-gray-100 p-3 flex-shrink-0 group-hover:shadow-md transition-shadow">
+                            <div key={item.id} className="flex gap-4 sm:gap-6 group animate-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
+                                <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-50 rounded-2xl border border-gray-100 p-2.5 sm:p-3 flex-shrink-0 group-hover:shadow-md transition-shadow">
                                     <img src={item.image_url} alt={item.name} className="w-full h-full object-contain" />
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -70,11 +70,11 @@ export function MiniCart() {
                                             {item.cartLabel || item.reference || 'Personalizado'}
                                         </p>
                                         {item.isMandatory && (
-                                            <span className="text-[7px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter italic">Obligatorio</span>
+                                             <span className="text-[7px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full border border-amber-100 uppercase tracking-tighter italic">Obligatorio</span>
                                         )}
                                     </div>
                                     <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-4 bg-gray-50 rounded-xl px-3 py-1.5 border border-gray-100">
+                                        <div className="flex items-center gap-3 sm:gap-4 bg-gray-50 rounded-xl px-2.5 sm:px-3 py-1.5 border border-gray-100">
                                             {item.isMandatory ? (
                                                 <span className="text-[10px] font-black italic text-brand-carbon px-2 leading-none">{item.quantity}</span>
                                             ) : (
@@ -92,7 +92,7 @@ export function MiniCart() {
                                                             const val = parseInt(e.target.value);
                                                             if (!isNaN(val) && val >= 1) updateQuantity(item.id, val);
                                                         }}
-                                                        className="w-10 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        className="w-8 sm:w-10 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                     />
                                                     <button
                                                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
@@ -118,7 +118,8 @@ export function MiniCart() {
                                 ) : (
                                     <button
                                         onClick={() => removeFromCart(item.id)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-2 text-gray-300 hover:text-red-500"
+                                        className="opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-2 text-gray-400 hover:text-red-500"
+                                        aria-label="Eliminar producto"
                                     >
                                         <Trash2 className="w-4 h-4" />
                                     </button>
@@ -130,7 +131,7 @@ export function MiniCart() {
 
                 {/* Footer Summary */}
                 {cart.length > 0 && (
-                    <div className="p-8 bg-gray-50 border-t border-gray-200 space-y-6 shadow-[0_-20px_40px_rgba(0,0,0,0.02)]">
+                    <div className="p-5 sm:p-8 bg-gray-50 border-t border-gray-200 space-y-5 sm:space-y-6 shadow-[0_-20px_40px_rgba(0,0,0,0.02)]">
                         <div className="space-y-3">
                             <div className="flex justify-between items-center text-gray-500 italic">
                                 <span className="text-[10px] font-black uppercase tracking-widest">Subtotal boutique</span>

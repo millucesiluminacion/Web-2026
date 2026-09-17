@@ -665,9 +665,18 @@ export default function ProductListing() {
                 {!isCatalogHome && (
                     <aside className={`lg:w-72 flex-shrink-0 ${filtersOpen ? 'block' : 'hidden lg:block'}`}>
                         <div className="bg-white p-7 rounded-[2.5rem] shadow-luxury border border-gray-100 sticky top-24 space-y-8">
-                            <h3 className="font-black text-brand-carbon uppercase italic text-xs tracking-[.2em] flex items-center gap-3">
-                                <Filter className="w-4 h-4 text-primary" /> Filtros
-                            </h3>
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-black text-brand-carbon uppercase italic text-xs tracking-[.2em] flex items-center gap-3">
+                                    <Filter className="w-4 h-4 text-primary" /> Filtros
+                                </h3>
+                                <button
+                                    onClick={() => setFiltersOpen(false)}
+                                    className="lg:hidden p-1.5 text-gray-400 hover:text-brand-carbon rounded-full hover:bg-gray-100 transition-colors"
+                                    aria-label="Cerrar filtros"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
 
                             {/* 1. Precio */}
                             <div className="space-y-4">
@@ -793,6 +802,14 @@ export default function ProductListing() {
                                     </button>
                                 ))}
                             </div>
+
+                            {/* Mobile apply/close button */}
+                            <button
+                                onClick={() => setFiltersOpen(false)}
+                                className="lg:hidden w-full py-3.5 bg-brand-carbon text-white rounded-2xl text-[10px] font-black uppercase italic tracking-widest hover:bg-primary transition-colors shadow-lg"
+                            >
+                                Ver {totalResults} Piezas
+                            </button>
                         </div>
                     </aside>
                 )}
@@ -800,11 +817,11 @@ export default function ProductListing() {
                 <div className="flex-1 min-w-0">
                     {isCatalogHome ? <div className="pt-4"><CategoryGrid /></div> : (
                         <>
-                            {activeCategory && <h2 className="text-3xl md:text-5xl font-black text-brand-carbon uppercase italic leading-none mb-10">{activeCategory.name} <br /><span className="text-gray-300">Colección</span></h2>}
+                            {activeCategory && <h2 className="text-2xl sm:text-4xl md:text-5xl font-black text-brand-carbon uppercase italic leading-none mb-6 sm:mb-10">{activeCategory.name} <br /><span className="text-gray-300">Colección</span></h2>}
 
                             {/* Subcategorías — Unificadas e Iconográficas */}
                             {subcategories.length > 0 && (
-                                <div className="mb-10 flex flex-wrap gap-4 overflow-x-auto pb-4 hide-scrollbar">
+                                <div className="mb-8 sm:mb-10 flex flex-nowrap sm:flex-wrap gap-2.5 sm:gap-4 overflow-x-auto pb-4 hide-scrollbar">
                                     {subcategories.map(sub => {
                                         const isActive = subcategoryQuery === sub.slug;
                                         return (

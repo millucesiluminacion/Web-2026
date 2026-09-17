@@ -3,7 +3,7 @@ import { ShieldCheck, CreditCard, Phone, MapPin } from 'lucide-react';
 export function TrustIndicators() {
     return (
         <div className="bg-neutral-800 border-b border-neutral-700 py-6">
-            <div className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+            <div className="container mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                 <div className="flex items-center justify-center gap-3">
                     <ShieldCheck className="w-8 h-8 text-blue-500" />
                     <div className="text-left">
