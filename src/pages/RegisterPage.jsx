@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, User, Check, Loader2, AlertCircle } from 'lucide-react';
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import { isBotRegistration } from '../lib/botProtection';
 
 export default function RegisterPage({ isPro = false }) {
     const navigate = useNavigate();
@@ -12,23 +13,9 @@ export default function RegisterPage({ isPro = false }) {
     const [companyName, setCompanyName] = useState('');
     const [vatId, setVatId] = useState('');
     const [honeypot, setHoneypot] = useState('');
+    const [formStartTime] = useState(Date.now());
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
-
-    const isBotRegistration = (emailVal, fullNameVal, hpVal) => {
-        if (hpVal && hpVal.trim().length > 0) return true;
-        if (emailVal && emailVal.includes('@')) {
-            const username = emailVal.split('@')[0];
-            const dotCount = (username.match(/\./g) || []).length;
-            if (dotCount >= 4) return true;
-        }
-        if (fullNameVal && fullNameVal.length > 15 && !fullNameVal.includes(' ')) {
-            const uppercaseCount = (fullNameVal.match(/[A-Z]/g) || []).length;
-            const lowercaseCount = (fullNameVal.match(/[a-z]/g) || []).length;
-            if (uppercaseCount > 4 && lowercaseCount > 4) return true;
-        }
-        return false;
-    };
 
     const translateError = (message) => {
         const msg = message.toLowerCase();
@@ -55,8 +42,8 @@ export default function RegisterPage({ isPro = false }) {
         setLoading(true);
         setError(null);
 
-        // Anti-Bot Protection Check
-        if (isBotRegistration(email, fullName, honeypot)) {
+        // Anti-Bot Protection Check (Honeypot + Time-Trap + Heurísticas)
+        if (isBotRegistration({ email, fullName, honeypot, formStartTime })) {
             setTimeout(() => {
                 setLoading(false);
                 alert('Registro exitoso. Revisa tu email para confirmar tu cuenta.');
@@ -183,7 +170,7 @@ export default function RegisterPage({ isPro = false }) {
 
                         <form onSubmit={handleRegister} className="space-y-6">
                             {/* Invisible Honeypot Anti-Bot Field */}
-                            <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                            <div style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' }} aria-hidden="true" tabIndex={-1}>
                                 <input
                                     type="text"
                                     name="website_confirm_hp"

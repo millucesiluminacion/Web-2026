@@ -60,9 +60,10 @@ export default function SEOManager() {
 
                 if (path.startsWith('/product/')) {
                     const slugOrId = path.split('/').pop();
-                    let { data } = await supabase.from('products').select('id, name, slug, price, offer_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('slug', slugOrId).maybeSingle();
-                    if (!data) {
-                        const { data: dataById } = await supabase.from('products').select('id, name, slug, price, offer_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('id', slugOrId).maybeSingle();
+                    const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
+                    let { data } = await supabase.from('products').select('id, name, slug, price, discount_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('slug', slugOrId).maybeSingle();
+                    if (!data && isUUID) {
+                        const { data: dataById } = await supabase.from('products').select('id, name, slug, price, discount_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('id', slugOrId).maybeSingle();
                         data = dataById;
                     }
                     if (data) seoData = {
@@ -235,7 +236,7 @@ export default function SEOManager() {
                     "@type": "Offer",
                     "url": `${origin}${path}`,
                     "priceCurrency": "EUR",
-                    "price": String(parseFloat(prod.offer_price || prod.price || 0).toFixed(2)),
+                    "price": String(parseFloat((prod.discount_price && parseFloat(prod.discount_price) > 0) ? prod.discount_price : (prod.price || 0)).toFixed(2)),
                     "availability": (prod.stock === null || prod.stock === undefined || prod.stock > 0)
                         ? "https://schema.org/InStock"
                         : "https://schema.org/OutOfStock",

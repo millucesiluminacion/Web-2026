@@ -49,7 +49,7 @@ export default function NotFoundPage() {
         try {
             const { data } = await supabase
                 .from('products')
-                .select('id, name, slug, price, offer_price, image_url')
+                .select('id, name, slug, price, discount_price, image_url')
                 .eq('is_active', true)
                 .limit(4);
             if (data) setFeaturedProducts(data);
@@ -267,7 +267,16 @@ export default function NotFoundPage() {
                                     </div>
                                     <h4 className="text-xs font-bold text-brand-carbon truncate group-hover:text-primary transition-colors mb-2">{p.name}</h4>
                                     <div className="flex items-center justify-between">
-                                        <span className="text-sm font-black text-brand-carbon">{p.offer_price || p.price} €</span>
+                                        <span className="text-sm font-black text-brand-carbon">
+                                            {p.discount_price && parseFloat(p.discount_price) > 0 ? (
+                                                <>
+                                                    <span className="line-through text-gray-400 text-xs mr-1">{parseFloat(p.price).toFixed(2)}€</span>
+                                                    <span className="text-red-500 font-bold">{parseFloat(p.discount_price).toFixed(2)}€</span>
+                                                </>
+                                            ) : (
+                                                `${parseFloat(p.price || 0).toFixed(2)} €`
+                                            )}
+                                        </span>
                                         <span className="w-8 h-8 rounded-xl bg-gray-50 group-hover:bg-primary group-hover:text-brand-carbon flex items-center justify-center text-gray-400 transition-all">
                                             <ShoppingBag className="w-4 h-4" />
                                         </span>

@@ -194,7 +194,8 @@ export default function ProductDetail() {
             }
 
             // Trial 2: By ID (Fallback for legacy links or missing slugs)
-            if (error || !product) {
+            const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
+            if ((error || !product) && isUUID) {
                 let res2 = await supabase
                     .from('products')
                     .select(selectWithBadges)

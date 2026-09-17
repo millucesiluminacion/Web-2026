@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import Papa from 'papaparse';
+import { isBotProfile } from '../../lib/botProtection';
 
 export default function UsersAdmin() {
     const [users, setUsers] = useState([]);
@@ -11,7 +12,9 @@ export default function UsersAdmin() {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [editingUser, setEditingUser] = useState(null);
+    const [roleFilter, setRoleFilter] = useState('team'); // team, customers, all, bots
     const [activeTab, setActiveTab] = useState('all'); // all, persona, profesional
+    const [isCleaningBots, setIsCleaningBots] = useState(false);
     const [formData, setFormData] = useState({
         full_name: '',
         email: '',
@@ -32,15 +35,20 @@ export default function UsersAdmin() {
 
     useEffect(() => {
         fetchUsers();
-    }, [page, searchQuery, activeTab]); // Recargar al cambiar filtros o página
+    }, [page, searchQuery, activeTab, roleFilter]);
 
     async function fetchUsers() {
         try {
             setLoading(true);
             let query = supabase
                 .from('profiles')
-                .select('*', { count: 'exact' })
-                .in('role', ['admin', 'manager', 'editor']);
+                .select('*', { count: 'exact' });
+
+            if (roleFilter === 'team') {
+                query = query.in('role', ['admin', 'manager', 'editor']);
+            } else if (roleFilter === 'customers') {
+                query = query.eq('role', 'customer');
+            }
 
             if (searchQuery) {
                 query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
@@ -57,8 +65,12 @@ export default function UsersAdmin() {
                 .range(from, to);
 
             if (error) throw error;
-            setUsers(data || []);
-            setTotalCount(count || 0);
+            let resultData = data || [];
+            if (roleFilter === 'bots') {
+                resultData = resultData.filter(u => isBotProfile(u));
+            }
+            setUsers(resultData);
+            setTotalCount(roleFilter === 'bots' ? resultData.length : (count || 0));
         } catch (error) {
             console.error('Error fetching users:', error.message);
         } finally {
@@ -336,13 +348,42 @@ export default function UsersAdmin() {
     };
 
     async function deleteUser(id) {
-        if (!confirm('¿Estás seguro de que quieres eliminar este perfil de administrador? (Nota: Esto no elimina la cuenta de Auth, solo el perfil)')) return;
+        const targetUser = users.find(u => u.id === id);
+        const isBot = targetUser && isBotProfile(targetUser);
+        const confirmMsg = isBot
+            ? `¿Deseas eliminar la cuenta sospechosa de bot "${targetUser?.full_name || targetUser?.email}"?`
+            : '¿Estás seguro de que quieres eliminar este perfil?';
+        if (!confirm(confirmMsg)) return;
+
         try {
+            await supabase.from('customers').delete().eq('id', id);
             const { error } = await supabase.from('profiles').delete().eq('id', id);
             if (error) throw error;
             setUsers(users.filter(u => u.id !== id));
+            setTotalCount(prev => Math.max(0, prev - 1));
         } catch (error) {
             alert('Error al eliminar: ' + error.message);
+        }
+    }
+
+    const detectedBots = users.filter(u => isBotProfile(u));
+
+    async function handleCleanBots() {
+        const botIds = detectedBots.map(u => u.id);
+        if (botIds.length === 0) return;
+        if (!confirm(`¿Eliminar definitivamente las ${botIds.length} cuenta(s) bot detectadas? Se eliminarán de perfiles y de clientes.`)) return;
+
+        try {
+            setIsCleaningBots(true);
+            await supabase.from('customers').delete().in('id', botIds);
+            const { error } = await supabase.from('profiles').delete().in('id', botIds);
+            if (error) throw error;
+            alert(`Se han eliminado ${botIds.length} bots correctamente.`);
+            fetchUsers();
+        } catch (error) {
+            alert('Error al limpiar bots: ' + error.message);
+        } finally {
+            setIsCleaningBots(false);
         }
     }
 
@@ -359,6 +400,7 @@ export default function UsersAdmin() {
             case 'admin': return 'bg-purple-100 text-purple-700 border-purple-200';
             case 'manager': return 'bg-cyan-100 text-cyan-700 border-cyan-200';
             case 'editor': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+            case 'customer': return 'bg-amber-100 text-amber-700 border-amber-200';
             default: return 'bg-gray-100 text-gray-700 border-gray-200';
         }
     };
@@ -369,7 +411,7 @@ export default function UsersAdmin() {
                 <div>
                     <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] mb-2 block font-outfit">Access Control</span>
                     <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
-                        Gestión de <span className="text-primary/40">Equipo</span>
+                        Gestión de <span className="text-primary/40">Usuarios</span>
                     </h1>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
@@ -394,13 +436,67 @@ export default function UsersAdmin() {
                     </button>
                     <div className="text-[10px] font-black text-blue-600 bg-blue-50 px-6 h-14 rounded-2xl border border-blue-100 uppercase italic tracking-widest font-outfit flex items-center gap-2 shadow-sm">
                         <UserCheck className="w-4 h-4" />
-                        {totalCount} Miembros del Equipo
+                        {totalCount} {roleFilter === 'team' ? 'Equipo' : roleFilter === 'customers' ? 'Clientes' : roleFilter === 'bots' ? 'Bots' : 'Usuarios'}
                     </div>
                 </div>
             </div>
 
             <div className="bg-white rounded-[2.5rem] shadow-sm overflow-hidden border border-gray-100">
                 <div className="p-8 border-b border-gray-100 bg-gray-50/20">
+                    {/* Role Filter Selector */}
+                    <div className="flex items-center gap-2 mb-6 border-b border-gray-100 pb-6 flex-wrap">
+                        {[
+                            { id: 'team', label: 'Equipo Interno', icon: Shield },
+                            { id: 'customers', label: 'Clientes Web', icon: UsersIcon },
+                            { id: 'all', label: 'Todos los Perfiles', icon: User },
+                            { id: 'bots', label: '⚠️ Posibles Bots', icon: AlertTriangle, badge: detectedBots.length }
+                        ].map((r) => (
+                            <button
+                                key={r.id}
+                                onClick={() => { setRoleFilter(r.id); setPage(1); }}
+                                className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${roleFilter === r.id
+                                    ? r.id === 'bots' ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' : 'bg-brand-carbon text-white shadow-lg'
+                                    : r.id === 'bots' ? 'text-red-500 hover:bg-red-50' : 'text-gray-400 hover:text-brand-carbon hover:bg-white'
+                                }`}
+                            >
+                                <r.icon className="w-3.5 h-3.5" />
+                                {r.label}
+                                {r.badge !== undefined && r.badge > 0 && (
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-black ${roleFilter === r.id ? 'bg-white text-red-600' : 'bg-red-100 text-red-600'}`}>
+                                        {r.badge}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Alerta de Bots Detectados */}
+                    {detectedBots.length > 0 && (
+                        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                                    <AlertTriangle className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h4 className="text-xs font-black uppercase text-red-800 tracking-wider">
+                                        {detectedBots.length} {detectedBots.length === 1 ? 'cuenta bot detectada' : 'cuentas bots detectadas'}
+                                    </h4>
+                                    <p className="text-[11px] text-red-600 font-medium">
+                                        Perfiles con nombres generados automáticamente o patrones de spam.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={handleCleanBots}
+                                disabled={isCleaningBots}
+                                className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-md flex items-center gap-2 shrink-0 disabled:opacity-50"
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                {isCleaningBots ? 'Eliminando...' : `Limpiar ${detectedBots.length} Bots`}
+                            </button>
+                        </div>
+                    )}
+
                     <div className="flex flex-col md:flex-row gap-6 items-center justify-between">
                         <div className="relative max-w-md w-full">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -448,7 +544,7 @@ export default function UsersAdmin() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-gray-50/50 border-b border-gray-100 font-outfit">
-                                    <th className="p-8 text-[10px] font-black uppercase tracking-widest text-gray-400">Miembro del Equipo</th>
+                                    <th className="p-8 text-[10px] font-black uppercase tracking-widest text-gray-400">Usuario / Miembro</th>
                                     <th className="p-8 text-[10px] font-black uppercase tracking-widest text-gray-400">Identificador</th>
                                     <th className="p-8 text-[10px] font-black uppercase tracking-widest text-gray-400">Rol de Acceso</th>
                                     <th className="p-8 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Estado</th>
@@ -456,21 +552,28 @@ export default function UsersAdmin() {
                             </thead>
                             <tbody className="divide-y divide-gray-50">
                                 {filteredUsers.map((user) => (
-                                    <tr key={user.id} className="group hover:bg-gray-50/30 transition-all font-outfit">
+                                    <tr key={user.id} className={`group hover:bg-gray-50/30 transition-all font-outfit ${isBotProfile(user) ? 'bg-red-50/20' : ''}`}>
                                         <td className="p-8">
                                             <div className="flex items-center gap-5">
                                                 <div className="relative">
-                                                    <div className="w-14 h-14 rounded-2xl bg-brand-carbon text-white flex items-center justify-center font-black italic text-xl shadow-lg border-2 border-white group-hover:scale-110 transition-transform overflow-hidden">
+                                                    <div className={`w-14 h-14 rounded-2xl ${isBotProfile(user) ? 'bg-red-600' : 'bg-brand-carbon'} text-white flex items-center justify-center font-black italic text-xl shadow-lg border-2 border-white group-hover:scale-110 transition-transform overflow-hidden`}>
                                                         {user.avatar_url ? (
                                                             <img src={user.avatar_url} className="w-full h-full object-cover" alt="" />
                                                         ) : (
                                                             user.full_name?.charAt(0) || 'U'
                                                         )}
                                                     </div>
-                                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white shadow-sm"></div>
+                                                    <div className={`absolute -bottom-1 -right-1 w-5 h-5 ${isBotProfile(user) ? 'bg-red-500' : 'bg-green-500'} rounded-full border-2 border-white shadow-sm`}></div>
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-black uppercase italic text-brand-carbon">{user.full_name || 'Sin Nombre'}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm font-black uppercase italic text-brand-carbon">{user.full_name || 'Sin Nombre'}</p>
+                                                        {isBotProfile(user) && (
+                                                            <span className="text-[8px] font-black uppercase bg-red-100 text-red-600 border border-red-200 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                                                                <AlertTriangle className="w-2.5 h-2.5" /> Posible Bot
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <div className="flex items-center gap-2 mt-1">
                                                         <Mail className="w-3 h-3 text-gray-300" />
                                                         <p className="text-[10px] font-bold text-gray-400 lowercase">{user.email || 'sin-email@mil-luces.com'}</p>
@@ -500,7 +603,7 @@ export default function UsersAdmin() {
                                         <td className="p-8">
                                             <div className="relative group/select">
                                                 <select
-                                                    value={user.role || 'editor'}
+                                                    value={user.role || 'customer'}
                                                     onChange={(e) => updateRole(user.id, e.target.value)}
                                                     disabled={isUpdating === user.id}
                                                     className={`appearance-none px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[.2em] border shadow-sm cursor-pointer focus:ring-2 focus:ring-primary/20 outline-none transition-all disabled:opacity-50 ${getRoleStyles(user.role)}`}
@@ -508,6 +611,7 @@ export default function UsersAdmin() {
                                                     <option value="admin">Administrador Full</option>
                                                     <option value="manager">Gestor de Boutique</option>
                                                     <option value="editor">Editor de Contenido</option>
+                                                    <option value="customer">Cliente Web</option>
                                                 </select>
                                                 {isUpdating === user.id && (
                                                     <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -534,8 +638,8 @@ export default function UsersAdmin() {
                                                 </button>
                                                 <button
                                                     onClick={() => deleteUser(user.id)}
-                                                    className="p-3 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                                    title="Eliminar Perfil"
+                                                    className={`p-3 rounded-xl transition-all ${isBotProfile(user) ? 'text-red-600 hover:bg-red-100 opacity-100' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                                                    title={isBotProfile(user) ? "Eliminar Cuenta Bot" : "Eliminar Perfil"}
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>

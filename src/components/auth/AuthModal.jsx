@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X, Mail, Lock, User, Check, Loader2, AlertCircle, ArrowRight } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
+import { isBotRegistration } from '../../lib/botProtection';
 
 export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType = 'persona' }) {
     const navigate = useNavigate();
@@ -21,6 +22,8 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
     const [regFullName, setRegFullName] = useState('');
     const [regCompanyName, setRegCompanyName] = useState('');
     const [regVatId, setRegVatId] = useState('');
+    const [regHoneypot, setRegHoneypot] = useState('');
+    const [regStartTime] = useState(Date.now());
     const [regLoading, setRegLoading] = useState(false);
     const [regError, setRegError] = useState(null);
 
@@ -74,8 +77,8 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
         setRegLoading(true);
         setRegError(null);
 
-        // Anti-Bot Protection Check
-        if (isBotRegistration(regEmail, regFullName, regHoneypot)) {
+        // Anti-Bot Protection Check (Honeypot + Time-Trap + Heurísticas)
+        if (isBotRegistration({ email: regEmail, fullName: regFullName, honeypot: regHoneypot, formStartTime: regStartTime })) {
             // Silently pretend registration succeeded to fool bots
             setTimeout(() => {
                 setRegLoading(false);
@@ -300,7 +303,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
 
                             <form onSubmit={handleRegister} className="space-y-3">
                                 {/* Invisible Honeypot Anti-Bot Field */}
-                                <div style={{ display: 'none', position: 'absolute', left: '-9999px' }} aria-hidden="true">
+                                <div style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' }} aria-hidden="true" tabIndex={-1}>
                                     <input
                                         type="text"
                                         name="confirm_website_hp"
