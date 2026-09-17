@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabaseClient';
 import { calculateProductPrice, IVA_RATE } from '../lib/pricingUtils';
 import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
 import { generateProductPDF } from '../lib/pdfGenerator';
+import { optimizeImage } from '../lib/imageUtils';
 
 const COLOR_MAP = {
     "Blanco": "#FFFFFF",
@@ -482,9 +483,10 @@ export default function ProductDetail() {
     const originalPrice = showPriceWithoutVat ? (rawOriginalPrice / (1 + IVA_RATE)) : rawOriginalPrice;
 
     // Gallery images: if product has extra_images array, use it; otherwise single image
-    const productImages = displayProduct?.extra_images && Array.isArray(displayProduct.extra_images) && displayProduct.extra_images.length > 0
+    const productImages = (displayProduct?.extra_images && Array.isArray(displayProduct.extra_images) && displayProduct.extra_images.length > 0
         ? [displayProduct.image_url, ...displayProduct.extra_images].filter(Boolean)
-        : [displayProduct?.image_url].filter(Boolean);
+        : [displayProduct?.image_url].filter(Boolean)
+    ).map(url => optimizeImage(url, 800, 800));
 
     if (loading) {
         return (
@@ -545,8 +547,11 @@ export default function ProductDetail() {
                                 <img
                                     src={productImages[activeImageIndex]}
                                     alt={displayProduct?.name}
+                                    loading="eager"
                                     fetchpriority="high"
                                     decoding="async"
+                                    width={800}
+                                    height={800}
                                     className="w-full h-full object-contain transition-transform duration-1000 group-hover:scale-110"
                                 />
                             ) : (
@@ -566,7 +571,7 @@ export default function ProductDetail() {
                                             : 'border-gray-100 hover:border-gray-300 opacity-60 hover:opacity-100'
                                             }`}
                                     >
-                                        <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-contain" />
+                                        <img src={img} alt={`Vista ${idx + 1}`} loading="lazy" decoding="async" className="w-full h-full object-contain" />
                                     </button>
                                 ))}
                             </div>
@@ -1166,7 +1171,7 @@ export default function ProductDetail() {
                                             <div className="aspect-square p-6 flex items-center justify-center relative">
                                                 <BadgeRenderer product={rp} />
                                                 {rp.image_url ? (
-                                                    <img src={rp.image_url} alt={rp.name} className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-110" />
+                                                    <img src={optimizeImage(rp.image_url, 400, 400)} alt={rp.name} loading="lazy" decoding="async" width={400} height={400} className="w-full h-full object-contain transition-transform duration-700 group-hover:scale-110" />
                                                 ) : (
                                                     <div className="text-6xl text-gray-100">💡</div>
                                                 )}

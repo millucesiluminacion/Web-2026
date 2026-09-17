@@ -1,11 +1,25 @@
 /**
- * Image Utility — Safe Optimization Layer
+ * Image Utility — Safe Optimization & Edge Cache Layer
  *
  * Strategy:
- * - Supabase Storage images: returned as-is (Image Transformation not available on this plan)
+ * - Supabase Storage images: Routed through /storage-proxy/ to be cached by Vercel Edge CDN (100GB/mo free quota)
+ *   with 1-year immutable caching. Falls back cleanly to original URL on any issue.
  * - Unsplash images: native resize params appended (?w=, &q=)
  * - All other URLs: returned as-is for maximum compatibility
  */
+
+/**
+ * Converts a Supabase Storage URL to the local edge cached proxy route.
+ * @param {string|null} url - Original URL
+ * @returns {string} Cached proxy route or original URL
+ */
+export const getStorageProxyUrl = (url) => {
+    if (!url || typeof url !== 'string') return url || '/placeholder.jpg';
+    if (url.includes('/storage/v1/object/public/')) {
+        return url.replace(/^https?:\/\/[^/]+\/storage\/v1\/object\/public\//, '/storage-proxy/');
+    }
+    return url;
+};
 
 /**
  * Optimizes an image URL where possible.
@@ -30,10 +44,10 @@ export const optimizeImage = (url, width = 600, height = null, quality = 80) => 
             return parsed.toString();
         }
 
-        // Supabase Storage: NOT transformed (service not enabled on this plan)
-        // Return original to avoid 403 errors
-        if (url.includes('supabase.co/storage')) {
-            return url;
+        // Supabase Storage: Route through Vercel Edge Cache Proxy
+        // Cached for 1 year on Vercel's global CDN (100GB free tier, zero Supabase egress)
+        if (url.includes('/storage/v1/object/public/')) {
+            return getStorageProxyUrl(url);
         }
 
         // All other URLs: passthrough

@@ -33,6 +33,15 @@ export default defineConfig(({ mode }) => {
         }
       }
     ],
+    server: {
+      proxy: {
+        '/storage-proxy': {
+          target: 'https://fvfnpztjsqdiljudjmdl.supabase.co/storage/v1/object/public',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/storage-proxy/, '')
+        }
+      }
+    },
     build: {
       // Raise the warning threshold to 700kB (chunks below this won't warn)
       chunkSizeWarningLimit: 700,

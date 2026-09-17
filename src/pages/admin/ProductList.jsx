@@ -1985,7 +1985,10 @@ export default function ProductList() {
                                                                         if (!file) return;
                                                                         const fileExt = file.name.split('.').pop();
                                                                         const fileName = `${Math.random()}.${fileExt}`;
-                                                                        const { error } = await supabase.storage.from('images').upload(fileName, file);
+                                                                        const { error } = await supabase.storage.from('images').upload(fileName, file, {
+                                                                            cacheControl: '31536000',
+                                                                            upsert: true
+                                                                        });
                                                                         if (!error) {
                                                                             const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(fileName);
                                                                             setFormData(prev => ({ ...prev, extra_images: [...(prev.extra_images || []), publicUrl] }));

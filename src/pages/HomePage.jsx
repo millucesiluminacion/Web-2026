@@ -10,6 +10,7 @@ import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
 import { calculateProductPrice, IVA_RATE } from '../lib/pricingUtils';
 import { useAuth } from '../context/AuthContext';
+import { optimizeImage } from '../lib/imageUtils';
 
 export default function HomePage() {
     const { addToCart } = useCart();
@@ -275,8 +276,10 @@ export default function HomePage() {
                                             <div className="flex-1 flex items-center justify-center p-6 relative">
                                                 {prod.image_url ? (
                                                     <img
-                                                        src={prod.image_url}
+                                                        src={optimizeImage(prod.image_url, 600)}
                                                         alt={prod.name}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="max-h-64 object-contain group-hover:scale-110 transition-transform duration-700"
                                                     />
                                                 ) : (
@@ -337,8 +340,10 @@ export default function HomePage() {
                                             <div className="h-32 flex items-center justify-center p-2 mb-4 relative overflow-hidden">
                                                 {prod.image_url ? (
                                                     <img
-                                                        src={prod.image_url}
+                                                        src={optimizeImage(prod.image_url, 400)}
                                                         alt={prod.name}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="max-h-full object-contain group-hover:scale-110 transition-transform duration-500"
                                                     />
                                                 ) : (

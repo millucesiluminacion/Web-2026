@@ -76,7 +76,10 @@ export default function ProfessionalsAdmin() {
 
             const { error: uploadError } = await supabase.storage
                 .from('categories') // Reusing categories bucket for simplicity or create 'pro'
-                .upload(filePath, file);
+                .upload(filePath, file, {
+                    cacheControl: '31536000',
+                    upsert: true
+                });
 
             if (uploadError) throw uploadError;
 

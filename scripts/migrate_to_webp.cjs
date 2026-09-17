@@ -125,6 +125,7 @@ async function phase1() {
                 .from(BUCKET)
                 .upload(webpPath, webpBuffer, {
                     contentType: 'image/webp',
+                    cacheControl: '31536000',
                     upsert: true,
                 });
 

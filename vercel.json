@@ -1,15 +1,30 @@
 {
+  "headers": [
+    {
+      "source": "/storage-proxy/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, s-maxage=31536000, immutable"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/feed/productos.xml",
       "destination": "/api/sitemap?type=google-merchant"
     },
     {
+      "source": "/storage-proxy/:path*",
+      "destination": "https://fvfnpztjsqdiljudjmdl.supabase.co/storage/v1/object/public/:path*"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api/$1"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/((?!api/|storage-proxy/).*)",
       "destination": "/index.html"
     }
   ]

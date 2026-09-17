@@ -61,9 +61,9 @@ export default function SEOManager() {
                 if (path.startsWith('/product/')) {
                     const slugOrId = path.split('/').pop();
                     const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
-                    let { data } = await supabase.from('products').select('id, name, slug, price, discount_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('slug', slugOrId).maybeSingle();
+                    let { data } = await supabase.from('products').select('id, name, slug, price, discount_price, stock, brands(name), description, meta_title, meta_description, image_url').eq('slug', slugOrId).maybeSingle();
                     if (!data && isUUID) {
-                        const { data: dataById } = await supabase.from('products').select('id, name, slug, price, discount_price, stock, brand_name, description, meta_title, meta_description, image_url').eq('id', slugOrId).maybeSingle();
+                        const { data: dataById } = await supabase.from('products').select('id, name, slug, price, discount_price, stock, brands(name), description, meta_title, meta_description, image_url').eq('id', slugOrId).maybeSingle();
                         data = dataById;
                     }
                     if (data) seoData = {
@@ -230,7 +230,7 @@ export default function SEOManager() {
                 "sku": prod.id,
                 "brand": {
                     "@type": "Brand",
-                    "name": prod.brand_name || "Mil Luces"
+                    "name": prod.brands?.name || prod.brand_name || "Mil Luces"
                 },
                 "offers": {
                     "@type": "Offer",
