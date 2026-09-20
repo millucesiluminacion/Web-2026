@@ -93,6 +93,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                 email: regEmail,
                 password: regPassword,
                 options: {
+                    emailRedirectTo: `${window.location.origin}/login`,
                     data: {
                         full_name: regFullName,
                         user_type: userType,
@@ -103,6 +104,29 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                 }
             });
             if (signUpError) throw signUpError;
+
+            // Trigger Welcome Email logic via System Key
+            try {
+                await fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY
+                    },
+                    body: JSON.stringify({
+                        to: regEmail,
+                        templateKey: 'welcome',
+                        variables: {
+                            name: regFullName,
+                            site_name: 'Mil Luces Iluminación',
+                            user_type: userType === 'profesional' ? 'Profesional' : 'Particular'
+                        }
+                    })
+                });
+            } catch (emailErr) {
+                console.error('Error triggering welcome email:', emailErr);
+            }
+
             onClose();
             alert('Registro exitoso. Revisa tu email para confirmar tu cuenta.');
         } catch (err) {

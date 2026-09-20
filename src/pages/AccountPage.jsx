@@ -12,6 +12,7 @@ export default function AccountPage() {
     const { user, profile, signOut, isPartner, userTier, refreshProfile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
+    const [isUploadingDoc, setIsUploadingDoc] = useState(false);
     const [activeTab, setActiveTab] = useState('perfil'); // 'perfil', 'favoritos', 'pedidos'
 
     // Data states
@@ -478,8 +479,17 @@ export default function AccountPage() {
                                                     </div>
                                                     <button
                                                         type="button"
-                                                        onClick={() => setFormData({ ...formData, tax_document_url: '' })}
+                                                        onClick={async () => {
+                                                            setFormData({ ...formData, tax_document_url: '' });
+                                                            try {
+                                                                await supabase.from('profiles').update({ tax_document_url: null }).eq('id', user.id);
+                                                                await refreshProfile();
+                                                            } catch (e) {
+                                                                console.error('Error clearing doc:', e);
+                                                            }
+                                                        }}
                                                         className="p-2 hover:bg-white rounded-lg text-gray-400 hover:text-red-500 transition-all"
+                                                        title="Eliminar documento"
                                                     >
                                                         <X className="w-4 h-4" />
                                                     </button>
@@ -488,27 +498,60 @@ export default function AccountPage() {
                                                 <div className="relative group">
                                                     <input
                                                         type="file"
-                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        disabled={isUploadingDoc}
+                                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 disabled:cursor-not-allowed"
                                                         onChange={async (e) => {
                                                             const file = e.target.files[0];
                                                             if (!file) return;
+
+                                                            if (file.size > 15 * 1024 * 1024) {
+                                                                alert('El archivo no debe superar los 15MB.');
+                                                                return;
+                                                            }
+
+                                                            setIsUploadingDoc(true);
                                                             try {
+                                                                const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                                                                const filePath = `docs/${user.id}/${Date.now()}_${sanitizedName}`;
                                                                 const { data, error } = await supabase.storage
                                                                     .from('images')
-                                                                    .upload(`docs/${user.id}/${Date.now()}_${file.name}`, file);
+                                                                    .upload(filePath, file, { upsert: true });
                                                                 if (error) throw error;
                                                                 const { data: { publicUrl } } = supabase.storage
                                                                     .from('images')
-                                                                    .getPublicUrl(data.path);
-                                                                setFormData({ ...formData, tax_document_url: publicUrl });
+                                                                    .getPublicUrl(filePath);
+
+                                                                setFormData(prev => ({ ...prev, tax_document_url: publicUrl }));
+
+                                                                // Persistencia directa en base de datos
+                                                                const { error: dbErr } = await supabase
+                                                                    .from('profiles')
+                                                                    .update({ tax_document_url: publicUrl })
+                                                                    .eq('id', user.id);
+                                                                if (dbErr) throw dbErr;
+
+                                                                await refreshProfile();
+                                                                alert('Documento subido y guardado correctamente.');
                                                             } catch (err) {
                                                                 alert('Error al subir documento: ' + err.message);
+                                                            } finally {
+                                                                setIsUploadingDoc(false);
                                                             }
                                                         }}
                                                     />
                                                     <div className="flex items-center gap-3 p-6 bg-white border-2 border-dashed border-gray-100 rounded-3xl group-hover:border-primary/20 group-hover:bg-primary/5 transition-all text-center justify-center">
-                                                        <Upload className="w-5 h-5 text-gray-300 group-hover:text-primary" />
-                                                        <span className="text-[10px] font-black uppercase italic tracking-tighter text-gray-400 group-hover:text-brand-carbon">Subir DNI / CIF / 036</span>
+                                                        {isUploadingDoc ? (
+                                                            <>
+                                                                <Loader2 className="w-5 h-5 animate-spin text-primary" />
+                                                                <span className="text-[10px] font-black uppercase italic tracking-tighter text-primary">Subiendo archivo...</span>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Upload className="w-5 h-5 text-gray-300 group-hover:text-primary" />
+                                                                <span className="text-[10px] font-black uppercase italic tracking-tighter text-gray-400 group-hover:text-brand-carbon">Subir DNI / CIF / 036 (PDF o Imagen)</span>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}

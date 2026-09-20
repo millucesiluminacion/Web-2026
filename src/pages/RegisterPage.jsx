@@ -70,6 +70,7 @@ export default function RegisterPage({ isPro = false }) {
                 email,
                 password,
                 options: {
+                    emailRedirectTo: `${window.location.origin}/login`,
                     data: {
                         full_name: fullName,
                         user_type: userType,
@@ -93,7 +94,11 @@ export default function RegisterPage({ isPro = false }) {
                     body: JSON.stringify({
                         to: email,
                         templateKey: 'welcome',
-                        variables: { name: fullName, site_name: 'Mil Luces Iluminación' }
+                        variables: { 
+                            name: fullName, 
+                            site_name: 'Mil Luces Iluminación',
+                            user_type: userType === 'profesional' ? 'Profesional' : 'Particular'
+                        }
                     })
                 });
             } catch (emailErr) {
