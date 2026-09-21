@@ -217,6 +217,23 @@ export default function CustomersList() {
                     .update(formData)
                     .eq('id', editingId);
                 if (error) throw error;
+
+                // Sincronización directa con profiles para redundancia y consistencia inmediata
+                if (formData.email) {
+                    await supabase
+                        .from('profiles')
+                        .update({
+                            user_type: formData.user_type,
+                            has_pro_prices: !!formData.has_pro_prices,
+                            discount_percent: formData.discount_percent,
+                            is_partner: !!formData.is_partner,
+                            company_name: formData.company_name,
+                            vat_id: formData.vat_id,
+                            phone: formData.phone,
+                            address: formData.address
+                        })
+                        .eq('email', formData.email);
+                }
             } else {
                 const { error } = await supabase
                     .from('customers')
@@ -508,17 +525,23 @@ export default function CustomersList() {
                                                             <Star className="w-2.5 h-2.5 fill-amber-400" /> VIP
                                                         </span>
                                                     )}
-                                                    {customer.has_pro_prices && (
-                                                        <span className="text-[8px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                                            Tarifa PRO
-                                                        </span>
+                                                    {customer.user_type === 'profesional' && (
+                                                        customer.has_pro_prices ? (
+                                                            <span className="text-[8px] font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                                                ✓ Tarifa PRO
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[8px] font-black text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-300 animate-pulse">
+                                                                ⏳ PRO PENDIENTE
+                                                            </span>
+                                                        )
                                                     )}
                                                     {customer.discount_percent > 0 && (
                                                         <span className="text-[8px] font-black text-purple-600 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
                                                             -{customer.discount_percent}% Desc.
                                                         </span>
                                                     )}
-                                                    {!customer.is_partner && !customer.has_pro_prices && !(customer.discount_percent > 0) && (
+                                                    {!customer.is_partner && !customer.has_pro_prices && !(customer.discount_percent > 0) && customer.user_type !== 'profesional' && (
                                                         <span className="text-[8px] font-bold text-gray-300 italic">Estándar</span>
                                                     )}
                                                 </div>

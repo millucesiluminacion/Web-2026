@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon } from 'lucide-react';
+import { Search, Loader2, User, Shield, Mail, Calendar, Trash2, Edit2, X, Plus, UserCheck, Settings, Key, Download, Upload, FileText, Star, ChevronLeft, ChevronRight, AlertTriangle, Users as UsersIcon, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import Papa from 'papaparse';
 import { isBotProfile } from '../../lib/botProtection';
@@ -95,6 +95,29 @@ export default function UsersAdmin() {
         }
     }
 
+    async function toggleProStatus(user, enable) {
+        try {
+            setIsUpdating(user.id);
+            const { error } = await supabase
+                .from('profiles')
+                .update({ has_pro_prices: enable })
+                .eq('id', user.id);
+
+            if (error) throw error;
+
+            // Actualizar estado local inmediatamente
+            setUsers(users.map(u => u.id === user.id ? { ...u, has_pro_prices: enable } : u));
+            alert(enable 
+                ? `✅ Tarifa Pro activada para ${user.full_name || user.email}. Ya tiene acceso a precios profesionales.`
+                : `ℹ️ Tarifa Pro desactivada para ${user.full_name || user.email}.`
+            );
+        } catch (error) {
+            alert('Error al actualizar estado Pro: ' + error.message);
+        } finally {
+            setIsUpdating(null);
+        }
+    }
+
     function openCreate() {
         setEditingUser(null);
         setFormData({
@@ -167,11 +190,17 @@ export default function UsersAdmin() {
             if (editingUser) {
                 // Update existing profile
                 const { password, ...updateData } = formData;
+                updateData.has_pro_prices = !!updateData.has_pro_prices;
+                updateData.is_partner = !!updateData.is_partner;
+
                 const { error } = await supabase
                     .from('profiles')
                     .update(updateData)
                     .eq('id', editingUser.id);
                 if (error) throw error;
+
+                // Actualizar inmediatamente en memoria para reflejo instantáneo en UI
+                setUsers(users.map(u => u.id === editingUser.id ? { ...u, ...updateData } : u));
             } else {
                 // Create new user - DUAL PATH (Try API first, then direct direct signUp fallback)
                 if (!formData.password || formData.password.length < 6) {
@@ -598,10 +627,21 @@ export default function UsersAdmin() {
                                                 <p className="font-mono text-[10px] text-gray-400 font-bold bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 w-fit">
                                                     {user.id.slice(0, 12).toUpperCase()}
                                                 </p>
-                                                <div className="flex flex-wrap gap-1">
+                                                <div className="flex flex-wrap gap-1 mt-1">
                                                     {user.user_type === 'profesional' && (
+                                                        user.has_pro_prices ? (
+                                                            <span className="text-[8px] font-black text-emerald-700 uppercase bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 w-fit flex items-center gap-1">
+                                                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> PRO ACTIVO
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[8px] font-black text-amber-700 uppercase bg-amber-50 px-2 py-0.5 rounded border border-amber-300 w-fit flex items-center gap-1 animate-pulse">
+                                                                ⏳ PRO PENDIENTE
+                                                            </span>
+                                                        )
+                                                    )}
+                                                    {user.discount_percent > 0 && (
                                                         <span className="text-[8px] font-black text-primary uppercase bg-primary/5 px-2 py-0.5 rounded border border-primary/10 w-fit">
-                                                            PRO {user.discount_percent}% DESC
+                                                            {user.discount_percent}% DESC
                                                         </span>
                                                     )}
                                                     {user.is_partner && (
@@ -634,6 +674,26 @@ export default function UsersAdmin() {
                                         </td>
                                         <td className="p-8 text-right">
                                             <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {user.user_type === 'profesional' && !user.has_pro_prices && (
+                                                    <button
+                                                        onClick={() => toggleProStatus(user, true)}
+                                                        disabled={isUpdating === user.id}
+                                                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 shadow-sm hover:shadow active:scale-95 shrink-0"
+                                                        title="Aprobar Tarifas Pro B2B"
+                                                    >
+                                                        <CheckCircle2 className="w-3 h-3" /> Aprobar Pro
+                                                    </button>
+                                                )}
+                                                {user.user_type === 'profesional' && user.has_pro_prices && (
+                                                    <button
+                                                        onClick={() => toggleProStatus(user, false)}
+                                                        disabled={isUpdating === user.id}
+                                                        className="p-2.5 text-emerald-600 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-all"
+                                                        title="Pausar tarifa Pro (volver a pendiente)"
+                                                    >
+                                                        <ShieldCheck className="w-4 h-4" />
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => openEdit(user)}
                                                     className="p-3 text-gray-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-all"
