@@ -48,6 +48,86 @@
       "source": "/product-page/:slug",
       "destination": "/product/:slug",
       "permanent": true
+    },
+    {
+      "source": "/lamparas-decorativas",
+      "destination": "/decoracion",
+      "permanent": true
+    },
+    {
+      "source": "/lamparas-colgantes",
+      "destination": "/catalogo?q=colgante",
+      "permanent": true
+    },
+    {
+      "source": "/para-exterior-1",
+      "destination": "/catalogo?category=exterior",
+      "permanent": true
+    },
+    {
+      "source": "/bombillas",
+      "destination": "/catalogo?q=bombilla",
+      "permanent": true
+    },
+    {
+      "source": "/transformadores",
+      "destination": "/catalogo?category=transformador24v",
+      "permanent": true
+    },
+    {
+      "source": "/paneles-1",
+      "destination": "/catalogo?q=panel",
+      "permanent": true
+    },
+    {
+      "source": "/paneles-led",
+      "destination": "/catalogo?q=panel",
+      "permanent": true
+    },
+    {
+      "source": "/tiras-de-led",
+      "destination": "/catalogo?category=tiras",
+      "permanent": true
+    },
+    {
+      "source": "/tiras-de-led-1",
+      "destination": "/catalogo?category=tiras",
+      "permanent": true
+    },
+    {
+      "source": "/modulos-led-1",
+      "destination": "/catalogo?category=modulosled",
+      "permanent": true
+    },
+    {
+      "source": "/neon-y-carteles",
+      "destination": "/catalogo?q=neon",
+      "permanent": true
+    },
+    {
+      "source": "/tubos-y-regletas-led",
+      "destination": "/catalogo?category=tubos",
+      "permanent": true
+    },
+    {
+      "source": "/tubos-de-led",
+      "destination": "/catalogo?category=tubos",
+      "permanent": true
+    },
+    {
+      "source": "/focos-techo",
+      "destination": "/catalogo?category=downlights-superficie",
+      "permanent": true
+    },
+    {
+      "source": "/apliques-pared",
+      "destination": "/catalogo?q=aplique",
+      "permanent": true
+    },
+    {
+      "source": "/m/:path*",
+      "destination": "/:path*",
+      "permanent": true
     }
   ],
   "rewrites": [
