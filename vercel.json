@@ -17,6 +17,37 @@
           "value": "noindex, nofollow"
         }
       ]
+    },
+    {
+      "source": "/tienda(.*)",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/tienda/ols/products/:slug",
+      "destination": "/product/:slug",
+      "permanent": true
+    },
+    {
+      "source": "/tienda/ols/categories/:slug",
+      "destination": "/catalogo?category=:slug",
+      "permanent": true
+    },
+    {
+      "source": "/tienda/:path*",
+      "destination": "/catalogo",
+      "permanent": true
+    },
+    {
+      "source": "/product-page/:slug",
+      "destination": "/product/:slug",
+      "permanent": true
     }
   ],
   "rewrites": [

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SITE_URL = 'https://millucesiluminacion.com';
+const SITE_URL = 'https://www.millucesiluminacion.com';
 const STORE_NAME = 'Mil Luces';
 const CURRENCY = 'EUR';
 const CACHE_SECONDS = 86400; // 24h

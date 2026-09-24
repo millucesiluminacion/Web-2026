@@ -2,7 +2,8 @@ User-agent: *
 Disallow: /admin
 Disallow: /admin/
 Disallow: /api/
+Disallow: /tienda/
 Allow: /api/sitemap
 Allow: /feed/productos.xml
 
-Sitemap: https://millucesiluminacion.com/api/sitemap
+Sitemap: https://www.millucesiluminacion.com/api/sitemap

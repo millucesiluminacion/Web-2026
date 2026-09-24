@@ -182,12 +182,22 @@ export default function SEOManager() {
                     updateOrCreateMeta('robots', 'index, follow');
                 }
 
-                // Canonical
+                // Canonical - siempre con www para evitar duplicados www vs no-www
+                const CANONICAL_BASE = 'https://www.millucesiluminacion.com';
                 const canonical = document.querySelector('link[rel="canonical"]') || document.createElement('link');
                 canonical.setAttribute('rel', 'canonical');
-                canonical.setAttribute('href', window.location.origin + path);
+                canonical.setAttribute('href', CANONICAL_BASE + path);
                 if (!document.querySelector('link[rel="canonical"]')) {
                     document.head.appendChild(canonical);
+                }
+
+                // Google Analytics 4 (gtag) - Medición de páginas vistas en SPA
+                if (typeof window.gtag === 'function') {
+                    window.gtag('event', 'page_view', {
+                        page_title: finalTitle,
+                        page_location: CANONICAL_BASE + location.pathname + location.search,
+                        page_path: location.pathname + location.search
+                    });
                 }
 
                 // Inject Schema.org JSON-LD Structured Data
