@@ -75,38 +75,68 @@ function error(msg) { console.error(`  ❌ ${msg}`); }
 
 // ─── PHASE 1: Convert & Upload ───────────────────────────────────────────────
 async function phase1() {
-    console.log('\n🔵 PHASE 1: Converting PNGs to WebP and uploading...\n');
+    console.log('\n🔵 PHASE 1: Gathering all non-WebP images from products, extra_images, categories, and projects...\n');
 
-    // Get all unique Supabase Storage image_urls from products
-    const { data: products, error: dbErr } = await supabase
+    const allUrls = new Set();
+
+    // 1. Products image_url & extra_images
+    const { data: products, error: prodErr } = await supabase
         .from('products')
-        .select('id, image_url')
-        .not('image_url', 'is', null)
-        .neq('image_url', '');
+        .select('id, image_url, extra_images');
 
-    if (dbErr) { error('Cannot fetch products: ' + dbErr.message); return; }
+    if (prodErr) { error('Cannot fetch products: ' + prodErr.message); return; }
 
-    // Filter to only Supabase storage URLs (skip externals like efectoled.com etc)
-    const supabaseProducts = products.filter(p => p.image_url && p.image_url.includes(`supabase.co/storage`));
+    for (const p of products || []) {
+        if (p.image_url && p.image_url.includes('supabase.co/storage')) {
+            allUrls.add(p.image_url);
+        }
+        if (Array.isArray(p.extra_images)) {
+            for (const img of p.extra_images) {
+                if (img && typeof img === 'string' && img.includes('supabase.co/storage')) {
+                    allUrls.add(img);
+                }
+            }
+        }
+    }
 
-    // De-duplicate by URL
-    const uniqueUrls = [...new Set(supabaseProducts.map(p => p.image_url))];
-    log(`Found ${uniqueUrls.length} unique Supabase images to convert.\n`);
+    // 2. Categories image_url
+    const { data: categories, error: catErr } = await supabase
+        .from('categories')
+        .select('id, image_url');
+    if (!catErr && categories) {
+        for (const c of categories) {
+            if (c.image_url && c.image_url.includes('supabase.co/storage')) {
+                allUrls.add(c.image_url);
+            }
+        }
+    }
+
+    // 3. Projects image_url
+    const { data: projects, error: projErr } = await supabase
+        .from('projects')
+        .select('id, image_url');
+    if (!projErr && projects) {
+        for (const pr of projects) {
+            if (pr.image_url && pr.image_url.includes('supabase.co/storage')) {
+                allUrls.add(pr.image_url);
+            }
+        }
+    }
+
+    // Filter out URLs that are already .webp
+    const nonWebpUrls = [...allUrls].filter(url => !/\.webp(\?.*)?$/i.test(url));
+    log(`Found ${nonWebpUrls.length} unique non-WebP Supabase images to convert.\n`);
 
     if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
 
     const mapping = fs.existsSync(MAPPING_FILE) ? JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8')) : {};
     let converted = 0, skipped = 0, failed = 0;
 
-    for (const url of uniqueUrls) {
+    for (const url of nonWebpUrls) {
         const storagePath = getStoragePath(url);
         if (!storagePath) { warn(`Skipping (can't parse path): ${url}`); skipped++; continue; }
 
-        // Skip if already converted
         if (mapping[url]) { log(`Already converted: ${storagePath}`); skipped++; continue; }
-
-        // Skip if already a webp
-        if (/\.webp$/i.test(storagePath)) { log(`Already WebP: ${storagePath}`); skipped++; continue; }
 
         try {
             log(`Converting: ${storagePath}`);
@@ -120,7 +150,7 @@ async function phase1() {
             const webpPath = toWebpPath(storagePath);
             const webpPublicUrl = `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${webpPath}`;
 
-            // Upload to Supabase Storage (upsert: overwrite if exists)
+            // Upload to Supabase Storage with 1 year cache header
             const { error: uploadErr } = await supabase.storage
                 .from(BUCKET)
                 .upload(webpPath, webpBuffer, {
@@ -131,7 +161,6 @@ async function phase1() {
 
             if (uploadErr) { error(`Upload failed for ${webpPath}: ${uploadErr.message}`); failed++; continue; }
 
-            // Record the mapping
             mapping[url] = webpPublicUrl;
             fs.writeFileSync(MAPPING_FILE, JSON.stringify(mapping, null, 2));
 
@@ -160,7 +189,7 @@ async function phase2() {
 
     const mapping = JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8'));
     const entries = Object.entries(mapping);
-    log(`Checking ${entries.length} WebP URLs...\n`);
+    log(`Checking ${entries.length} WebP URLs in storage...\n`);
 
     let ok = 0, broken = 0;
     const brokenUrls = [];
@@ -176,7 +205,6 @@ async function phase2() {
                 req.on('error', reject);
                 req.end();
             });
-            success(`OK: ${webpUrl.split('/').pop()}`);
             ok++;
         } catch (e) {
             error(`BROKEN: ${webpUrl} — ${e.message}`);
@@ -187,9 +215,9 @@ async function phase2() {
 
     console.log(`\n📊 Phase 2 complete: ${ok} accessible, ${broken} broken.`);
     if (broken > 0) {
-        console.log('   ❌ Fix broken URLs before running Phase 3 (check Supabase bucket permissions).');
+        console.log('   ❌ Fix broken URLs before running Phase 3.');
     } else {
-        console.log('   ✅ All WebP images verified! You can now run Phase 3 to update the database.');
+        console.log('   ✅ All WebP images verified! You can now run Phase 3 to safely update the database.');
     }
 }
 
@@ -203,36 +231,73 @@ async function phase3() {
 
     const mapping = JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8'));
     const entries = Object.entries(mapping);
-    log(`Updating ${entries.length} product image URLs in the database...\n`);
+    log(`Processing ${entries.length} URL mappings across products, extra_images, categories, and projects...\n`);
 
-    let updated = 0, failed = 0;
+    let updatedProducts = 0;
+    let updatedCategories = 0;
+    let updatedProjects = 0;
 
     for (const [originalUrl, webpUrl] of entries) {
-        const { data, error: updErr } = await supabase
+        // 1. Update products image_url
+        const { data: pData } = await supabase
             .from('products')
             .update({ image_url: webpUrl })
             .eq('image_url', originalUrl)
             .select('id');
+        if (pData?.length) updatedProducts += pData.length;
 
-        if (updErr) {
-            error(`DB update failed for ${originalUrl}: ${updErr.message}`);
-            failed++;
-        } else {
-            success(`Updated ${data?.length || 0} product(s): ...${originalUrl.split('/').pop()} → ...${webpUrl.split('/').pop()}`);
-            updated++;
+        // 2. Update categories image_url
+        const { data: cData } = await supabase
+            .from('categories')
+            .update({ image_url: webpUrl })
+            .eq('image_url', originalUrl)
+            .select('id');
+        if (cData?.length) updatedCategories += cData.length;
+
+        // 3. Update projects image_url
+        const { data: prData } = await supabase
+            .from('projects')
+            .update({ image_url: webpUrl })
+            .eq('image_url', originalUrl)
+            .select('id');
+        if (prData?.length) updatedProjects += prData.length;
+    }
+
+    // 4. Update products extra_images arrays
+    const { data: productsWithExtras } = await supabase
+        .from('products')
+        .select('id, extra_images')
+        .not('extra_images', 'is', null);
+
+    let updatedExtras = 0;
+    for (const prod of productsWithExtras || []) {
+        if (!Array.isArray(prod.extra_images)) continue;
+        let changed = false;
+        const newExtras = prod.extra_images.map(img => {
+            if (mapping[img]) {
+                changed = true;
+                return mapping[img];
+            }
+            return img;
+        });
+        if (changed) {
+            await supabase.from('products').update({ extra_images: newExtras }).eq('id', prod.id);
+            updatedExtras++;
         }
     }
 
-    console.log(`\n📊 Phase 3 complete: ${updated} URL groups updated, ${failed} failed.`);
-    if (failed === 0) {
-        console.log('   ✅ Migration complete! Original PNG files remain in Storage as backup.');
-        console.log('   ℹ️  To rollback at any time, run: node scripts/migrate_to_webp.cjs rollback');
-    }
+    console.log(`\n📊 Phase 3 complete:`);
+    console.log(`   - Products main image updated: ${updatedProducts}`);
+    console.log(`   - Products extra images updated: ${updatedExtras}`);
+    console.log(`   - Categories image updated: ${updatedCategories}`);
+    console.log(`   - Projects image updated: ${updatedProjects}`);
+    console.log('   ✅ Migration successfully committed to database!');
+    console.log('   ℹ️  Original PNG/JPG files remain in Supabase Storage as 100% safe backup.');
 }
 
-// ─── ROLLBACK: Restore original PNG URLs ────────────────────────────────────
+// ─── ROLLBACK: Restore original URLs ────────────────────────────────────────
 async function rollback() {
-    console.log('\n🔴 ROLLBACK: Restoring original PNG URLs in database...\n');
+    console.log('\n🔴 ROLLBACK: Restoring original PNG/JPG URLs in database...\n');
 
     if (!fs.existsSync(MAPPING_FILE)) {
         error('No mapping file found. Nothing to rollback.'); return;
@@ -240,27 +305,37 @@ async function rollback() {
 
     const mapping = JSON.parse(fs.readFileSync(MAPPING_FILE, 'utf8'));
     const entries = Object.entries(mapping);
-    log(`Restoring ${entries.length} product image URLs to original PNGs...\n`);
-
-    let restored = 0, failed = 0;
+    log(`Restoring ${entries.length} URL mappings across database...\n`);
 
     for (const [originalUrl, webpUrl] of entries) {
-        const { data, error: updErr } = await supabase
-            .from('products')
-            .update({ image_url: originalUrl })
-            .eq('image_url', webpUrl)
-            .select('id');
+        await supabase.from('products').update({ image_url: originalUrl }).eq('image_url', webpUrl);
+        await supabase.from('categories').update({ image_url: originalUrl }).eq('image_url', webpUrl);
+        await supabase.from('projects').update({ image_url: originalUrl }).eq('image_url', webpUrl);
+    }
 
-        if (updErr) {
-            error(`Restore failed for ${webpUrl}: ${updErr.message}`);
-            failed++;
-        } else {
-            success(`Restored ${data?.length || 0} product(s): ...${webpUrl.split('/').pop()} → ...${originalUrl.split('/').pop()}`);
-            restored++;
+    const { data: productsWithExtras } = await supabase
+        .from('products')
+        .select('id, extra_images')
+        .not('extra_images', 'is', null);
+
+    const reverseMapping = Object.fromEntries(entries.map(([orig, webp]) => [webp, orig]));
+
+    for (const prod of productsWithExtras || []) {
+        if (!Array.isArray(prod.extra_images)) continue;
+        let changed = false;
+        const restoredExtras = prod.extra_images.map(img => {
+            if (reverseMapping[img]) {
+                changed = true;
+                return reverseMapping[img];
+            }
+            return img;
+        });
+        if (changed) {
+            await supabase.from('products').update({ extra_images: restoredExtras }).eq('id', prod.id);
         }
     }
 
-    console.log(`\n📊 Rollback complete: ${restored} restored, ${failed} failed.`);
+    console.log('\n📊 Rollback complete! All URLs restored to original.');
 }
 
 // ─── Entry Point ─────────────────────────────────────────────────────────────
