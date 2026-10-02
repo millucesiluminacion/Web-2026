@@ -23,15 +23,23 @@ export function CartProvider({ children }) {
 
     const [isSideCartOpen, setIsSideCartOpen] = useState(false);
 
+    // Build a stable cart-item key combining product id + selected options
+    const buildCartKey = (product) => {
+        const opts = product.selectedOptions || {};
+        const optsStr = Object.keys(opts).sort().map(k => `${k}:${opts[k]}`).join('|');
+        return `${product.id}__${optsStr}`;
+    };
+
     const addToCart = async (product, quantity = 1) => {
+        const cartKey = buildCartKey(product);
         setCart(prev => {
-            const existing = prev.find(item => item.id === product.id);
+            const existing = prev.find(item => buildCartKey(item) === cartKey);
             if (existing) {
                 return prev.map(item =>
-                    item.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
+                    buildCartKey(item) === cartKey ? { ...item, quantity: item.quantity + quantity } : item
                 );
             }
-            return [...prev, { ...product, quantity }];
+            return [...prev, { ...product, quantity, _cartKey: cartKey }];
         });
 
         // HANDLE MANDATORY ACCESSORIES
@@ -64,14 +72,13 @@ export function CartProvider({ children }) {
         setIsSideCartOpen(true);
     };
 
-    const removeFromCart = (id) => {
+    const removeFromCart = (cartKey) => {
         setCart(prev => {
-            const newCart = prev.filter(item => item.id !== id);
+            // Support removal by _cartKey (new) or by id (legacy/mandatory accessories)
+            const newCart = prev.filter(item => (item._cartKey || item.id) !== cartKey && item.id !== cartKey);
             // Also remove mandatory accessories that were linked to this parent
-            // and are not linked to any OTHER product still in the cart
             return newCart.filter(item => {
-                if (item.isMandatory && item.parentId === id) {
-                    // Check if another instance of the same parent product exists (unlikely in this simple impl)
+                if (item.isMandatory && item.parentId === cartKey) {
                     return false;
                 }
                 return true;
@@ -79,9 +86,11 @@ export function CartProvider({ children }) {
         });
     };
 
-    const updateQuantity = (id, quantity) => {
+    const updateQuantity = (cartKey, quantity) => {
         if (quantity < 1) return;
-        setCart(prev => prev.map(item => item.id === id ? { ...item, quantity } : item));
+        setCart(prev => prev.map(item =>
+            (item._cartKey || item.id) === cartKey ? { ...item, quantity } : item
+        ));
     };
 
     const clearCart = () => setCart([]);

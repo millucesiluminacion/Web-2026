@@ -59,7 +59,7 @@ export function MiniCart() {
                         </div>
                     ) : (
                         cart.map((item, idx) => (
-                            <div key={item.id} className="flex gap-4 sm:gap-6 group animate-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
+                            <div key={item._cartKey || item.id} className="flex gap-4 sm:gap-6 group animate-in slide-in-from-bottom-4 duration-500" style={{ animationDelay: `${idx * 50}ms` }}>
                                 <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gray-50 rounded-2xl border border-gray-100 p-2.5 sm:p-3 flex-shrink-0 group-hover:shadow-md transition-shadow">
                                     <img src={item.image_url} alt={item.name} className="w-full h-full object-contain" />
                                 </div>
@@ -80,7 +80,7 @@ export function MiniCart() {
                                             ) : (
                                                 <>
                                                     <button
-                                                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                        onClick={() => updateQuantity(item._cartKey || item.id, item.quantity - 1)}
                                                         className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"
                                                     >
                                                         -
@@ -90,12 +90,12 @@ export function MiniCart() {
                                                         value={item.quantity}
                                                         onChange={(e) => {
                                                             const val = parseInt(e.target.value);
-                                                            if (!isNaN(val) && val >= 1) updateQuantity(item.id, val);
+                                                            if (!isNaN(val) && val >= 1) updateQuantity(item._cartKey || item.id, val);
                                                         }}
                                                         className="w-8 sm:w-10 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                     />
                                                     <button
-                                                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                        onClick={() => updateQuantity(item._cartKey || item.id, item.quantity + 1)}
                                                         className="text-gray-400 hover:text-brand-carbon transition-colors text-xs font-black"
                                                     >
                                                         +
@@ -117,7 +117,7 @@ export function MiniCart() {
                                     </div>
                                 ) : (
                                     <button
-                                        onClick={() => removeFromCart(item.id)}
+                                        onClick={() => removeFromCart(item._cartKey || item.id)}
                                         className="opacity-80 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-2 text-gray-400 hover:text-red-500"
                                         aria-label="Eliminar producto"
                                     >

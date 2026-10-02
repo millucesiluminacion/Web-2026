@@ -101,7 +101,7 @@ async function generateGoogleMerchantFeed(res, supabase) {
       <g:shipping>
         <g:country>ES</g:country>
         <g:service>Estándar</g:service>
-        <g:price>0.00 EUR</g:price>
+        <g:price>${parseFloat(displayPrice) >= 150 ? '0.00' : '5.95'} EUR</g:price>
       </g:shipping>
     </item>`;
     }).join('');

@@ -365,7 +365,14 @@ export default function AccountPage() {
                                                         <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[10px] font-black">
                                                             {item.quantity}x
                                                         </div>
-                                                        <p className="text-[10px] font-bold text-gray-500 uppercase truncate max-w-[120px]">{item.product_name}</p>
+                                                        <div>
+                                                            <p className="text-[10px] font-bold text-gray-500 uppercase truncate max-w-[120px]">{item.product_name}</p>
+                                                            {item.selected_options && Object.keys(item.selected_options).length > 0 && (
+                                                                <p className="text-[9px] font-bold text-primary/70 uppercase truncate max-w-[120px] mt-0.5">
+                                                                    {Object.entries(item.selected_options).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ')}
+                                                                </p>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>

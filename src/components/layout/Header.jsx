@@ -178,7 +178,7 @@ export function Header({ onOpenAuthModal }) {
 
                     {/* Right: Actions */}
                     <div className="flex items-center gap-3 md:gap-6">
-                        <a href="tel:900000000" className="hidden md:flex items-center gap-3 group">
+                        <a href="tel:+34689935436" className="hidden md:flex items-center gap-3 group">
                             <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center group-hover:bg-primary group-hover:text-white transition-all">
                                 <Phone className="w-4 h-4" />
                             </div>

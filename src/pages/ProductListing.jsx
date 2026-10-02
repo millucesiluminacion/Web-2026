@@ -87,8 +87,18 @@ const normalizeFilterValue = (val) => {
 
 const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters = {}, isLCP = false }) => {
     const pricing = calculateProductPrice(product, profile);
+    const navigate = useNavigate();
     const [isHovered, setIsHovered] = useState(false);
     const [currentImgIndex, setCurrentImgIndex] = useState(0);
+
+    // Determina si el producto tiene atributos que el cliente debe seleccionar
+    // (temperatura de color, acabado, etc. con más de 1 opción)
+    const hasSelectableOptions = useMemo(() => {
+        const attrs = product.attributes || {};
+        const hasMultiValueAttr = Object.values(attrs).some(v => Array.isArray(v) && v.length > 1);
+        const hasVariants = product.variants && product.variants.length > 0;
+        return hasMultiValueAttr || hasVariants;
+    }, [product.attributes, product.variants]);
 
     const images = useMemo(() => {
         const imgs = [product.image_url];
@@ -193,7 +203,33 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
             </Link>
             <div className="p-8 pt-0 flex-1 flex flex-col">
                 <div className="mb-4">
-                    <StarRating rating={product.rating_avg} count={product.reviews_count} />
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                        <StarRating rating={product.rating_avg} count={product.reviews_count} />
+                        {(() => {
+                            const s = parseInt(product.stock, 10);
+                            if (isNaN(s) || s <= 0) {
+                                return (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-100">
+                                        Agotado
+                                    </span>
+                                );
+                            }
+                            if (s <= 5) {
+                                return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border border-amber-200/80 animate-pulse">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                        ¡Solo {s}!
+                                    </span>
+                                );
+                            }
+                            return (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                    En stock
+                                </span>
+                            );
+                        })()}
+                    </div>
                     <Link to={`/product/${product.slug || product.id}`}>
                         <h3 className="text-sm font-black text-brand-carbon uppercase italic leading-tight group-hover:text-primary transition-colors line-clamp-2">{product.name}</h3>
                     </Link>
@@ -335,8 +371,16 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                                         <div className="w-px h-5 bg-gray-200 mx-2 hidden lg:block" />
                                     </div>
                                     <button
-                                        onClick={(e) => { e.preventDefault(); addToCart({ ...product, price: pricing.finalPrice }, localQty || 1); }}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            if (hasSelectableOptions) {
+                                                navigate(`/product/${product.slug || product.id}`);
+                                            } else {
+                                                addToCart({ ...product, price: pricing.finalPrice }, localQty || 1);
+                                            }
+                                        }}
                                         className="w-10 h-10 lg:w-11 lg:h-11 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all flex-shrink-0"
+                                        title={hasSelectableOptions ? 'Seleccionar opciones' : 'Añadir al carrito'}
                                     >
                                         <ShoppingCart className="w-4 h-4 lg:w-5 lg:h-5" />
                                     </button>

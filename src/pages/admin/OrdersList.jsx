@@ -577,6 +577,7 @@ export default function OrdersList() {
                     },
                     body: JSON.stringify({
                         to: adminEmail,
+                        subject: `📋 Nuevo Pedido Manual #${order.id.slice(0, 8).toUpperCase()} - Mil Luces Iluminación`,
                         templateKey: 'master_layout',
                         variables: {
                             site_name: 'Mil Luces Iluminación',
@@ -1407,6 +1408,15 @@ export default function OrdersList() {
                                                             </div>
                                                             <div>
                                                                 <p className="text-sm font-black text-brand-carbon uppercase italic">{item.product_name}</p>
+                                                                {item.selected_options && Object.keys(item.selected_options).length > 0 && (
+                                                                    <div className="flex flex-wrap gap-1 mt-1.5">
+                                                                        {Object.entries(item.selected_options).map(([k, v]) => v && (
+                                                                            <span key={k} className="inline-flex items-center gap-1 bg-primary/8 text-primary border border-primary/20 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide">
+                                                                                {k}: {v}
+                                                                            </span>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Precio: {item.unit_price.toFixed(2)} €</p>
                                                             </div>
                                                         </div>
@@ -2063,6 +2073,11 @@ export default function OrdersList() {
                                         <tr key={idx} className="group italic">
                                             <td className="py-6 pr-4">
                                                 <p className="text-[11px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
+                                                {item.selected_options && Object.keys(item.selected_options).length > 0 && (
+                                                    <p className="text-[9px] font-bold text-primary/70 uppercase tracking-tighter mb-0.5">
+                                                        {Object.entries(item.selected_options).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ')}
+                                                    </p>
+                                                )}
                                                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">REF: {item.product_id?.slice(-6).toUpperCase()}</p>
                                             </td>
                                             <td className="py-6 px-4 text-center font-black text-sm">x{item.quantity}</td>

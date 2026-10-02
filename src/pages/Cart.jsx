@@ -321,6 +321,7 @@ export default function Cart() {
                 },
                 body: JSON.stringify({
                     to: adminEmail,
+                    subject: `🛒 Nuevo Pedido #${order.id.slice(0, 8).toUpperCase()} - Mil Luces Iluminación`,
                     templateKey: 'master_layout',
                     variables: {
                         site_name: 'Mil Luces Iluminación',
@@ -389,9 +390,28 @@ export default function Cart() {
             quantity: item.quantity,
             unit_price: item.price,
             product_name: item.name,
+            selected_options: (item.selectedOptions && Object.keys(item.selectedOptions).some(k => item.selectedOptions[k]))
+                ? Object.fromEntries(Object.entries(item.selectedOptions).filter(([, v]) => v != null && v !== ''))
+                : null,
         }));
         const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
         if (itemsError) throw itemsError;
+
+        // Descontar stock de cada producto pedido
+        try {
+            for (const item of cart) {
+                if (item.id) {
+                    await supabase.rpc('decrement_stock', {
+                        p_product_id: item.id,
+                        p_quantity: item.quantity
+                    });
+                }
+            }
+        } catch (stockErr) {
+            // No bloqueamos el pedido si el descuento de stock falla,
+            // pero sí lo registramos para revisión
+            console.error('[saveOrder] Error al descontar stock:', stockErr);
+        }
 
         if (appliedCoupon) {
             try {
@@ -708,7 +728,7 @@ export default function Cart() {
                                 {showOrderSummary && (
                                     <div className="px-8 pb-8 border-t border-gray-50 pt-6 space-y-4">
                                         {cart.map(item => (
-                                            <div key={item.id} className="group flex items-center gap-5 p-4 rounded-2xl hover:bg-gray-50/80 transition-colors">
+                                            <div key={item._cartKey || item.id} className="group flex items-center gap-5 p-4 rounded-2xl hover:bg-gray-50/80 transition-colors">
                                                 <Link to={`/product/${item.slug || item.id}`} className="w-16 h-16 bg-brand-porcelain rounded-xl flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-100">
                                                     {item.image_url ? <img src={item.image_url} alt={item.name} className="w-full h-full object-contain" /> : <span className="text-2xl">💡</span>}
                                                 </Link>
@@ -730,7 +750,7 @@ export default function Cart() {
                                                             <span className="text-[10px] font-black text-brand-carbon px-2 italic">{item.quantity}</span>
                                                         ) : (
                                                             <>
-                                                                <button type="button" onClick={() => updateQuantity(item.id, item.quantity - 1)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
+                                                                <button type="button" onClick={() => updateQuantity(item._cartKey || item.id, item.quantity - 1)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
                                                                     <Minus className="w-3 h-3" />
                                                                 </button>
                                                                 <input
@@ -738,11 +758,11 @@ export default function Cart() {
                                                                     value={item.quantity}
                                                                     onChange={(e) => {
                                                                         const val = parseInt(e.target.value);
-                                                                        if (!isNaN(val) && val >= 1) updateQuantity(item.id, val);
+                                                                        if (!isNaN(val) && val >= 1) updateQuantity(item._cartKey || item.id, val);
                                                                     }}
                                                                     className="w-10 bg-transparent text-center font-black italic text-brand-carbon border-none focus:outline-none text-[10px] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                                                 />
-                                                                <button type="button" onClick={() => updateQuantity(item.id, item.quantity + 1)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
+                                                                <button type="button" onClick={() => updateQuantity(item._cartKey || item.id, item.quantity + 1)} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:text-brand-carbon transition-colors">
                                                                     <Plus className="w-3 h-3" />
                                                                 </button>
                                                             </>
@@ -761,7 +781,7 @@ export default function Cart() {
                                                     ) : (
                                                         <button
                                                             type="button"
-                                                            onClick={() => removeFromCart(item.id)}
+                                                            onClick={() => removeFromCart(item._cartKey || item.id)}
                                                             className="w-8 h-8 flex items-center justify-center text-gray-200 hover:text-red-400 hover:bg-red-50 transition-all rounded-xl shadow-sm hover:shadow-red-100"
                                                         >
                                                             <Trash className="w-4 h-4" />

@@ -100,6 +100,36 @@ export default async function handler(req, res) {
         let finalHtml = html;
         let finalText = text || 'Este correo requiere un cliente HTML.';
 
+        // Cargar siempre datos de branding de app_settings para resolver {logo_url}, {site_name}, etc.
+        const defaultBranding = {
+            site_name: 'Mil Luces Iluminación',
+            contact_email: 'milluces@millucesiluminacion.com',
+            support_phone: '917654062',
+            site_url: 'https://www.millucesiluminacion.com',
+            logo_url: 'https://www.millucesiluminacion.com/logo_new.png'
+        };
+
+        try {
+            const { data: brandSetting } = await supabaseAdmin.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
+            if (brandSetting?.value) {
+                if (brandSetting.value.site_name) defaultBranding.site_name = brandSetting.value.site_name;
+                if (brandSetting.value.contact_email) defaultBranding.contact_email = brandSetting.value.contact_email;
+                if (brandSetting.value.support_phone) defaultBranding.support_phone = brandSetting.value.support_phone;
+                const rawSiteUrl = brandSetting.value.site_url ||
+                    (brandSetting.value.contact_email
+                        ? 'https://www.' + brandSetting.value.contact_email.split('@')[1]
+                        : 'https://www.millucesiluminacion.com');
+                const siteUrl = rawSiteUrl.replace('https://millucesiluminacion.com', 'https://www.millucesiluminacion.com');
+                defaultBranding.site_url = siteUrl.replace(/\/$/, '');
+                defaultBranding.logo_url = brandSetting.value.logo_url || (defaultBranding.site_url + '/logo_new.png');
+            }
+        } catch (e) {
+            console.warn('[send-email] No se pudo cargar branding:', e.message);
+        }
+
+        // Variables consolidadas (las enviadas por el caller tienen prioridad sobre branding)
+        const consolidatedVars = { ...defaultBranding, ...(variables || {}) };
+
         // Interceptor de Plantillas Avanzadas
         if (templateKey) {
             console.log(`[send-email] Autogenerando correo con templateKey: ${templateKey}`);
@@ -114,21 +144,13 @@ export default async function handler(req, res) {
                 const template = templates[templateKey];
 
                 if (template) {
-                    finalSubject = template.subject || '';
+                    const isLayoutOnly = templateKey === 'master_layout';
+                    finalSubject = (isLayoutOnly && subject) ? subject : (template.subject || subject || '');
                     let rawBody = template.body || '';
 
-                    // Construimos siempre variables. Por defecto metemos site_name de branding
-                    let injectionVars = { ...variables };
-                    try {
-                        if (!injectionVars.site_name) {
-                            const { data: brandSetting } = await supabaseAdmin.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
-                            if (brandSetting) injectionVars.site_name = brandSetting.value.site_name || 'Nuestra Tienda';
-                        }
-                    } catch (e) { }
-
-                    // Inyectar en subject y body
-                    Object.keys(injectionVars).forEach(key => {
-                        const val = injectionVars[key] || '';
+                    // Inyectar variables en subject y body
+                    Object.keys(consolidatedVars).forEach(key => {
+                        const val = String(consolidatedVars[key] || '');
                         finalSubject = finalSubject.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
                         rawBody = rawBody.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
                     });
@@ -145,10 +167,10 @@ export default async function handler(req, res) {
                     // Envolver en master_layout (Layout Maestro)
                     if (templates['master_layout'] && templates['master_layout'].body) {
                         let master = templates['master_layout'].body;
-                        Object.keys(injectionVars).forEach(key => {
-                            master = master.replace(new RegExp(`\\{${key}\\}`, 'g'), injectionVars[key] || '');
+                        Object.keys(consolidatedVars).forEach(key => {
+                            master = master.replace(new RegExp(`\\{${key}\\}`, 'g'), consolidatedVars[key] || '');
                         });
-                        finalHtml = master.replace('{body}', bodyHtml);
+                        finalHtml = master.replace('{body}', () => bodyHtml);
                     } else {
                         finalHtml = bodyHtml;
                     }
@@ -157,6 +179,27 @@ export default async function handler(req, res) {
                     console.warn(`[send-email] La plantilla ${templateKey} no existe en DB.`);
                 }
             }
+        }
+
+        // Limpieza y sustitución universal para cualquier HTML o Subject recibido
+        if (finalSubject) {
+            Object.keys(consolidatedVars).forEach(key => {
+                const val = String(consolidatedVars[key] || '');
+                finalSubject = finalSubject.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+            });
+        }
+        if (finalHtml) {
+            Object.keys(consolidatedVars).forEach(key => {
+                const val = String(consolidatedVars[key] || '');
+                finalHtml = finalHtml.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
+            });
+            // Garantía absoluta para logo_url y branding si quedaron como literales
+            finalHtml = finalHtml
+                .replace(/\{logo_url\}/g, consolidatedVars.logo_url || 'https://www.millucesiluminacion.com/logo_new.png')
+                .replace(/\{site_name\}/g, consolidatedVars.site_name || 'Mil Luces')
+                .replace(/\{contact_email\}/g, consolidatedVars.contact_email || 'milluces@millucesiluminacion.com')
+                .replace(/\{support_phone\}/g, consolidatedVars.support_phone || '917654062')
+                .replace(/\{site_url\}/g, consolidatedVars.site_url || 'https://www.millucesiluminacion.com');
         }
 
         // Validación final

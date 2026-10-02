@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, AlertTriangle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown, Ruler } from 'lucide-react';
+import { Star, ShoppingCart, Truck, ShieldCheck, ArrowLeft, Loader2, AlertCircle, AlertTriangle, ChevronRight, Zap, Package, BadgePercent, Lock, Shield, Heart, Clock, MessageSquare, Send, FileDown, Ruler, MessageCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
@@ -700,12 +700,47 @@ export default function ProductDetail() {
                             )}
                         </div>
 
-                        {/* Stock & Urgency Badges */}
-                        <div className="flex flex-col gap-3 mb-8">
+                        {/* Stock & Urgency Badges (Opción A: Urgencia inteligente) */}
+                        <div className="flex flex-col gap-2.5 mb-8">
+                            {(() => {
+                                const rawStock = displayProduct?.stock ?? parentProduct?.stock;
+                                const stockNum = parseInt(rawStock, 10);
+                                const hasStock = !isNaN(stockNum) && stockNum > 0;
+                                const isByMeter = displayProduct?.is_by_meter || parentProduct?.is_by_meter;
+                                const unit = isByMeter ? 'metros' : 'unidades';
+
+                                if (!hasStock) {
+                                    return (
+                                        <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-rose-50 border border-rose-200/70 text-rose-800 text-[11px] font-bold tracking-wide w-fit">
+                                            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                                            <span>Agotado temporalmente · <span className="font-semibold text-rose-600">Consultar reposición por WhatsApp</span></span>
+                                        </div>
+                                    );
+                                }
+
+                                if (stockNum <= 10) {
+                                    return (
+                                        <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200/80 text-amber-900 text-[11px] font-bold tracking-wide w-fit animate-pulse">
+                                            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                                            <span>¡Solo quedan <strong className="font-black text-amber-950 underline">{stockNum} {unit}</strong> en stock! · Alta demanda</span>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="inline-flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-emerald-50 border border-emerald-200/70 text-emerald-900 text-[11px] font-bold tracking-wide w-fit">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        <span>En stock en almacén Cobo Calleja · <span className="font-semibold text-emerald-700">Envío 24/48h o recogida hoy</span></span>
+                                    </div>
+                                );
+                            })()}
+
                             {(() => {
                                 const now = new Date();
                                 const hours = now.getHours();
-                                if (hours < 15 && parseInt(displayProduct?.stock) > 0) {
+                                const rawStock = displayProduct?.stock ?? parentProduct?.stock;
+                                const stockNum = parseInt(rawStock, 10);
+                                if (hours < 15 && stockNum > 0) {
                                     return (
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide flex items-center gap-2">
                                             <Clock className="w-3.5 h-3.5 text-primary" />
@@ -906,6 +941,53 @@ export default function ProductDetail() {
                                     }
                                 </span>
                             </button>
+
+                            {/* Botón discreto de WhatsApp adaptado a disponibilidad / consultas */}
+                            {(() => {
+                                const rawStock = displayProduct?.stock ?? parentProduct?.stock;
+                                const stockNum = parseInt(rawStock, 10);
+                                const isOutOfStock = isNaN(stockNum) || stockNum <= 0;
+
+                                const waMessage = isOutOfStock
+                                    ? `Hola Mil Luces, veo que este producto está temporalmente agotado:\n` +
+                                      `• *${parentProduct?.name || 'Producto'}*${displayProduct?.reference ? ` (Ref: ${displayProduct.reference})` : ''}\n` +
+                                      `• Enlace: ${typeof window !== 'undefined' ? window.location.href : ''}\n\n` +
+                                      `¿Cuándo tendréis reposición o tenéis alguna alternativa similar en tienda? Gracias.`
+                                    : `Hola Mil Luces, tengo una consulta sobre este producto:\n` +
+                                      `• *${parentProduct?.name || 'Producto'}*${displayProduct?.reference ? ` (Ref: ${displayProduct.reference})` : ''} [${(finalPrice || 0).toFixed(2)}€]\n` +
+                                      `• Enlace: ${typeof window !== 'undefined' ? window.location.href : ''}\n\n` +
+                                      `¿Tenéis disponibilidad / me podéis confirmar información? Gracias.`;
+
+                                return (
+                                    <a
+                                        href={`https://wa.me/34689935436?text=${encodeURIComponent(waMessage)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={() => {
+                                            if (typeof window !== 'undefined' && window.gtag) {
+                                                window.gtag('event', 'whatsapp_product_inquiry', {
+                                                    event_category: 'E-commerce',
+                                                    event_label: parentProduct?.name,
+                                                    product_name: parentProduct?.name,
+                                                    product_ref: displayProduct?.reference || '',
+                                                    price: finalPrice,
+                                                    is_out_of_stock: isOutOfStock
+                                                });
+                                            }
+                                        }}
+                                        className="w-full py-2.5 px-4 rounded-xl border border-emerald-500/20 bg-emerald-50/50 hover:bg-emerald-100/70 text-emerald-800 transition-all flex items-center justify-center gap-2 text-[10px] font-bold tracking-wide group/wa"
+                                    >
+                                        <MessageCircle className="w-3.5 h-3.5 text-emerald-600 transition-transform group-hover/wa:scale-110" />
+                                        <span>
+                                            {isOutOfStock ? (
+                                                <>¿Interesado? <strong className="font-black underline underline-offset-2">Consultar próxima llegada por WhatsApp</strong></>
+                                            ) : (
+                                                <>¿Dudas o stock en tienda? <strong className="font-black underline underline-offset-2">Consultar por WhatsApp</strong></>
+                                            )}
+                                        </span>
+                                    </a>
+                                );
+                            })()}
                         </div>
 
                         {/* --- OPTIONS SELECTOR (multi-valor) --- */}

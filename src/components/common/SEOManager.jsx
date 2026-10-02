@@ -262,8 +262,9 @@ export default function SEOManager() {
                 "name": prod.name,
                 "description": prod.meta_description || prod.description || prod.name,
                 "image": prod.image_url ? [prod.image_url] : [],
-                "sku": prod.reference || prod.id,
-                "mpn": prod.reference || prod.id,
+                "sku": prod.reference || String(prod.id),
+                ...(prod.reference ? { "mpn": prod.reference } : {}),
+                ...(prod.barcode ? { "gtin13": prod.barcode } : {}),
                 "brand": {
                     "@type": "Brand",
                     "name": prod.brands?.name || prod.brand_name || "Mil Luces"
@@ -290,7 +291,8 @@ export default function SEOManager() {
                         "returnPolicyCategory": "https://schema.org/MerchantReturnFiniteReturnWindow",
                         "merchantReturnDays": 14,
                         "returnMethod": "https://schema.org/ReturnByMail",
-                        "returnFees": "https://schema.org/FreeReturn"
+                        "returnFees": "https://schema.org/FreeReturn",
+                        "merchantReturnLink": `${origin}/politica-de-devoluciones`
                     },
                     // Resuelve advertencia de Search Console: shippingDetails
                     "shippingDetails": {

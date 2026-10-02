@@ -5,6 +5,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { AuthModal } from '../auth/AuthModal';
 import { useAuth } from '../../context/AuthContext';
+import WhatsAppFloatingButton from '../common/WhatsAppFloatingButton';
 
 export function MainLayout() {
     const { userTier } = useAuth();
@@ -28,6 +29,7 @@ export function MainLayout() {
                 <Outlet />
             </main>
             <Footer />
+            <WhatsAppFloatingButton />
             <AuthModal
                 isOpen={authModal.open}
                 onClose={closeAuthModal}
@@ -36,5 +38,4 @@ export function MainLayout() {
             />
         </div>
     );
-
 }

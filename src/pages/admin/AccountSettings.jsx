@@ -153,21 +153,149 @@ export default function AccountSettings() {
 
                 const emails = settings.find(s => s.key === 'email_templates');
                 if (emails) {
+                    const TEMPLATE_VERSION = 6; // Incrementar para forzar actualización de templates
                     const loadedTemplates = emails.value || {};
-                    // Inyectar nuevas plantillas estructurales si no existen (retrocompatibilidad)
+                    const savedVersion = loadedTemplates._version || 0;
+                    const needsUpgrade = savedVersion < TEMPLATE_VERSION;
+
+                    // Si hay upgrade, borrar plantillas antiguas para regenerar con diseño premium
+                    if (needsUpgrade) {
+                        ['master_layout', 'welcome', 'order_confirmation', 'order_status_update', 'password_reset'].forEach(k => {
+                            delete loadedTemplates[k];
+                        });
+                        loadedTemplates._version = TEMPLATE_VERSION;
+                    }
+
+                    // ─── MASTER LAYOUT ───────────────────────────────────────────────
+
                     if (!loadedTemplates.master_layout) {
                         loadedTemplates.master_layout = {
                             subject: 'N/A (Esqueleto HTML de todos los correos)',
-                            body: '<div style="background-color: #f9f9f9; padding: 40px; font-family: sans-serif;">\n  <div style="max-width: 600px; margin: 0 auto; background-color: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">\n    <div style="padding: 30px; text-align: center; border-bottom: 1px solid #f0f0f0;">\n      <h1 style="color: #111827; margin: 0; font-size: 24px; font-weight: 900; font-style: italic; text-transform: uppercase;">{site_name}</h1>\n    </div>\n    <div style="padding: 40px; color: #374151; font-size: 15px; line-height: 1.6;">\n      {body}\n    </div>\n    <div style="background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; border-top: 1px solid #e5e7eb;">\n      <p style="margin:0;">Este es un mensaje automático de {site_name}.</p>\n    </div>\n  </div>\n</div>'
+                            body: `<div style="margin:0;padding:0;background-color:#f4f4f5;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#ffffff;padding:28px 48px;text-align:center;border-bottom:3px solid #1a3a8f;">
+            <a href="{site_url}" style="text-decoration:none;display:inline-block;font-size:24px;font-weight:900;color:#1a3a8f;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+              <img src="{logo_url}" alt="{site_name}" width="200" height="72" border="0" style="display:block;width:200px;max-width:200px;height:auto;margin:0 auto;border:0;outline:none;text-decoration:none;" />
+            </a>
+          </td>
+        </tr>
+        <!-- BODY -->
+        <tr>
+          <td style="padding:48px;color:#374151;font-size:15px;line-height:1.8;">
+            {body}
+          </td>
+        </tr>
+        <!-- DIVIDER -->
+        <tr><td style="padding:0 48px;"><div style="height:1px;background:linear-gradient(to right,transparent,#e5e7eb,transparent);"></div></td></tr>
+        <!-- FOOTER -->
+        <tr>
+          <td style="padding:32px 48px;text-align:center;background-color:#fafafa;">
+            <p style="margin:0 0 8px 0;font-size:11px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;">Servicio al Cliente</p>
+            <p style="margin:0 0 4px 0;font-size:13px;color:#4b5563;">{site_name} &middot; <a href="mailto:{contact_email}" style="color:#1a3a8f;text-decoration:none;">{contact_email}</a></p>
+            <p style="margin:0 0 16px 0;font-size:13px;color:#4b5563;">{support_phone}</p>
+            <p style="margin:0;font-size:11px;color:#d1d5db;">Este es un mensaje automático, por favor no respondas a este correo.</p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:24px 0 0 0;font-size:11px;color:#9ca3af;text-align:center;">&copy; 2026 {site_name}. Todos los derechos reservados.</p>
+    </td></tr>
+  </table>
+</div>`
                         };
                     }
+                    // ─── PASSWORD RESET ──────────────────────────────────────────────
                     if (!loadedTemplates.password_reset) {
                         loadedTemplates.password_reset = {
-                            subject: 'Restablecer contraseña - {site_name}',
-                            body: 'Hola {name},\n\nHemos recibido una solicitud para restablecer la contraseña de tu cuenta.\n\nPara crear una nueva contraseña, haz clic en el siguiente enlace de forma segura:\n\n<a href="{reset_url}" style="display:inline-block; padding: 12px 24px; background-color: #111827; color: white; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top:20px; margin-bottom:20px;">Restablecer mi Contraseña</a>\n\nSi no has solicitado este cambio, por favor ignora este correo.'
+                            subject: '🔐 Restablecer contraseña — {site_name}',
+                            body: `<h2 style="margin:0 0 8px 0;font-size:22px;font-weight:800;color:#111827;">Solicitud de nueva contraseña</h2>
+<p style="margin:0 0 24px 0;font-size:15px;color:#6b7280;font-weight:400;">Hemos recibido una solicitud para restablecer el acceso a tu cuenta.</p>
+
+<p style="margin:0 0 24px 0;color:#374151;font-size:15px;">Hola, <strong>{name}</strong>.</p>
+<p style="margin:0 0 32px 0;color:#374151;font-size:15px;">Para crear una nueva contraseña haz clic en el botón de abajo. Este enlace es personal e intransferible y expirará en 24 horas.</p>
+
+<div style="text-align:center;margin:0 0 40px 0;">
+  <a href="{reset_url}" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#ffffff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:0.5px;">Restablecer mi contraseña →</a>
+</div>
+
+<div style="background-color:#fef9ec;border-left:3px solid #f59e0b;border-radius:4px;padding:14px 18px;margin-bottom:8px;">
+  <p style="margin:0;font-size:13px;color:#92400e;"><strong>¿No has solicitado este cambio?</strong> Puedes ignorar este correo con total tranquilidad. Tu contraseña actual permanece intacta.</p>
+</div>`
+                        };
+                    }
+                    // ─── WELCOME ────────────────────────────────────────────────────
+                    if (!loadedTemplates.welcome) {
+                        loadedTemplates.welcome = {
+                            subject: '✨ Bienvenido/a a {site_name} — Tu cuenta está lista',
+                            body: `<h2 style="margin:0 0 4px 0;font-size:26px;font-weight:900;color:#111827;">¡Bienvenido/a, {name}!</h2>
+<p style="margin:0 0 32px 0;font-size:13px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;">Tu cuenta ha sido creada con éxito</p>
+
+<p style="margin:0 0 20px 0;color:#374151;font-size:15px;line-height:1.8;">Nos alegra tenerte con nosotros. En <strong>{site_name}</strong> encontrarás una selección exclusiva de luminarias y soluciones de iluminación para cada espacio, con la garantía de la mejor calidad y un servicio cercano y personal.</p>
+
+<div style="background:linear-gradient(135deg,#f8faff,#eef2ff);border-radius:12px;padding:28px 32px;margin:0 0 32px 0;">
+  <p style="margin:0 0 16px 0;font-size:13px;font-weight:700;color:#4338ca;letter-spacing:2px;text-transform:uppercase;">Lo que te espera</p>
+  <table cellpadding="0" cellspacing="0" width="100%">
+    <tr><td style="padding:6px 0;font-size:14px;color:#374151;"><span style="color:#4338ca;font-weight:700;margin-right:10px;">✦</span> Catálogo exclusivo con más de 1.000 referencias</td></tr>
+    <tr><td style="padding:6px 0;font-size:14px;color:#374151;"><span style="color:#4338ca;font-weight:700;margin-right:10px;">✦</span> Precios inmejorables y ofertas para clientes registrados</td></tr>
+    <tr><td style="padding:6px 0;font-size:14px;color:#374151;"><span style="color:#4338ca;font-weight:700;margin-right:10px;">✦</span> Asesoramiento personalizado sin compromiso</td></tr>
+    <tr><td style="padding:6px 0;font-size:14px;color:#374151;"><span style="color:#4338ca;font-weight:700;margin-right:10px;">✦</span> Gestión sencilla de tus pedidos y seguimiento en tiempo real</td></tr>
+  </table>
+</div>
+
+<div style="text-align:center;margin:0 0 8px 0;">
+  <a href="https://millucesiluminacion.com/productos" style="display:inline-block;padding:16px 40px;background:linear-gradient(135deg,#1a1a2e,#0f3460);color:#ffffff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:700;letter-spacing:0.5px;">Descubrir el catálogo →</a>
+</div>
+<p style="text-align:center;margin:12px 0 0 0;font-size:13px;color:#9ca3af;">Si necesitas ayuda, estamos a tu disposición en <a href="mailto:{contact_email}" style="color:#4338ca;text-decoration:none;">{contact_email}</a></p>`
+                        };
+                    }
+                    // ─── ORDER CONFIRMATION ──────────────────────────────────────────
+                    if (!loadedTemplates.order_confirmation) {
+                        loadedTemplates.order_confirmation = {
+                            subject: '✅ Pedido #{order_id} confirmado — {site_name}',
+                            body: `<h2 style="margin:0 0 4px 0;font-size:26px;font-weight:900;color:#111827;">¡Pedido recibido!</h2>
+<p style="margin:0 0 32px 0;font-size:13px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;">Referencia: #{order_id}</p>
+
+<p style="margin:0 0 20px 0;color:#374151;font-size:15px;line-height:1.8;">Hola, <strong>{name}</strong>. Muchas gracias por confiar en <strong>{site_name}</strong>. Hemos recibido tu pedido correctamente y nuestro equipo ya está trabajando en él con la máxima dedicación.</p>
+
+{body}
+
+<div style="background:linear-gradient(135deg,#f0fdf4,#dcfce7);border-radius:12px;padding:24px 28px;margin:32px 0;">
+  <p style="margin:0 0 6px 0;font-size:13px;font-weight:700;color:#166534;letter-spacing:2px;text-transform:uppercase;">¿Qué pasa ahora?</p>
+  <table cellpadding="0" cellspacing="0" width="100%">
+    <tr><td style="padding:5px 0;font-size:14px;color:#374151;"><span style="color:#16a34a;font-weight:700;margin-right:8px;">1.</span> Revisamos tu pedido y verificamos la disponibilidad de los artículos.</td></tr>
+    <tr><td style="padding:5px 0;font-size:14px;color:#374151;"><span style="color:#16a34a;font-weight:700;margin-right:8px;">2.</span> Preparamos cuidadosamente tu envío.</td></tr>
+    <tr><td style="padding:5px 0;font-size:14px;color:#374151;"><span style="color:#16a34a;font-weight:700;margin-right:8px;">3.</span> Recibirás un correo de confirmación cuando tu pedido esté en camino.</td></tr>
+  </table>
+</div>
+
+<p style="text-align:center;margin:0;font-size:13px;color:#6b7280;">¿Tienes alguna duda? Escríbenos a <a href="mailto:{contact_email}" style="color:#4338ca;text-decoration:none;">{contact_email}</a> — respondemos en menos de 24h.</p>`
+                        };
+                    }
+                    // ─── ORDER STATUS UPDATE ─────────────────────────────────────────
+                    if (!loadedTemplates.order_status_update) {
+                        loadedTemplates.order_status_update = {
+                            subject: '📦 Actualización de tu pedido #{order_id} — {site_name}',
+                            body: `<h2 style="margin:0 0 4px 0;font-size:26px;font-weight:900;color:#111827;">Tu pedido ha sido actualizado</h2>
+<p style="margin:0 0 32px 0;font-size:13px;color:#9ca3af;letter-spacing:2px;text-transform:uppercase;">Referencia: #{order_id}</p>
+
+<p style="margin:0 0 28px 0;color:#374151;font-size:15px;line-height:1.8;">Hola, <strong>{name}</strong>. Te informamos de que el estado de tu pedido ha cambiado.</p>
+
+<div style="text-align:center;margin:0 0 36px 0;">
+  <div style="display:inline-block;background:linear-gradient(135deg,#1a1a2e,#0f3460);border-radius:10px;padding:20px 40px;">
+    <p style="margin:0 0 4px 0;font-size:11px;color:rgba(255,255,255,0.5);letter-spacing:3px;text-transform:uppercase;">Estado actual</p>
+    <p style="margin:0;font-size:20px;font-weight:800;color:#ffffff;">{status}</p>
+  </div>
+</div>
+
+<p style="text-align:center;margin:0 0 12px 0;font-size:14px;color:#6b7280;">Si tienes cualquier pregunta sobre tu pedido, no dudes en contactarnos.</p>
+<p style="text-align:center;margin:0;font-size:14px;"><a href="mailto:{contact_email}" style="color:#4338ca;text-decoration:none;font-weight:600;">{contact_email}</a></p>`
                         };
                     }
                     setEmailTemplates(loadedTemplates);
+
                 }
             }
         } catch (err) {
@@ -646,28 +774,36 @@ export default function AccountSettings() {
                             order_status_update: '🔄 Cambio de Estado',
                             password_reset: '🔐 Recuperar Contraseña'
                         };
+                        const rawSiteUrl = branding?.site_url || (branding?.contact_email ? 'https://www.' + branding.contact_email.split('@')[1] : 'https://www.millucesiluminacion.com');
+                        const siteUrl = rawSiteUrl.replace('https://millucesiluminacion.com', 'https://www.millucesiluminacion.com');
+                        const logoUrl = branding?.logo_url || (siteUrl.replace(/\/$/, '') + '/logo_new.png');
+
                         const mockData = {
                             name: 'Juan Pérez',
                             order_id: '#100042',
                             status: 'Enviado con Correos Express (Tracking: ES8291)',
                             site_name: branding?.site_name || 'Mil Luces',
-                            reset_url: 'https://millucesiluminacion.com/reset'
+                            contact_email: branding?.contact_email || 'milluces@millucesiluminacion.com',
+                            support_phone: branding?.support_phone || '917654062',
+                            site_url: siteUrl.replace(/\/$/, ''),
+                            logo_url: logoUrl,
+                            reset_url: `${siteUrl.replace(/\/$/, '')}/reset`
                         };
 
                         const getPreviewHtml = () => {
                             if (!emailTemplates[selectedTemplate]) return '';
                             try {
-                                let rawBody = emailTemplates[selectedTemplate].body;
+                                let rawBody = emailTemplates[selectedTemplate].body || '';
                                 Object.keys(mockData).forEach(key => {
                                     rawBody = rawBody.replace(new RegExp(`\\{${key}\\}`, 'g'), mockData[key]);
                                 });
 
                                 let htmlContent = '';
                                 if (selectedTemplate === 'master_layout') {
-                                    htmlContent = rawBody;
+                                    htmlContent = rawBody.replace('{body}', '<div style="padding:24px;background:#f9fafb;border:2px dashed #cbd5e1;border-radius:12px;text-align:center;color:#64748b;font-weight:600;font-size:14px;">[Aquí se inserta el contenido específico de cada correo]</div>');
                                 } else {
                                     const master = emailTemplates['master_layout']?.body || '{body}';
-                                    let wrapped = master.replace('{body}', marked.parse(rawBody));
+                                    let wrapped = master.replace('{body}', () => marked.parse(rawBody));
                                     Object.keys(mockData).forEach(key => {
                                         wrapped = wrapped.replace(new RegExp(`\\{${key}\\}`, 'g'), mockData[key]);
                                     });
@@ -739,7 +875,7 @@ export default function AccountSettings() {
                                             <div className="mt-auto pt-6 border-t border-gray-100">
                                                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight mb-4">
                                                     Variables soportadas:
-                                                    <span className="text-primary ml-1">&#123;name&#125;, &#123;site_name&#125;</span>
+                                                    <span className="text-primary ml-1">&#123;name&#125;, &#123;site_name&#125;, &#123;contact_email&#125;, &#123;support_phone&#125;, &#123;logo_url&#125;, &#123;site_url&#125;</span>
                                                     {selectedTemplate.includes('order') && <span className="text-primary ml-1">, &#123;order_id&#125;, &#123;status&#125;</span>}
                                                     {selectedTemplate === 'password_reset' && <span className="text-primary ml-1">, &#123;reset_url&#125;</span>}
                                                     {selectedTemplate === 'master_layout' && <span className="font-black text-brand-carbon ml-1">¡IMPRESCINDIBLE INCLUIR &#123;body&#125;!</span>}
@@ -750,7 +886,10 @@ export default function AccountSettings() {
                                                     onClick={async () => {
                                                         const toEmail = testEmail || profile.email || branding.contact_email;
                                                         if (!toEmail) return alert("Hacen falta datos: Ve a 'Correo SMTP' y pon un email de prueba.");
-                                                        const subjectText = emailTemplates[selectedTemplate]?.subject || 'Prueba de Plantilla';
+                                                        let subjectText = emailTemplates[selectedTemplate]?.subject || 'Prueba de Plantilla';
+                                                        Object.keys(mockData).forEach(key => {
+                                                            subjectText = subjectText.replace(new RegExp(`\\{${key}\\}`, 'g'), mockData[key]);
+                                                        });
                                                         try {
                                                             const { data: { session } } = await supabase.auth.getSession();
                                                             const response = await fetch('/api/send-email', {
@@ -760,6 +899,7 @@ export default function AccountSettings() {
                                                                     to: toEmail,
                                                                     subject: `[TEST] ${subjectText}`,
                                                                     html: getPreviewHtml(),
+                                                                    variables: mockData,
                                                                     text: 'Visualiza este correo en un cliente HTML.'
                                                                 })
                                                             });
