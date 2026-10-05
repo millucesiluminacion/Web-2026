@@ -93,7 +93,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                 email: regEmail,
                 password: regPassword,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/login`,
+                    emailRedirectTo: `${window.location.origin}/login?confirmed=true`,
                     data: {
                         full_name: regFullName,
                         user_type: userType,

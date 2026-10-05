@@ -70,7 +70,7 @@ export default function RegisterPage({ isPro = false }) {
                 email,
                 password,
                 options: {
-                    emailRedirectTo: `${window.location.origin}/login`,
+                    emailRedirectTo: `${window.location.origin}/login?confirmed=true`,
                     data: {
                         full_name: fullName,
                         user_type: userType,

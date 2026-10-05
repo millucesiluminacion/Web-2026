@@ -13,11 +13,15 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Interceptar si el usuario llega con un hash de recuperación de Supabase fuera de /reset-password
+        // Interceptar si el usuario llega con un hash de recuperación o confirmación de Supabase fuera de su ruta
         if (typeof window !== 'undefined' && window.location.hash) {
             const hash = window.location.hash;
             if (hash.includes('type=recovery') && !window.location.pathname.includes('reset-password')) {
                 window.location.href = '/reset-password' + hash;
+                return;
+            }
+            if (hash.includes('type=signup') && !window.location.pathname.includes('login')) {
+                window.location.href = '/login?confirmed=true' + hash;
                 return;
             }
         }
