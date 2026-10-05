@@ -14,7 +14,7 @@ export default defineConfig(({ mode }) => {
         configureServer(server) {
           server.middlewares.use(async (req, res, next) => {
             const url = new URL(req.url, 'http://localhost');
-            if (url.pathname === '/feed/productos.xml' || url.pathname === '/api/sitemap') {
+            if (url.pathname === '/feed/productos.xml' || url.pathname === '/api/sitemap' || url.pathname === '/sitemap.xml') {
               try {
                 if (url.pathname === '/feed/productos.xml') {
                   req.query = { type: 'google-merchant' };

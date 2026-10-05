@@ -122,7 +122,7 @@ export function RoomsSection() {
                         <li key={`${room.id || room.name}-${currentIndex}-${i}`} className="animate-in fade-in duration-700 slide-in-from-right-4">
                             <div className="rounded-lg overflow-hidden relative group h-80 shadow-md transition-shadow hover:shadow-xl">
                                 <div className="h-full">
-                                    <Link to={`/catalogo?room=${room.id || room.slug}`} className="block h-full">
+                                    <Link to={`/catalogo?room=${room.slug || room.id}`} className="block h-full">
                                         <img
                                             src={room.img}
                                             alt={room.name}

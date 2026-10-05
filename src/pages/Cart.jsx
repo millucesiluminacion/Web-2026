@@ -14,6 +14,7 @@ import { Elements } from '@stripe/react-stripe-js';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import StripePaymentForm from '../components/commerce/StripePaymentForm';
 import { IVA_RATE } from '../lib/pricingUtils';
+import { trackViewCart, trackBeginCheckout, trackPurchase } from '../lib/analytics';
 
 const INPUT_CLASS = "w-full bg-gray-50/80 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all placeholder:font-normal placeholder:text-gray-300";
 const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1.5 block ml-1";
@@ -67,6 +68,13 @@ export default function Cart() {
     const baseImponible = effectiveTotalPrice / (1 + IVA_RATE);
     const iva = effectiveTotalPrice - baseImponible;
 
+    // Track view_cart on load if cart has items
+    useEffect(() => {
+        if (cart && cart.length > 0) {
+            trackViewCart(cart, effectiveTotalPrice);
+        }
+    }, []);
+
     // Verificar si venimos de un pago exitoso (incluyendo redirecciones como Bizum o 3DSecure)
     useEffect(() => {
         const paymentStatus = searchParams.get('payment');
@@ -90,6 +98,7 @@ export default function Cart() {
                 }
                 setOrderRef(orderId.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
+                trackPurchase({ id: orderId, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
                 clearCart();
             }
             confirmRedirectPayment();
@@ -485,6 +494,7 @@ export default function Cart() {
 
         setOrderRef(paymentIntent?.id ? paymentIntent.id.slice(-8).toUpperCase() : (orderIdToUpdate ? orderIdToUpdate.slice(0, 8).toUpperCase() : 'OK'));
         setOrderCompleted(true);
+        trackPurchase(updatedOrder || { id: orderIdToUpdate, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
         clearCart();
         setLoading(false);
     };
@@ -515,6 +525,7 @@ export default function Cart() {
 
         if (formData.paymentMethod === 'stripe') return;
 
+        trackBeginCheckout(cart, effectiveTotalPrice);
         setLoading(true);
         setPayError('');
 
@@ -539,6 +550,7 @@ export default function Cart() {
             if (formData.paymentMethod === 'transfer' || formData.paymentMethod === 'in_store') {
                 setOrderRef(order.id.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
+                trackPurchase(order, cart, effectiveTotalPrice, effectiveShippingCost);
                 clearCart();
                 return;
             }
@@ -1040,6 +1052,7 @@ export default function Cart() {
                                                                     const savedOrder = await saveOrder({ status: 'PAID', payment_status: 'completed' });
                                                                     setOrderRef(savedOrder.id.slice(0, 8).toUpperCase());
                                                                     setOrderCompleted(true);
+                                                                    trackPurchase(savedOrder, cart, effectiveTotalPrice, effectiveShippingCost);
                                                                     clearCart();
                                                                 } else {
                                                                     setPayError(result.error || 'Error completando el pago con PayPal.');

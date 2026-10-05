@@ -72,11 +72,14 @@ async function generateGoogleMerchantFeed(res, supabase) {
     const categoryMap = new Map((categoriesRes.data || []).map(c => [c.id, c.name]));
     const brandMap = new Map((brandsRes.data || []).map(b => [b.id, b.name]));
 
-    const items = (productsRes.data ?? []).map(p => {
+    const validProducts = (productsRes.data ?? []).filter(p => p.image_url && p.image_url.trim());
+
+    const items = validProducts.map(p => {
         const url = `${SITE_URL}/product/${xmlEscape(p.slug || p.id)}`;
-        const salePrice = p.discount_price ? parseFloat(p.discount_price).toFixed(2) : null;
         const basePrice = parseFloat(p.price || 0).toFixed(2);
-        const displayPrice = salePrice || basePrice;
+        const hasSale = p.discount_price && parseFloat(p.discount_price) > 0 && parseFloat(p.discount_price) < parseFloat(p.price || 0);
+        const salePrice = hasSale ? parseFloat(p.discount_price).toFixed(2) : null;
+        const currentPrice = salePrice || basePrice;
         const avail = getAvailability(p.stock);
         const catName = xmlEscape(categoryMap.get(p.category_id) || 'Iluminación');
         const brand = xmlEscape(brandMap.get(p.brand_id) || STORE_NAME);
@@ -89,9 +92,9 @@ async function generateGoogleMerchantFeed(res, supabase) {
       <g:title>${title}</g:title>
       <g:description>${desc}</g:description>
       <g:link>${url}</g:link>
-      ${p.image_url ? `<g:image_link>${xmlEscape(p.image_url)}</g:image_link>` : ''}
+      <g:image_link>${xmlEscape(p.image_url)}</g:image_link>
       <g:availability>${avail}</g:availability>
-      <g:price>${displayPrice} ${CURRENCY}</g:price>
+      <g:price>${basePrice} ${CURRENCY}</g:price>
       ${salePrice ? `<g:sale_price>${salePrice} ${CURRENCY}</g:sale_price>` : ''}
       <g:brand>${brand}</g:brand>
       <g:condition>new</g:condition>
@@ -101,7 +104,7 @@ async function generateGoogleMerchantFeed(res, supabase) {
       <g:shipping>
         <g:country>ES</g:country>
         <g:service>Estándar</g:service>
-        <g:price>${parseFloat(displayPrice) >= 150 ? '0.00' : '5.95'} EUR</g:price>
+        <g:price>${parseFloat(currentPrice) >= 150 ? '0.00' : '5.95'} EUR</g:price>
       </g:shipping>
     </item>`;
     }).join('');

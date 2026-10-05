@@ -13,6 +13,7 @@ import { useCart } from '../context/CartContext';
 import { supabase } from '../lib/supabaseClient';
 import { calculateProductPrice } from '../lib/pricingUtils';
 import { optimizeImage } from '../lib/imageUtils';
+import { trackAddToCart } from '../lib/analytics';
 
 const ICON_MAP = { BoxSelect, Square, Grid, Zap, Lightbulb, Tag, Settings };
 
@@ -332,6 +333,7 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                                         onClick={(e) => {
                                             e.preventDefault();
                                             addToCart({ ...product, price: pricing.finalPrice }, localQty || 1);
+                                            trackAddToCart(product, localQty || 1);
                                         }}
                                         className="w-10 h-10 lg:w-11 lg:h-11 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all flex-shrink-0"
                                     >
@@ -377,6 +379,7 @@ const ProductCard = memo(({ product, profile, addToCart, selectedDynamicFilters 
                                                 navigate(`/product/${product.slug || product.id}`);
                                             } else {
                                                 addToCart({ ...product, price: pricing.finalPrice }, localQty || 1);
+                                                trackAddToCart(product, localQty || 1);
                                             }
                                         }}
                                         className="w-10 h-10 lg:w-11 lg:h-11 bg-primary text-white rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 hover:scale-105 transition-all flex-shrink-0"
@@ -503,10 +506,13 @@ export default function ProductListing() {
             setDynamicFiltersConfig(catF);
 
             // 3. Build Query
-            // Resolve roomId slug → UUID (the URL param can be a slug like 'salon', but DB expects UUID)
             const allRooms = rooms.length > 0 ? rooms : (await supabase.from('rooms').select('id, slug').order('order_index')).data || [];
             if (rooms.length === 0 && allRooms.length > 0) setRooms(allRooms);
-            const resolvedRoomId = roomId ? (allRooms.find(r => r.slug === roomId || r.id === roomId)?.id ?? null) : null;
+            const resolvedRoomId = roomId ? (allRooms.find(r => 
+                r.slug?.toLowerCase() === roomId?.toLowerCase() || 
+                (roomId?.toLowerCase() === 'salon' && r.slug === 'salon-comedor') || 
+                r.id === roomId
+            )?.id ?? null) : null;
 
             let qSelect = '*, variants:products(image_url, attributes), product_rooms(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';
             if (resolvedRoomId) qSelect = '*, variants:products(image_url, attributes), product_rooms!inner(room_id), product_professions(profession_id), product_badges(badges(*)), energy_labels(*), product_quality_seals(quality_seals(*))';

@@ -8,6 +8,7 @@ import { calculateProductPrice, IVA_RATE } from '../lib/pricingUtils';
 import { BadgeRenderer, StarRating } from '../components/commerce/BoutiqueUI';
 import { generateProductPDF } from '../lib/pdfGenerator';
 import { optimizeImage } from '../lib/imageUtils';
+import { trackViewItem, trackAddToCart } from '../lib/analytics';
 
 const COLOR_MAP = {
     "Blanco": "#FFFFFF",
@@ -228,6 +229,7 @@ export default function ProductDetail() {
 
             if (!product) throw new Error("Producto no encontrado");
             setParentProduct(product);
+            trackViewItem(product);
             setCategoryName(product.categories?.name || '');
             setCategorySlug(product.categories?.slug || product.category_id);
 
@@ -433,6 +435,7 @@ export default function ProductDetail() {
             selectedOptions: { ...selectedAttributes, measure: selectedMeasurement?.measure },
             cartLabel: selectedLabel || null
         }, qty);
+        trackAddToCart(productToAdd, qty);
     };
 
     const handleDownloadPDF = async () => {

@@ -26,12 +26,12 @@ export default function RoomsPage() {
                 const [roomsRes, cmsRes, productsRes] = await Promise.all([
                     supabase.from('rooms').select('*').order('order_index', { ascending: true }).order('name', { ascending: true }),
                     supabase.from('cms_pages').select('*').eq('slug', 'estancias').maybeSingle(),
-                    supabase.from('products').select('room_id').is('parent_id', null).neq('is_active', false)
+                    supabase.from('product_rooms').select('room_id')
                 ]);
 
                 if (roomsRes.error) throw roomsRes.error;
 
-                // Process Product Counts
+                // Process Product Counts from junction table
                 const dataForCounts = productsRes.data || [];
                 const roomCounts = dataForCounts.reduce((acc, p) => {
                     if (p.room_id) acc[p.room_id] = (acc[p.room_id] || 0) + 1;
@@ -112,7 +112,7 @@ export default function RoomsPage() {
                                         </span>
                                     </div>
                                     <div className="h-full">
-                                        <Link to={`/catalogo?room=${room.id || room.slug}`} className="block h-full">
+                                        <Link to={`/catalogo?room=${room.slug || room.id}`} className="block h-full">
                                             <img
                                                 src={room.img}
                                                 alt={room.name}

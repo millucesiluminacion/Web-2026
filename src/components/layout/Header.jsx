@@ -22,12 +22,13 @@ const STATIC_CATEGORIES = [
 ];
 
 const STATIC_ROOMS = [
-    { name: 'Salón / Comedor', slug: 'salon' },
+    { name: 'Salón / Comedor', slug: 'salon-comedor' },
     { name: 'Cocina', slug: 'cocina' },
     { name: 'Dormitorio', slug: 'dormitorio' },
     { name: 'Baño', slug: 'bano' },
     { name: 'Exterior', slug: 'exterior' },
     { name: 'Pasillos', slug: 'pasillos' },
+    { name: 'Garaje', slug: 'Garaje' },
 ];
 
 export function Header({ onOpenAuthModal }) {
@@ -63,8 +64,8 @@ export function Header({ onOpenAuthModal }) {
         async function fetchMegaData() {
             try {
                 const [{ data: cats }, { data: rms }, { data: profs }, { data: banner }] = await Promise.all([
-                    supabase.from('categories').select('name, slug').is('parent_id', null).order('order_index').limit(12),
-                    supabase.from('rooms').select('name, slug').order('order_index').limit(6),
+                    supabase.from('categories').select('name, slug').is('parent_id', null).order('order_index').limit(24),
+                    supabase.from('rooms').select('name, slug').order('order_index').limit(12),
                     supabase.from('professions').select('name, slug').order('order_index').limit(6),
                     supabase.from('sliders')
                         .select('*')

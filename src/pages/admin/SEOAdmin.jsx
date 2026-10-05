@@ -112,7 +112,7 @@ export default function SEOAdmin() {
             const supportsKeywords = ['products', 'categories', 'rooms'].includes(tab);
             let select = (tab === 'blog' || tab === 'cms_pages')
                 ? 'id, title, slug, meta_title, meta_description'
-                : `id, name, slug, meta_title, meta_description${supportsKeywords ? ', focus_keywords' : ''}`;
+                : `id, name, slug, meta_title, meta_description${tab === 'categories' ? ', parent_id' : ''}${supportsKeywords ? ', focus_keywords' : ''}`;
 
             if (tab === 'cms_pages') table = 'cms_pages';
 
@@ -181,6 +181,33 @@ export default function SEOAdmin() {
 
     const updateItem = (id, field, val) =>
         setItems(items.map(i => i.id === id ? { ...i, [field]: val } : i));
+
+    const getItemUrl = (item) => {
+        if (!item?.slug) return null;
+        switch (activeTab) {
+            case 'products':
+                return `/product/${item.slug}`;
+            case 'categories': {
+                if (item.parent_id) {
+                    const parent = items.find(c => c.id === item.parent_id);
+                    if (parent?.slug) {
+                        return `/catalogo?category=${parent.slug}&subcategory=${item.slug}`;
+                    }
+                }
+                return `/catalogo?category=${item.slug}`;
+            }
+            case 'rooms':
+                return `/catalogo?room=${item.slug}`;
+            case 'blog':
+                return `/blog/${item.slug}`;
+            case 'pages':
+                return item.slug ? `/${item.slug}` : '/';
+            case 'cms_pages':
+                return `/${item.slug}`;
+            default:
+                return `/${item.slug}`;
+        }
+    };
 
     const suggestSlug = (item) => {
         const raw = (item.name || item.title || '').toLowerCase().trim()
@@ -491,13 +518,18 @@ export default function SEOAdmin() {
                                                         </button>
                                                     )}
                                                 </div>
-                                                {item.slug && (
-                                                    <a href={`${window.location.origin}/${item.slug}`} target="_blank" rel="noopener noreferrer"
-                                                        className="text-[8px] font-bold text-primary/40 uppercase tracking-tighter pl-1 hover:text-primary transition-colors flex items-center gap-1">
-                                                        {window.location.host}/{item.slug}
-                                                        <ExternalLink className="w-2 h-2" />
-                                                    </a>
-                                                )}
+                                                {item.slug && (() => {
+                                                    const url = getItemUrl(item);
+                                                    if (!url) return null;
+                                                    return (
+                                                        <a href={url} target="_blank" rel="noopener noreferrer"
+                                                            className="text-[8px] font-bold text-primary/60 uppercase tracking-tighter pl-1 hover:text-primary transition-colors flex items-center gap-1"
+                                                            title={`Abrir ${url}`}>
+                                                            {url}
+                                                            <ExternalLink className="w-2.5 h-2.5 flex-shrink-0" />
+                                                        </a>
+                                                    );
+                                                })()}
                                             </div>
 
                                             {/* Meta Title */}

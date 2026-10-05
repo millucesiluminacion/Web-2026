@@ -17,15 +17,6 @@
           "value": "noindex, nofollow"
         }
       ]
-    },
-    {
-      "source": "/tienda(.*)",
-      "headers": [
-        {
-          "key": "X-Robots-Tag",
-          "value": "noindex, nofollow"
-        }
-      ]
     }
   ],
   "redirects": [
@@ -131,6 +122,10 @@
     }
   ],
   "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
     {
       "source": "/feed/productos.xml",
       "destination": "/api/sitemap?type=google-merchant"

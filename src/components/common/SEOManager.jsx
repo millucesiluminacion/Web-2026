@@ -184,9 +184,23 @@ export default function SEOManager() {
 
                 // Canonical - siempre con www para evitar duplicados www vs no-www
                 const CANONICAL_BASE = 'https://www.millucesiluminacion.com';
+                let canonicalUrl = CANONICAL_BASE + path;
+                if (path === '/catalogo') {
+                    const searchParams = new URLSearchParams(location.search);
+                    const catSlug = searchParams.get('category');
+                    const roomSlug = searchParams.get('room');
+                    const brandSlug = searchParams.get('brand');
+                    if (catSlug) {
+                        canonicalUrl = `${CANONICAL_BASE}/catalogo?category=${encodeURIComponent(catSlug)}`;
+                    } else if (roomSlug) {
+                        canonicalUrl = `${CANONICAL_BASE}/catalogo?room=${encodeURIComponent(roomSlug)}`;
+                    } else if (brandSlug) {
+                        canonicalUrl = `${CANONICAL_BASE}/catalogo?brand=${encodeURIComponent(brandSlug)}`;
+                    }
+                }
                 const canonical = document.querySelector('link[rel="canonical"]') || document.createElement('link');
                 canonical.setAttribute('rel', 'canonical');
-                canonical.setAttribute('href', CANONICAL_BASE + path);
+                canonical.setAttribute('href', canonicalUrl);
                 if (!document.querySelector('link[rel="canonical"]')) {
                     document.head.appendChild(canonical);
                 }
@@ -259,6 +273,7 @@ export default function SEOManager() {
             const productSchema = {
                 "@context": "https://schema.org",
                 "@type": "Product",
+                "productID": String(prod.id),
                 "name": prod.name,
                 "description": prod.meta_description || prod.description || prod.name,
                 "image": prod.image_url ? [prod.image_url] : [],
