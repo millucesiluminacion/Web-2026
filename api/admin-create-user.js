@@ -54,7 +54,7 @@ export default async function handler(req, res) {
         }
 
         // 3. Extract new user data
-        const { email, password, full_name, role, user_type, company_name, vat_id, discount_percent, is_partner } = req.body;
+        const { email, password, full_name, role, user_type, company_name, vat_id, discount_percent, is_partner, has_pro_prices } = req.body;
 
         if (!email || !password) {
             return res.status(400).json({ error: 'Email y contraseña son obligatorios.' });
@@ -82,12 +82,13 @@ export default async function handler(req, res) {
             id: newUserId,
             email,
             full_name: full_name || '',
-            role: role || 'editor',
+            role: role || 'customer',
             user_type: user_type || 'persona',
             company_name: company_name || '',
             vat_id: vat_id || '',
             discount_percent: discount_percent || 0,
             is_partner: is_partner || false,
+            has_pro_prices: has_pro_prices || false,
             created_at: new Date().toISOString(),
         });
 

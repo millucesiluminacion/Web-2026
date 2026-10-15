@@ -124,7 +124,7 @@ export default function UsersAdmin() {
             full_name: '',
             email: '',
             password: '',
-            role: 'editor',
+            role: roleFilter === 'customers' ? 'customer' : 'editor',
             user_type: 'persona',
             company_name: '',
             vat_id: '',
@@ -140,7 +140,7 @@ export default function UsersAdmin() {
         setFormData({
             full_name: user.full_name || '',
             email: user.email || '',
-            role: user.role || 'editor',
+            role: user.role || 'customer',
             user_type: user.user_type || 'persona',
             company_name: user.company_name || '',
             vat_id: user.vat_id || '',
@@ -156,6 +156,7 @@ export default function UsersAdmin() {
             const { data: { session } } = await supabase.auth.getSession();
             const brandRes = await supabase.from('app_settings').select('value').eq('key', 'site_branding').maybeSingle();
             const brand = brandRes.data?.value || { site_name: 'Mil Luces' };
+            const isCustomer = userData.role === 'customer';
 
             await fetch('/api/send-email', {
                 method: 'POST',
@@ -165,12 +166,14 @@ export default function UsersAdmin() {
                 },
                 body: JSON.stringify({
                     to: userData.email,
-                    subject: `¡Bienvenido a ${brand.site_name}!`,
+                    subject: isCustomer ? `¡Bienvenido a ${brand.site_name}!` : `¡Bienvenido al equipo de ${brand.site_name}!`,
                     html: `
                         <div style="font-family: sans-serif; max-width: 600px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-                            <h1 style="color: #000; text-transform: uppercase;">¡Hola ${userData.full_name}!</h1>
-                            <p>Te damos la bienvenida al equipo de <b>${brand.site_name}</b>.</p>
-                            <p>Tu cuenta ha sido creada con el perfil de: <b>${userData.role?.toUpperCase()}</b></p>
+                            <h1 style="color: #000; text-transform: uppercase;">¡Hola ${userData.full_name || 'Cliente'}!</h1>
+                            ${isCustomer 
+                                ? `<p>Te damos la bienvenida a la tienda online de <b>${brand.site_name}</b>.</p><p>Tu cuenta de cliente ha sido creada correctamente. Ya puedes acceder con tus credenciales para realizar pedidos y consultar tus compras.</p>`
+                                : `<p>Te damos la bienvenida al equipo de <b>${brand.site_name}</b>.</p><p>Tu cuenta ha sido creada con el perfil de: <b>${userData.role?.toUpperCase()}</b></p>`
+                            }
                             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
                             <p style="font-size: 12px; color: #666;">Si no esperabas este correo, por favor contacta con soporte.</p>
                         </div>
@@ -966,9 +969,10 @@ export default function UsersAdmin() {
                                 <label className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400 font-outfit">Nivel de Acceso</label>
                                 <div className="grid grid-cols-1 gap-3">
                                     {[
-                                        { id: 'admin', label: 'Administrador Full', desc: 'Control total de la boutique' },
+                                        { id: 'customer', label: 'Cliente Web', desc: 'Acceso a la tienda online y sus pedidos (sin acceso al panel de administración)' },
+                                        { id: 'editor', label: 'Editor de Contenido', desc: 'Solo edición visual y blog' },
                                         { id: 'manager', label: 'Gestor de Boutique', desc: 'Gestión de productos y stock' },
-                                        { id: 'editor', label: 'Editor de Contenido', desc: 'Solo edición visual y blog' }
+                                        { id: 'admin', label: 'Administrador Full', desc: 'Control total de la boutique' }
                                     ].map((role) => (
                                         <button
                                             key={role.id}

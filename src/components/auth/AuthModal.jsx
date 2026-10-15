@@ -130,7 +130,16 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
             onClose();
             alert('Registro exitoso. Revisa tu email para confirmar tu cuenta.');
         } catch (err) {
-            setRegError(err.message);
+            const msg = (err.message || '').toLowerCase();
+            if (msg.includes('user already registered') || msg.includes('email already in use')) {
+                setRegError('Este correo electrónico ya tiene una cuenta activa. Prueba a iniciar sesión.');
+            } else if (msg.includes('rate limit')) {
+                setRegError('Has intentado demasiadas veces. Por favor, espera unos minutos.');
+            } else if (msg.includes('password should be at least 6 characters')) {
+                setRegError('La contraseña debe tener al menos 6 caracteres.');
+            } else {
+                setRegError(err.message || 'Error al crear la cuenta. Inténtalo de nuevo.');
+            }
         } finally {
             setRegLoading(false);
         }
@@ -327,12 +336,12 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
 
                             <form onSubmit={handleRegister} className="space-y-3">
                                 {/* Invisible Honeypot Anti-Bot Field */}
-                                <div style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' }} aria-hidden="true" tabIndex={-1}>
+                                <div style={{ display: 'none' }} aria-hidden="true" tabIndex={-1}>
                                     <input
                                         type="text"
-                                        name="confirm_website_hp"
+                                        name="hp_extra_verification"
                                         tabIndex={-1}
-                                        autoComplete="off"
+                                        autoComplete="new-password"
                                         value={regHoneypot}
                                         onChange={(e) => setRegHoneypot(e.target.value)}
                                     />
@@ -403,12 +412,12 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
                                         </p>
                                     </div>
                                 )}
-                                <div className="flex items-start gap-3 py-1">
-                                    <input type="checkbox" required className="mt-1 accent-primary w-4 h-4" disabled={regLoading} />
+                                <label className="flex items-start gap-3 py-1 cursor-pointer select-none">
+                                    <input type="checkbox" required className="mt-1 accent-primary w-4 h-4 cursor-pointer" disabled={regLoading} />
                                     <span className="text-[9px] text-gray-400 font-bold uppercase tracking-tight leading-relaxed">
-                                        Acepto la <a href="#" className="text-primary hover:underline">Política de Privacidad</a> y Términos de Servicio
+                                        Acepto la <a href="/politica-privacidad" target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">Política de Privacidad</a> y Términos de Servicio
                                     </span>
-                                </div>
+                                </label>
                                 <button
                                     type="submit" disabled={regLoading}
                                     className="w-full h-14 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[10px] tracking-widest hover:bg-primary transition-all shadow-xl shadow-brand-carbon/10 flex items-center justify-center gap-3 disabled:opacity-50"

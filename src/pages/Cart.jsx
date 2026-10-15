@@ -44,17 +44,25 @@ export default function Cart() {
     const [couponError, setCouponError] = useState('');
     const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
-    const [formData, setFormData] = useState({
-        name: profile?.full_name || '',
-        email: user?.email || '',
-        phone: '',
-        address: '',
-        city: '',
-        zip: '',
-        country: 'España',
-        notes: '',
-        paymentMethod: '',
-        shippingMethod: null // 'delivery' or 'pickup'
+    const [formData, setFormData] = useState(() => {
+        let draft = null;
+        try {
+            const raw = typeof window !== 'undefined' ? sessionStorage.getItem('ml_checkout_draft') : null;
+            if (raw) draft = JSON.parse(raw);
+        } catch (e) {}
+
+        return {
+            name: draft?.name || profile?.full_name || '',
+            email: draft?.email || user?.email || '',
+            phone: draft?.phone || '',
+            address: draft?.address || '',
+            city: draft?.city || '',
+            zip: draft?.zip || '',
+            country: draft?.country || 'España',
+            notes: draft?.notes || '',
+            paymentMethod: draft?.paymentMethod || '',
+            shippingMethod: draft?.shippingMethod || null // 'delivery' or 'pickup'
+        };
     });
 
     const isPro = profile?.user_type === 'profesional' && !!profile?.has_pro_prices;
@@ -357,8 +365,53 @@ export default function Cart() {
         }
     }
 
+    // Guardar borrador en sessionStorage para evitar pérdida de datos si el navegador recarga
+    useEffect(() => {
+        try {
+            if (formData.name || formData.email || formData.phone || formData.address || formData.shippingMethod) {
+                sessionStorage.setItem('ml_checkout_draft', JSON.stringify(formData));
+            }
+        } catch (e) {}
+    }, [formData]);
+
+    useEffect(() => {
+        if (orderCompleted) {
+            try {
+                sessionStorage.removeItem('ml_checkout_draft');
+            } catch (e) {}
+        }
+    }, [orderCompleted]);
+
+    // Validación exhaustiva previa al pago
+    function validateCheckoutData() {
+        if (!formData.shippingMethod) {
+            throw new Error('Por favor, selecciona un método de entrega (Envío a Domicilio o Recogida en Tienda).');
+        }
+        if (!formData.name?.trim()) {
+            throw new Error('Por favor, introduce tu nombre completo.');
+        }
+        if (!formData.email?.trim() || !formData.email.includes('@')) {
+            throw new Error('Por favor, introduce un correo electrónico de contacto válido.');
+        }
+        if (!formData.phone?.trim()) {
+            throw new Error('Por favor, introduce un teléfono de contacto.');
+        }
+        if (formData.shippingMethod === 'delivery') {
+            if (!formData.address?.trim()) {
+                throw new Error('Por favor, introduce la dirección de entrega.');
+            }
+            if (!formData.zip?.trim()) {
+                throw new Error('Por favor, introduce el código postal de entrega.');
+            }
+            if (!formData.city?.trim()) {
+                throw new Error('Por favor, introduce la localidad o ciudad de entrega.');
+            }
+        }
+    }
+
     // Guardar pedido en Supabase
     async function saveOrder(options = {}) {
+        validateCheckoutData();
         const isOnlinePayment = formData.paymentMethod === 'stripe' || formData.paymentMethod === 'paypal';
         const defaultStatus = 'PENDING';
         const defaultPaymentStatus = isOnlinePayment ? 'unpaid' : 'pending';
@@ -968,10 +1021,13 @@ export default function Cart() {
                                                             amount={effectiveTotalPrice}
                                                             prePaymentHook={async () => {
                                                                 try {
+                                                                    setPayError('');
                                                                     const order = await saveOrder();
                                                                     return { orderId: order.id };
                                                                 } catch (err) {
-                                                                    return { error: err.message || 'Error al crear el pedido' };
+                                                                    const msg = err.message || 'Error al crear el pedido';
+                                                                    setPayError(msg);
+                                                                    return { error: msg };
                                                                 }
                                                             }}
                                                             onSucceeded={handlePaymentSucceeded}
@@ -1199,7 +1255,6 @@ export default function Cart() {
                                 </div>
                                 {formData.paymentMethod !== 'stripe' && formData.paymentMethod !== 'paypal' && (
                                     <button
-                                        form="aio-form"
                                         type="submit"
                                         disabled={loading || paymentloading || activeMethodsList.length === 0 || !formData.paymentMethod || !formData.shippingMethod}
                                         className="w-full bg-white text-brand-carbon py-4 rounded-2xl font-black uppercase italic text-[11px] hover:bg-primary hover:text-white transition-all shadow-xl shadow-black/30 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed group relative z-10 mb-4"

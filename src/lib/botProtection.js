@@ -13,22 +13,22 @@ export function isSuspiciousName(name) {
     if (!name || typeof name !== 'string') return false;
     const trimmed = name.trim();
 
-    // 1. Longitud mayor a 14 caracteres sin un solo espacio
-    if (!trimmed.includes(' ') && trimmed.length > 14) {
+    // 1. Longitud mayor a 25 caracteres sin un solo espacio (bots que envían hashes aleatorios)
+    if (!trimmed.includes(' ') && trimmed.length > 25) {
         return true;
     }
 
-    // 2. Mayúsculas aleatorias en medio de palabras (al menos 3 mayúsculas no iniciales en una sola palabra)
+    // 2. Mayúsculas aleatorias en medio de palabras (al menos 4 mayúsculas no iniciales en una sola palabra)
     const words = trimmed.split(/\s+/);
     for (const word of words) {
-        if (word.length > 10) {
+        if (word.length > 12) {
             const middlePart = word.slice(1);
             const uppercaseInMiddle = (middlePart.match(/[A-Z]/g) || []).length;
-            if (uppercaseInMiddle >= 3) return true;
+            if (uppercaseInMiddle >= 4) return true;
         }
 
-        // 3. 5 o más consonantes consecutivas (en español/inglés normal es casi inexistente)
-        if (/[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]{5,}/.test(word)) {
+        // 3. 7 o más consonantes consecutivas (excluyendo 'y' que actúa como vocal en muchos idiomas y apellidos)
+        if (/[bcdfghjklmnpqrstvwxzBCDFGHJKLMNPQRSTVWXZ]{7,}/.test(word)) {
             return true;
         }
     }
@@ -38,7 +38,7 @@ export function isSuspiciousName(name) {
 
 /**
  * Detecta correos con patrones spam conocidos:
- * - Técnica 'dot-trick' abusiva (4 o más puntos en la parte del usuario antes del @).
+ * - Técnica 'dot-trick' abusiva (5 o más puntos en la parte del usuario antes del @).
  */
 export function isSuspiciousEmail(email) {
     if (!email || typeof email !== 'string') return false;
@@ -47,7 +47,7 @@ export function isSuspiciousEmail(email) {
 
     const username = parts[0];
     const dotCount = (username.match(/\./g) || []).length;
-    if (dotCount >= 4) return true;
+    if (dotCount >= 5) return true;
 
     return false;
 }
@@ -63,25 +63,26 @@ export function isSuspiciousEmail(email) {
  * @returns {boolean} true si es bot, false si es un usuario legítimo
  */
 export function isBotRegistration({ email, fullName, honeypot, formStartTime }) {
-    // 1. Trampa Honeypot: si el campo invisible contiene cualquier valor, es un bot 100% seguro.
+    // 1. Trampa Honeypot: si el campo invisible contiene cualquier valor no vacío
     if (honeypot && typeof honeypot === 'string' && honeypot.trim().length > 0) {
         return true;
     }
 
-    // 2. Trampa de tiempo (Time-trap): Un humano no rellena los campos en menos de 1,4 segundos.
+    // 2. Trampa de tiempo (Time-trap): Un script automatizado envía en <400ms.
+    // 400ms es seguro para permitir que humanos usando autocompletar de navegador no sean bloqueados.
     if (formStartTime && typeof formStartTime === 'number') {
         const elapsed = Date.now() - formStartTime;
-        if (elapsed < 1400) {
+        if (elapsed < 400) {
             return true;
         }
     }
 
-    // 3. Heurística de nombre falso/aleatorio
+    // 3. Heurística de nombre falso/aleatorio (cadenas de hash o patrones bot)
     if (isSuspiciousName(fullName)) {
         return true;
     }
 
-    // 4. Heurística de correo falso
+    // 4. Heurística de correo falso (dot-trick abusivo)
     if (isSuspiciousEmail(email)) {
         return true;
     }

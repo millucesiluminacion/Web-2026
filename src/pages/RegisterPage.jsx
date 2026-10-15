@@ -175,12 +175,12 @@ export default function RegisterPage({ isPro = false }) {
 
                         <form onSubmit={handleRegister} className="space-y-6">
                             {/* Invisible Honeypot Anti-Bot Field */}
-                            <div style={{ position: 'absolute', left: '-9999px', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' }} aria-hidden="true" tabIndex={-1}>
+                            <div style={{ display: 'none' }} aria-hidden="true" tabIndex={-1}>
                                 <input
                                     type="text"
-                                    name="website_confirm_hp"
+                                    name="hp_extra_verification"
                                     tabIndex={-1}
-                                    autoComplete="off"
+                                    autoComplete="new-password"
                                     value={honeypot}
                                     onChange={(e) => setHoneypot(e.target.value)}
                                 />
@@ -254,12 +254,16 @@ export default function RegisterPage({ isPro = false }) {
                                 />
                             </div>
 
-                            <div className="flex items-start gap-4 py-4">
-                                <input type="checkbox" className="mt-1 accent-primary w-4 h-4" required disabled={loading} />
+                            <label className="flex items-start gap-4 py-4 cursor-pointer select-none">
+                                <input type="checkbox" className="mt-1 accent-primary w-4 h-4 cursor-pointer" required disabled={loading} />
                                 <span className="text-[10px] text-gray-400 leading-relaxed uppercase font-black tracking-tight">
-                                    He leído y acepto la <a href="#" className="text-primary hover:underline">Política de Privacidad</a> y los Términos de Servicio.
+                                    He leído y acepto la{' '}
+                                    <Link to="/politica-privacidad" target="_blank" onClick={(e) => e.stopPropagation()} className="text-primary hover:underline">
+                                        Política de Privacidad
+                                    </Link>{' '}
+                                    y los Términos de Servicio.
                                 </span>
-                            </div>
+                            </label>
 
                             <button
                                 type="submit"

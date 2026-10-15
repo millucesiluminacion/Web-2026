@@ -102,7 +102,7 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-6">
             <div className="bg-gray-50/50 p-6 rounded-3xl border border-gray-100 shadow-sm transition-all space-y-4">
                 <div className="flex items-center justify-between mb-2">
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest flex items-center gap-2">
@@ -166,7 +166,8 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
             )}
 
             <button
-                type="submit"
+                type="button"
+                onClick={handleSubmit}
                 disabled={!stripe || !elements || loading}
                 className="w-full h-16 bg-brand-carbon text-white rounded-[2rem] font-black uppercase italic tracking-widest hover:bg-primary transition-all shadow-xl shadow-brand-carbon/20 flex items-center justify-center gap-4 group disabled:opacity-50"
             >
@@ -183,6 +184,6 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
             <p className="text-[9px] text-center text-gray-400 font-bold uppercase tracking-widest">
                 Tu pago se procesa de forma segura a través de Stripe con encriptación SSL de 256 bits.
             </p>
-        </form>
+        </div>
     );
 }
