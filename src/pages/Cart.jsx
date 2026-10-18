@@ -110,12 +110,18 @@ export default function Cart() {
                     console.error('Error al confirmar pago tras redirección:', e);
                 }
 
+                let dbItems = [];
                 if (!confirmedOrder) {
                     try {
                         const { data } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
                         confirmedOrder = data;
                     } catch (e) { }
                 }
+
+                try {
+                    const { data: items } = await supabase.from('order_items').select('*, products(*)').eq('order_id', orderId);
+                    if (items && items.length > 0) dbItems = items;
+                } catch (e) { }
 
                 if (confirmedOrder) {
                     try {
@@ -125,7 +131,23 @@ export default function Cart() {
 
                 setOrderRef(orderId.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
-                trackPurchase(confirmedOrder || { id: orderId, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
+
+                // Asegurar que GA4 reciba los productos reales aunque el estado del carrito se haya reiniciado en el navegador
+                let itemsForGA4 = cart;
+                if (!itemsForGA4 || itemsForGA4.length === 0) {
+                    itemsForGA4 = dbItems.map(item => ({
+                        id: item.product_id,
+                        name: item.products?.name || item.name || 'Producto',
+                        price: item.price_at_purchase || item.price || item.products?.price || 0,
+                        quantity: item.quantity || 1,
+                        reference: item.products?.reference || ''
+                    }));
+                }
+
+                const orderTotal = Number(confirmedOrder?.total || effectiveTotalPrice || 0);
+                const orderShipping = Number(confirmedOrder?.shipping_cost ?? effectiveShippingCost ?? 0);
+
+                trackPurchase(confirmedOrder || { id: orderId, total: orderTotal }, itemsForGA4, orderTotal, orderShipping);
                 clearCart();
             }
             confirmRedirectPayment();

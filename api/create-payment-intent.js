@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import { sendServerPurchaseEvent } from './ga4-server.js';
 
 export const config = {
     api: { bodyParser: true }
@@ -114,6 +115,12 @@ export default async function handler(req, res) {
             }
 
             console.log(`[Stripe Confirm API] Order ${orderId} successfully marked as PAID.`);
+            
+            // Enviar compra a GA4 desde el servidor (por si el usuario cerró el navegador tras validar en la app del banco)
+            sendServerPurchaseEvent(supabase, orderId).catch(err => {
+                console.warn('[Stripe Confirm API] Error triggering GA4 server purchase:', err);
+            });
+
             return res.status(200).json({ success: true, order: updatedOrder });
         }
 
