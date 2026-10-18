@@ -18,7 +18,8 @@ export default function SEOManager() {
 
     async function updateMetaTags() {
         try {
-            const path = location.pathname;
+            const rawPath = location.pathname;
+            const path = rawPath.length > 1 ? rawPath.replace(/\/+$/, '') : rawPath;
             let seoData = null;
 
             // 1. Prioridad: Ajustes Globales y Páginas Estáticas
@@ -97,19 +98,34 @@ export default function SEOManager() {
                 } else if (path === '/catalogo' || path === '/decoracion') {
                     const catSlug = searchParams.get('category');
                     const roomSlug = searchParams.get('room');
+                    const brandSlug = searchParams.get('brand');
 
                     if (catSlug) {
                         const { data } = await supabase.from('categories').select('meta_title, meta_description, name').eq('slug', catSlug).maybeSingle();
                         if (data) seoData = {
                             title: data.meta_title || `${data.name} | Iluminación Mil Luces`,
-                            description: data.meta_description
+                            description: data.meta_description,
+                            isValidFilter: true
                         };
                     } else if (roomSlug) {
                         const { data } = await supabase.from('rooms').select('meta_title, meta_description, name').eq('slug', roomSlug).maybeSingle();
                         if (data) seoData = {
                             title: data.meta_title || `${data.name} | Iluminación Mil Luces`,
-                            description: data.meta_description
+                            description: data.meta_description,
+                            isValidFilter: true
                         };
+                    } else if (brandSlug) {
+                        const { data } = await supabase.from('brands').select('id, name').ilike('name', brandSlug).maybeSingle();
+                        if (data) {
+                            const { count } = await supabase.from('products').select('id', { count: 'exact', head: true }).eq('brand_id', data.id).neq('is_active', false).is('parent_id', null);
+                            if (count && count > 0) {
+                                seoData = {
+                                    title: `Lámparas y Focos ${data.name} | Mil Luces`,
+                                    description: `Catálogo de iluminación de la marca ${data.name}. Envíos rápidos y garantía oficial.`,
+                                    isValidFilter: true
+                                };
+                            }
+                        }
                     }
                 } else {
                     // Fallback para páginas CMS u otras rutas dinámicas sin prefijo
@@ -184,18 +200,20 @@ export default function SEOManager() {
 
                 // Canonical - siempre con www para evitar duplicados www vs no-www
                 const CANONICAL_BASE = 'https://www.millucesiluminacion.com';
-                let canonicalUrl = CANONICAL_BASE + path;
+                let canonicalUrl = CANONICAL_BASE + (path === '/' ? '/' : path);
                 if (path === '/catalogo') {
                     const searchParams = new URLSearchParams(location.search);
                     const catSlug = searchParams.get('category');
                     const roomSlug = searchParams.get('room');
                     const brandSlug = searchParams.get('brand');
-                    if (catSlug) {
+                    if (catSlug && seoData?.isValidFilter) {
                         canonicalUrl = `${CANONICAL_BASE}/catalogo?category=${encodeURIComponent(catSlug)}`;
-                    } else if (roomSlug) {
+                    } else if (roomSlug && seoData?.isValidFilter) {
                         canonicalUrl = `${CANONICAL_BASE}/catalogo?room=${encodeURIComponent(roomSlug)}`;
-                    } else if (brandSlug) {
+                    } else if (brandSlug && seoData?.isValidFilter) {
                         canonicalUrl = `${CANONICAL_BASE}/catalogo?brand=${encodeURIComponent(brandSlug)}`;
+                    } else {
+                        canonicalUrl = `${CANONICAL_BASE}/catalogo`;
                     }
                 }
                 const canonical = document.querySelector('link[rel="canonical"]') || document.createElement('link');

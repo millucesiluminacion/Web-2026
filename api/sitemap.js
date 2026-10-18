@@ -127,10 +127,10 @@ ${items}
 
 // Standard Sitemap generator
 async function generateStandardSitemap(res, supabase) {
-    const [productsRes, categoriesRes, blogRes, brandsRes, roomsRes] = await Promise.all([
+    const [productsRes, categoriesRes, blogRes, brandsRes, roomsRes, catRelsRes, prodRoomsRes] = await Promise.all([
         supabase
             .from('products')
-            .select('slug, created_at')
+            .select('slug, created_at, category_id, brand_id, room_id')
             .is('parent_id', null)
             .neq('is_active', false)
             .not('slug', 'is', null)
@@ -138,7 +138,7 @@ async function generateStandardSitemap(res, supabase) {
             .limit(5000),
         supabase
             .from('categories')
-            .select('slug, created_at')
+            .select('id, slug, created_at')
             .not('slug', 'is', null),
         supabase
             .from('blog_posts')
@@ -148,11 +148,39 @@ async function generateStandardSitemap(res, supabase) {
             .limit(1000),
         supabase
             .from('brands')
-            .select('name, created_at'),
+            .select('id, name, created_at'),
         supabase
             .from('rooms')
-            .select('slug, created_at')
+            .select('id, slug, created_at')
             .not('slug', 'is', null),
+        supabase
+            .from('category_relationships')
+            .select('parent_id, child_id'),
+        supabase
+            .from('product_rooms')
+            .select('room_id'),
+    ]);
+
+    const products = productsRes.data || [];
+    const categories = categoriesRes.data || [];
+    const brands = brandsRes.data || [];
+    const rooms = roomsRes.data || [];
+    const catRels = catRelsRes.data || [];
+    const prodRooms = prodRoomsRes.data || [];
+
+    // Map parent to children for hierarchy checking
+    function gatherCatIds(id) {
+        const ids = [id];
+        const children = catRels.filter(r => r.parent_id === id).map(r => r.child_id);
+        children.forEach(cid => ids.push(...gatherCatIds(cid)));
+        return ids;
+    }
+
+    const activeCatIds = new Set(products.map(p => p.category_id).filter(Boolean));
+    const activeBrandIds = new Set(products.map(p => p.brand_id).filter(Boolean));
+    const activeRoomIds = new Set([
+        ...products.map(p => p.room_id).filter(Boolean),
+        ...prodRooms.map(pr => pr.room_id).filter(Boolean)
     ]);
 
     const entries = [];
@@ -161,16 +189,20 @@ async function generateStandardSitemap(res, supabase) {
         entries.push(urlEntry(route));
     }
 
-    for (const cat of (categoriesRes.data || [])) {
-        entries.push(urlEntry({
-            loc: `/catalogo?category=${xmlEscape(cat.slug)}`,
-            lastmod: cat.created_at ? cat.created_at.split('T')[0] : undefined,
-            changefreq: 'weekly',
-            priority: '0.7',
-        }));
+    for (const cat of categories) {
+        const descendantIds = gatherCatIds(cat.id);
+        const hasProducts = descendantIds.some(id => activeCatIds.has(id));
+        if (hasProducts) {
+            entries.push(urlEntry({
+                loc: `/catalogo?category=${xmlEscape(cat.slug)}`,
+                lastmod: cat.created_at ? cat.created_at.split('T')[0] : undefined,
+                changefreq: 'weekly',
+                priority: '0.7',
+            }));
+        }
     }
 
-    for (const prod of (productsRes.data || [])) {
+    for (const prod of products) {
         entries.push(urlEntry({
             loc: `/product/${xmlEscape(prod.slug)}`,
             lastmod: prod.created_at ? prod.created_at.split('T')[0] : undefined,
@@ -188,8 +220,8 @@ async function generateStandardSitemap(res, supabase) {
         }));
     }
 
-    for (const brand of (brandsRes.data || [])) {
-        if (brand.name) {
+    for (const brand of brands) {
+        if (brand.name && activeBrandIds.has(brand.id)) {
             entries.push(urlEntry({
                 loc: `/catalogo?brand=${xmlEscape(brand.name.toLowerCase())}`,
                 lastmod: brand.created_at ? brand.created_at.split('T')[0] : undefined,
@@ -199,13 +231,15 @@ async function generateStandardSitemap(res, supabase) {
         }
     }
 
-    for (const room of (roomsRes.data || [])) {
-        entries.push(urlEntry({
-            loc: `/catalogo?room=${xmlEscape(room.slug)}`,
-            lastmod: room.created_at ? room.created_at.split('T')[0] : undefined,
-            changefreq: 'weekly',
-            priority: '0.6',
-        }));
+    for (const room of rooms) {
+        if (activeRoomIds.has(room.id)) {
+            entries.push(urlEntry({
+                loc: `/catalogo?room=${xmlEscape(room.slug)}`,
+                lastmod: room.created_at ? room.created_at.split('T')[0] : undefined,
+                changefreq: 'weekly',
+                priority: '0.6',
+            }));
+        }
     }
 
     const xml = [

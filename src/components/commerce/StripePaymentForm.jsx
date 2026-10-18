@@ -47,7 +47,13 @@ export default function StripePaymentForm({ amount, onSucceeded, onFailed, prePa
             if (onFailed) await onFailed(result.error.message, orderId);
         } else {
             if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
-                if (onSucceeded) await onSucceeded(result.paymentIntent, orderId);
+                if (onSucceeded) {
+                    try {
+                        await onSucceeded(result.paymentIntent, orderId);
+                    } catch (succeededErr) {
+                        console.error('[StripePaymentForm] Error in onSucceeded callback:', succeededErr);
+                    }
+                }
             }
         }
     };

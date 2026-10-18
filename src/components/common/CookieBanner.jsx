@@ -12,6 +12,18 @@ export default function CookieBanner() {
             // Delay appearance for better UX
             const timer = setTimeout(() => setIsVisible(true), 1500);
             return () => clearTimeout(timer);
+        } else {
+            try {
+                const parsed = JSON.parse(consent);
+                if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+                    window.gtag('consent', 'update', {
+                        analytics_storage: parsed.analytics ? 'granted' : 'denied',
+                        ad_storage: parsed.marketing ? 'granted' : 'denied',
+                        ad_user_data: parsed.marketing ? 'granted' : 'denied',
+                        ad_personalization: parsed.marketing ? 'granted' : 'denied'
+                    });
+                }
+            } catch (e) { }
         }
     }, []);
 
@@ -22,6 +34,14 @@ export default function CookieBanner() {
             marketing: true,
             date: new Date().toISOString()
         }));
+        if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+            window.gtag('consent', 'update', {
+                analytics_storage: 'granted',
+                ad_storage: 'granted',
+                ad_user_data: 'granted',
+                ad_personalization: 'granted'
+            });
+        }
         setIsVisible(false);
     };
 
@@ -32,6 +52,14 @@ export default function CookieBanner() {
             marketing: false,
             date: new Date().toISOString()
         }));
+        if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
+            window.gtag('consent', 'update', {
+                analytics_storage: 'denied',
+                ad_storage: 'denied',
+                ad_user_data: 'denied',
+                ad_personalization: 'denied'
+            });
+        }
         setIsVisible(false);
     };
 

@@ -1429,16 +1429,31 @@ export default function OrdersList() {
                                             </div>
 
                                             <div className="p-10 bg-neutral-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
-                                                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:scale-125 transition-transform duration-1000"></div>
                                                 <div className="space-y-5 relative z-10">
-                                                    <div className="flex justify-between text-[11px] font-bold text-white/30 uppercase tracking-[.4em] font-outfit">
-                                                        <span>Subtotal Boutique</span>
-                                                        <span>{(selectedOrder.total / 1.21).toFixed(2)} €</span>
-                                                    </div>
-                                                    <div className="flex justify-between text-[11px] font-bold text-white/30 uppercase tracking-[.4em] font-outfit">
-                                                        <span>Impuestos (21%)</span>
-                                                        <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)} €</span>
-                                                    </div>
+                                                    {(() => {
+                                                        const itemsSubtotal = (selectedOrder.order_items || []).reduce((acc, curr) => acc + ((curr.unit_price || 0) * (curr.quantity || 1)), 0);
+                                                        const shippingVal = selectedOrder.shipping_method === 'pickup' ? 0 : Math.max(0, selectedOrder.total - itemsSubtotal);
+                                                        return (
+                                                            <>
+                                                                <div className="flex justify-between text-[11px] font-bold text-white/30 uppercase tracking-[.4em] font-outfit">
+                                                                    <span>Artículos</span>
+                                                                    <span>{itemsSubtotal.toFixed(2)} €</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] font-bold text-white/30 uppercase tracking-[.4em] font-outfit">
+                                                                    <span>Envío ({selectedOrder.shipping_method === 'pickup' ? 'Recogida' : 'A Domicilio'})</span>
+                                                                    <span>{shippingVal === 0 ? 'GRATIS' : `${shippingVal.toFixed(2)} €`}</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] font-bold text-white/30 uppercase tracking-[.4em] font-outfit">
+                                                                    <span>Base Imponible</span>
+                                                                    <span>{(selectedOrder.total / 1.21).toFixed(2)} €</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[11px] font-bold text-white/30 uppercase tracking-[.4em] font-outfit">
+                                                                    <span>IVA (21%)</span>
+                                                                    <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)} €</span>
+                                                                </div>
+                                                            </>
+                                                        );
+                                                    })()}
                                                     <div className="pt-6 border-t border-white/5 flex justify-between items-end">
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[10px] font-black uppercase text-primary tracking-widest italic font-outfit">Total de Facturación</span>

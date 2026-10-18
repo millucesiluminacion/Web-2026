@@ -101,7 +101,8 @@ export default async function handler(req, res) {
                 .from('orders')
                 .update({
                     status: 'PAID',
-                    payment_status: 'PAID'
+                    payment_status: 'PAID',
+                    payment_id: paymentIntentId
                 })
                 .eq('id', orderId)
                 .select()

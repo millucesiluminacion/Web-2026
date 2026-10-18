@@ -91,8 +91,9 @@ export default function Cart() {
 
         if ((paymentStatus === 'success' || paymentIntentId) && orderId) {
             async function confirmRedirectPayment() {
+                let confirmedOrder = null;
                 try {
-                    await fetch('/api/create-payment-intent', {
+                    const res = await fetch('/api/create-payment-intent', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -101,12 +102,30 @@ export default function Cart() {
                             paymentIntentId: paymentIntentId
                         })
                     });
+                    if (res.ok) {
+                        const data = await res.json();
+                        confirmedOrder = data.order;
+                    }
                 } catch (e) {
                     console.error('Error al confirmar pago tras redirección:', e);
                 }
+
+                if (!confirmedOrder) {
+                    try {
+                        const { data } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
+                        confirmedOrder = data;
+                    } catch (e) { }
+                }
+
+                if (confirmedOrder) {
+                    try {
+                        await sendOrderConfirmationEmails(confirmedOrder);
+                    } catch (e) { }
+                }
+
                 setOrderRef(orderId.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
-                trackPurchase({ id: orderId, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
+                trackPurchase(confirmedOrder || { id: orderId, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
                 clearCart();
             }
             confirmRedirectPayment();
@@ -285,6 +304,10 @@ export default function Cart() {
                                 <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">IVA (21%):</td>
                                 <td style="text-align: right; font-size: 14px; font-weight: bold;">${ivaAmount.toFixed(2)}€</td>
                             </tr>
+                            <tr>
+                                <td style="font-size: 12px; color: #6b7280; text-transform: uppercase;">Gastos de Envío:</td>
+                                <td style="text-align: right; font-size: 14px; font-weight: bold;">${effectiveShippingCost === 0 ? 'GRATIS (0.00€)' : `${effectiveShippingCost.toFixed(2)}€`}</td>
+                            </tr>
                             ${appliedCoupon ? `
                             <tr>
                                 <td style="font-size: 12px; color: #16a34a; text-transform: uppercase; font-weight: bold;">Descuento Cupón (${appliedCoupon.code}):</td>
@@ -420,9 +443,59 @@ export default function Cart() {
         const paymentStatus = options.payment_status || defaultPaymentStatus;
         const shouldSendEmail = options.sendEmail !== undefined ? options.sendEmail : !isOnlinePayment;
 
+        // 1. Resolver usuario y cliente para asociar el pedido correctamente en BD y CRM
+        let resolvedUserId = user?.id || null;
+        let resolvedCustomerId = null;
+        const normalizedEmail = formData.email?.trim().toLowerCase();
+
+        try {
+            // Si no hay sesión activa, intentar asociar al perfil registrado con este email
+            if (!resolvedUserId && normalizedEmail) {
+                const { data: matchedProfile } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .ilike('email', normalizedEmail)
+                    .maybeSingle();
+                if (matchedProfile?.id) {
+                    resolvedUserId = matchedProfile.id;
+                }
+            }
+
+            // Buscar si ya existe en la tabla customers o darlo de alta
+            if (normalizedEmail) {
+                const { data: matchedCust } = await supabase
+                    .from('customers')
+                    .select('id')
+                    .ilike('email', normalizedEmail)
+                    .maybeSingle();
+
+                if (matchedCust?.id) {
+                    resolvedCustomerId = matchedCust.id;
+                } else {
+                    const { data: newCust } = await supabase
+                        .from('customers')
+                        .insert([{
+                            full_name: formData.name?.trim() || 'Cliente Web',
+                            email: normalizedEmail,
+                            phone: formData.phone?.trim() || '',
+                            address: formData.shippingMethod === 'delivery' ? `${formData.address || ''}, ${formData.city || ''} (${formData.zip || ''})`.trim() : '',
+                            user_type: 'persona'
+                        }])
+                        .select('id')
+                        .maybeSingle();
+                    if (newCust?.id) {
+                        resolvedCustomerId = newCust.id;
+                    }
+                }
+            }
+        } catch (linkErr) {
+            console.warn('[saveOrder] Error asociando cliente/usuario:', linkErr);
+        }
+
         const { data: order, error } = await supabase
             .from('orders')
             .insert([{
+                customer_id: resolvedCustomerId,
                 customer_name: formData.name,
                 customer_email: formData.email,
                 customer_phone: formData.phone,
@@ -437,7 +510,7 @@ export default function Cart() {
                 shipping_method: formData.shippingMethod || 'delivery',
                 status: orderStatus,
                 payment_status: paymentStatus,
-                user_id: user?.id || null,
+                user_id: resolvedUserId,
             }])
             .select()
             .maybeSingle();
@@ -530,8 +603,8 @@ export default function Cart() {
                     .from('orders')
                     .update({
                         status: 'PAID',
-                        payment_status: 'completed',
-                        payment_intent_id: paymentIntent?.id || null
+                        payment_status: 'PAID',
+                        payment_id: paymentIntent?.id || null
                     })
                     .eq('id', orderIdToUpdate)
                     .select()
@@ -545,6 +618,10 @@ export default function Cart() {
             }
         }
 
+        // Limpiar referencias para evitar colisiones con reintentos
+        createdOrderIdRef.current = '';
+        setCreatedOrderId('');
+
         setOrderRef(paymentIntent?.id ? paymentIntent.id.slice(-8).toUpperCase() : (orderIdToUpdate ? orderIdToUpdate.slice(0, 8).toUpperCase() : 'OK'));
         setOrderCompleted(true);
         trackPurchase(updatedOrder || { id: orderIdToUpdate, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
@@ -554,18 +631,32 @@ export default function Cart() {
 
     const handlePaymentFailed = async (error, overrideOrderId) => {
         setPayError(error?.message || error || 'Error en el pago');
-        const idToDelete = overrideOrderId || createdOrderIdRef.current || createdOrderId;
+        const failedOrderId = overrideOrderId || createdOrderIdRef.current || createdOrderId;
 
-        if (idToDelete) {
-            // Eliminar pedido borrador si el pago no se completó
+        if (failedOrderId) {
+            // NUNCA eliminar pedidos de la base de datos para no perder trazabilidad ni crear discrepancias
             try {
-                await supabase.from('coupon_uses').delete().eq('order_id', idToDelete);
-                await supabase.from('order_items').delete().eq('order_id', idToDelete);
-                await supabase.from('orders').delete().eq('id', idToDelete);
+                const { data: currentOrder } = await supabase
+                    .from('orders')
+                    .select('status, payment_status')
+                    .eq('id', failedOrderId)
+                    .maybeSingle();
+
+                // Solo marcar como fallido si no fue ya completado con éxito
+                if (currentOrder && currentOrder.status !== 'PAID' && currentOrder.payment_status !== 'PAID') {
+                    await supabase
+                        .from('orders')
+                        .update({
+                            status: 'CANCELLED',
+                            payment_status: 'failed'
+                        })
+                        .eq('id', failedOrderId);
+                }
+            } catch (e) {
+                console.error('[Cart] Error al actualizar estado de pedido tras fallo:', e);
+            } finally {
                 createdOrderIdRef.current = '';
                 setCreatedOrderId('');
-            } catch (e) {
-                console.error('Error al limpiar pedido tras fallo de pago:', e);
             }
         }
 
