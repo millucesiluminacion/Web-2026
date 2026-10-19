@@ -22,6 +22,13 @@ export default function CustomersList() {
     const [page, setPage] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const pageSize = 50;
+    const [tabCounts, setTabCounts] = useState({
+        all: 0,
+        persona: 0,
+        profesional: 0,
+        partner: 0,
+        has_orders: 0
+    });
 
     const [formData, setFormData] = useState({
         full_name: '',
@@ -50,6 +57,46 @@ export default function CustomersList() {
     }, [isModalOpen, viewingCustomer]);
 
     useEffect(() => {
+        fetchTabCounts();
+    }, []);
+
+    async function fetchTabCounts() {
+        try {
+            const [totalRes, personaRes, proRes, partnerRes, ordersRes] = await Promise.all([
+                supabase.from('customers').select('*', { count: 'exact', head: true }),
+                supabase.from('customers').select('*', { count: 'exact', head: true }).or('user_type.eq.persona,user_type.is.null'),
+                supabase.from('customers').select('*', { count: 'exact', head: true }).eq('user_type', 'profesional'),
+                supabase.from('customers').select('*', { count: 'exact', head: true }).eq('is_partner', true),
+                supabase.from('orders').select('customer_email').neq('status', 'CANCELLED')
+            ]);
+
+            const orderEmails = new Set(
+                (ordersRes.data || [])
+                    .map(o => o.customer_email?.toLowerCase().trim())
+                    .filter(Boolean)
+            );
+
+            let hasOrdersCount = 0;
+            if (orderEmails.size > 0) {
+                const { data: custList } = await supabase.from('customers').select('id, email');
+                if (custList) {
+                    hasOrdersCount = custList.filter(c => c.email && orderEmails.has(c.email.toLowerCase().trim())).length;
+                }
+            }
+
+            setTabCounts({
+                all: totalRes.count || 0,
+                persona: personaRes.count || 0,
+                profesional: proRes.count || 0,
+                partner: partnerRes.count || 0,
+                has_orders: hasOrdersCount
+            });
+        } catch (err) {
+            console.error('Error fetching tab counts:', err);
+        }
+    }
+
+    useEffect(() => {
         fetchCustomers();
     }, [page, searchQuery, activeTab, sortBy]);
 
@@ -65,10 +112,34 @@ export default function CustomersList() {
             }
 
             // Apply Tab Filters at DB level if applicable
-            if (activeTab === 'persona' || activeTab === 'profesional') {
-                query = query.eq('user_type', activeTab);
+            if (activeTab === 'persona') {
+                query = query.or('user_type.eq.persona,user_type.is.null');
+            } else if (activeTab === 'profesional') {
+                query = query.eq('user_type', 'profesional');
             } else if (activeTab === 'partner') {
                 query = query.eq('is_partner', true);
+            } else if (activeTab === 'has_orders') {
+                const { data: ordersData } = await supabase
+                    .from('orders')
+                    .select('customer_email')
+                    .neq('status', 'CANCELLED');
+                const orderEmails = new Set(
+                    (ordersData || [])
+                        .map(o => o.customer_email?.toLowerCase().trim())
+                        .filter(Boolean)
+                );
+                const { data: allCusts } = await supabase
+                    .from('customers')
+                    .select('id, email');
+                const matchingIds = (allCusts || [])
+                    .filter(c => c.email && orderEmails.has(c.email.toLowerCase().trim()))
+                    .map(c => c.id);
+
+                if (matchingIds.length > 0) {
+                    query = query.in('id', matchingIds);
+                } else {
+                    query = query.in('id', ['00000000-0000-0000-0000-000000000000']);
+                }
             }
 
             // Apply SQL sorting where possible
@@ -91,8 +162,12 @@ export default function CustomersList() {
             const { data, error, count } = await query.range(from, to);
             if (error) throw error;
 
-            // OPTIMIZATION: Single Batch Query for Orders instead of 50 individual queries
-            const customerEmails = (data || []).map(c => c.email?.toLowerCase()).filter(Boolean);
+            // OPTIMIZATION: Single Batch Query for Orders with case-insensitive email matching
+            const customerEmails = [...new Set((data || []).flatMap(c => [
+                c.email,
+                c.email?.toLowerCase(),
+                c.email?.toUpperCase()
+            ]).filter(Boolean))];
             const orderStatsMap = {};
 
             if (customerEmails.length > 0) {
@@ -104,7 +179,7 @@ export default function CustomersList() {
 
                 if (!orderErr && orderData) {
                     orderData.forEach(ord => {
-                        const email = ord.customer_email?.toLowerCase();
+                        const email = ord.customer_email?.toLowerCase().trim();
                         if (!email) return;
                         if (!orderStatsMap[email]) {
                             orderStatsMap[email] = { count: 0, spent: 0 };
@@ -116,18 +191,13 @@ export default function CustomersList() {
             }
 
             let processed = (data || []).map(cust => {
-                const stats = orderStatsMap[cust.email?.toLowerCase()] || { count: 0, spent: 0 };
+                const stats = orderStatsMap[cust.email?.toLowerCase().trim()] || { count: 0, spent: 0 };
                 return {
                     ...cust,
                     orderCount: stats.count,
                     totalSpent: stats.spent
                 };
             });
-
-            // Tab filter for 'has_orders'
-            if (activeTab === 'has_orders') {
-                processed = processed.filter(c => c.orderCount > 0);
-            }
 
             // In-Memory Sorting for Spent & Orders Count
             if (sortBy === 'spent_desc') {
@@ -242,6 +312,7 @@ export default function CustomersList() {
             }
             setIsModalOpen(false);
             fetchCustomers();
+            fetchTabCounts();
         } catch (error) {
             alert('Error al guardar cliente: ' + error.message);
         } finally {
@@ -256,33 +327,91 @@ export default function CustomersList() {
             if (error) throw error;
             setCustomers(customers.filter(c => c.id !== id));
             if (viewingCustomer?.id === id) setViewingCustomer(null);
+            fetchTabCounts();
         } catch (error) {
             alert('Error al eliminar: ' + error.message);
         }
     }
 
-    const handleExport = () => {
-        const csv = Papa.unparse(customers.map(c => ({
-            ID: c.id,
-            Fecha_Registro: formatDateTime(c.created_at),
-            Nombre: c.full_name,
-            Email: c.email,
-            Telefono: c.phone || '',
-            Direccion: c.address || '',
-            Tipo: c.user_type === 'profesional' ? 'Profesional' : 'Particular',
-            Empresa: c.company_name || '',
-            NIF_CIF: c.vat_id || '',
-            Socio_VIP: c.is_partner ? 'SÍ' : 'NO',
-            Tarifa_Pro: c.has_pro_prices ? 'SÍ' : 'NO',
-            Descuento_Global: `${c.discount_percent || 0}%`,
-            Total_Pedidos: c.orderCount || 0,
-            Gasto_Total_EUR: (c.totalSpent || 0).toFixed(2)
-        })));
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `clientes_mil_luces_${new Date().toISOString().slice(0, 10)}.csv`;
-        link.click();
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleExport = async () => {
+        try {
+            setIsExporting(true);
+            let query = supabase.from('customers').select('*');
+            if (searchQuery) {
+                query = query.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%`);
+            }
+            if (activeTab === 'persona') {
+                query = query.or('user_type.eq.persona,user_type.is.null');
+            } else if (activeTab === 'profesional') {
+                query = query.eq('user_type', 'profesional');
+            } else if (activeTab === 'partner') {
+                query = query.eq('is_partner', true);
+            } else if (activeTab === 'has_orders') {
+                const { data: ordersData } = await supabase.from('orders').select('customer_email').neq('status', 'CANCELLED');
+                const orderEmails = new Set((ordersData || []).map(o => o.customer_email?.toLowerCase().trim()).filter(Boolean));
+                const { data: allCusts } = await supabase.from('customers').select('id, email');
+                const matchingIds = (allCusts || []).filter(c => c.email && orderEmails.has(c.email.toLowerCase().trim())).map(c => c.id);
+                if (matchingIds.length > 0) {
+                    query = query.in('id', matchingIds);
+                } else {
+                    query = query.in('id', ['00000000-0000-0000-0000-000000000000']);
+                }
+            }
+            query = query.order('created_at', { ascending: false });
+
+            const { data: allData, error } = await query;
+            if (error) throw error;
+
+            const emails = (allData || []).map(c => c.email?.toLowerCase().trim()).filter(Boolean);
+            const statsMap = {};
+            if (emails.length > 0) {
+                const { data: orderData } = await supabase
+                    .from('orders')
+                    .select('customer_email, total, status')
+                    .neq('status', 'CANCELLED');
+                (orderData || []).forEach(ord => {
+                    const em = ord.customer_email?.toLowerCase().trim();
+                    if (!em) return;
+                    if (!statsMap[em]) statsMap[em] = { count: 0, spent: 0 };
+                    statsMap[em].count += 1;
+                    statsMap[em].spent += (ord.total || 0);
+                });
+            }
+
+            const exportList = (allData || []).map(c => {
+                const stats = statsMap[c.email?.toLowerCase().trim()] || { count: 0, spent: 0 };
+                return {
+                    ID: c.id,
+                    Fecha_Registro: formatDateTime(c.created_at),
+                    Nombre: c.full_name,
+                    Email: c.email,
+                    Telefono: c.phone || '',
+                    Direccion: c.address || '',
+                    Tipo: c.user_type === 'profesional' ? 'Profesional' : 'Particular',
+                    Empresa: c.company_name || '',
+                    NIF_CIF: c.vat_id || '',
+                    Socio_VIP: c.is_partner ? 'SÍ' : 'NO',
+                    Tarifa_Pro: c.has_pro_prices ? 'SÍ' : 'NO',
+                    Descuento_Global: `${c.discount_percent || 0}%`,
+                    Total_Pedidos: stats.count,
+                    Gasto_Total_EUR: stats.spent.toFixed(2)
+                };
+            });
+
+            const csv = Papa.unparse(exportList);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `clientes_mil_luces_${activeTab}_${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+        } catch (err) {
+            console.error('Error exporting customers:', err);
+            alert('Error al exportar clientes: ' + err.message);
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const handleImport = (e) => {
@@ -323,7 +452,7 @@ export default function CustomersList() {
                         address: String(row.Address || row['Dirección'] || row.address || '').trim(),
                         company_name: String(row.Organization || row.Empresa || '').trim(),
                         vat_id: String(row.vat_id || row['VAT ID'] || row.NIF || '').trim(),
-                        is_partner: row.Member === true || row.Member === 'SÍ',
+                        is_partner: row.Socio_VIP === 'SÍ' || row.Socio_VIP === true || row.is_partner === true || row.is_partner === 'true',
                         discount_percent: parseFloat(row.Descuento || row.discount_percent) || 0,
                         user_type: (row.Organization || row.Empresa) ? 'profesional' : 'persona',
                         has_pro_prices: row.Tarifa_Pro === true || row.Tarifa_Pro === 'SÍ' || row.has_pro_prices === true
@@ -345,16 +474,9 @@ export default function CustomersList() {
 
                 alert(`IMPORTACIÓN FINALIZADA:\n✅ ${created} Creados | 🔄 ${updated} Actualizados | ❌ ${errors} Errores`);
                 fetchCustomers();
+                fetchTabCounts();
             }
         });
-    };
-
-    const customerCounts = {
-        all: totalCount || customers.length,
-        persona: customers.filter(c => (c.user_type || 'persona') === 'persona').length,
-        profesional: customers.filter(c => c.user_type === 'profesional').length,
-        partner: customers.filter(c => c.is_partner).length,
-        has_orders: customers.filter(c => c.orderCount > 0).length
     };
 
     return (
@@ -388,7 +510,10 @@ export default function CustomersList() {
                                 placeholder="BUSCAR POR NOMBRE, EMAIL O TELÉFONO..."
                                 className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl text-[11px] font-bold uppercase tracking-widest focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-300"
                                 value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onChange={(e) => {
+                                    setSearchQuery(e.target.value);
+                                    setPage(1);
+                                }}
                             />
                         </div>
 
@@ -399,7 +524,10 @@ export default function CustomersList() {
                             </span>
                             <select
                                 value={sortBy}
-                                onChange={(e) => setSortBy(e.target.value)}
+                                onChange={(e) => {
+                                    setSortBy(e.target.value);
+                                    setPage(1);
+                                }}
                                 className="bg-gray-50 text-[10px] font-black uppercase tracking-wider text-brand-carbon py-2.5 px-4 rounded-xl outline-none cursor-pointer hover:bg-gray-100 transition-colors border-none"
                             >
                                 <option value="created_at_desc">📅 Registro: Más Recientes</option>
@@ -415,15 +543,18 @@ export default function CustomersList() {
                     {/* Filter Tabs */}
                     <div className="flex flex-wrap items-center gap-2 pt-2">
                         {[
-                            { id: 'all', label: 'Todos', count: customerCounts.all },
-                            { id: 'persona', label: 'Particulares (B2C)', count: customerCounts.persona },
-                            { id: 'profesional', label: 'Profesionales (B2B)', count: customerCounts.profesional },
-                            { id: 'partner', label: 'Socios VIP', count: customerCounts.partner },
-                            { id: 'has_orders', label: 'Con Compras', count: customerCounts.has_orders }
+                            { id: 'all', label: 'Todos', count: tabCounts.all },
+                            { id: 'persona', label: 'Particulares (B2C)', count: tabCounts.persona },
+                            { id: 'profesional', label: 'Profesionales (B2B)', count: tabCounts.profesional },
+                            { id: 'partner', label: 'Socios VIP', count: tabCounts.partner },
+                            { id: 'has_orders', label: 'Con Compras', count: tabCounts.has_orders }
                         ].map((tab) => (
                             <button
                                 key={tab.id}
-                                onClick={() => setActiveTab(tab.id)}
+                                onClick={() => {
+                                    setActiveTab(tab.id);
+                                    setPage(1);
+                                }}
                                 className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2.5 ${activeTab === tab.id
                                         ? 'bg-brand-carbon text-white shadow-lg scale-[1.02]'
                                         : 'bg-white text-gray-400 hover:text-brand-carbon hover:bg-gray-100 border border-gray-100'
@@ -588,30 +719,32 @@ export default function CustomersList() {
                         </div>
 
                         {/* Pagination Controls */}
-                        {totalCount > pageSize && (
+                        {totalCount > 0 && (
                             <div className="p-6 border-t border-gray-100 flex flex-col md:flex-row items-center justify-between gap-4 bg-gray-50/30">
                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
                                     Mostrando <span className="text-primary">{customers.length}</span> de <span className="text-brand-carbon">{totalCount}</span> registros
                                 </p>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setPage(prev => Math.max(1, prev - 1))}
-                                        disabled={page === 1}
-                                        className="p-3.5 rounded-xl bg-white border border-gray-200 text-gray-400 hover:text-primary disabled:opacity-30 transition-all shadow-sm"
-                                    >
-                                        <ChevronLeft className="w-4 h-4" />
-                                    </button>
-                                    <span className="px-4 text-[10px] font-black text-brand-carbon">
-                                        Página {page} de {Math.ceil(totalCount / pageSize)}
-                                    </span>
-                                    <button
-                                        onClick={() => setPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
-                                        disabled={page >= Math.ceil(totalCount / pageSize)}
-                                        className="p-3.5 rounded-xl bg-white border border-gray-200 text-gray-400 hover:text-primary disabled:opacity-30 transition-all shadow-sm"
-                                    >
-                                        <ChevronRight className="w-4 h-4" />
-                                    </button>
-                                </div>
+                                {totalCount > pageSize && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setPage(prev => Math.max(1, prev - 1))}
+                                            disabled={page === 1}
+                                            className="p-3.5 rounded-xl bg-white border border-gray-200 text-gray-400 hover:text-primary disabled:opacity-30 transition-all shadow-sm"
+                                        >
+                                            <ChevronLeft className="w-4 h-4" />
+                                        </button>
+                                        <span className="px-4 text-[10px] font-black text-brand-carbon">
+                                            Página {page} de {Math.ceil(totalCount / pageSize)}
+                                        </span>
+                                        <button
+                                            onClick={() => setPage(prev => Math.min(Math.ceil(totalCount / pageSize), prev + 1))}
+                                            disabled={page >= Math.ceil(totalCount / pageSize)}
+                                            className="p-3.5 rounded-xl bg-white border border-gray-200 text-gray-400 hover:text-primary disabled:opacity-30 transition-all shadow-sm"
+                                        >
+                                            <ChevronRight className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </>
@@ -638,10 +771,11 @@ export default function CustomersList() {
                         </label>
                         <button
                             onClick={handleExport}
-                            className="px-6 py-3.5 bg-white text-black rounded-xl font-black uppercase italic text-[10px] hover:bg-primary hover:text-white transition-all flex items-center gap-2 shadow-lg"
+                            disabled={isExporting}
+                            className="px-6 py-3.5 bg-white text-black rounded-xl font-black uppercase italic text-[10px] hover:bg-primary hover:text-white transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
                         >
-                            <Download className="w-4 h-4" />
-                            Exportar (.CSV)
+                            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                            {isExporting ? 'Exportando...' : 'Exportar (.CSV)'}
                         </button>
                     </div>
                 </div>

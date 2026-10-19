@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 
 import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag } from 'lucide-react';
@@ -614,7 +615,7 @@ export default function OrdersList() {
             setFetchingItems(true);
             const { data, error } = await supabase
                 .from('order_items')
-                .select('*')
+                .select('*, products(id, name, reference, attributes, image_url, category_id)')
                 .eq('order_id', orderId);
 
             if (error) throw error;
@@ -638,7 +639,7 @@ export default function OrdersList() {
             setFetchingItems(true);
             const { data, error } = await supabase
                 .from('order_items')
-                .select('*')
+                .select('*, products(id, name, reference, attributes, image_url, category_id)')
                 .eq('order_id', order.id);
 
             if (error) throw error;
@@ -1400,32 +1401,82 @@ export default function OrdersList() {
                                     ) : (
                                         <div className="space-y-6">
                                             <div className="max-h-[400px] overflow-y-auto pr-4 custom-scrollbar space-y-4">
-                                                {orderItems.map((item, idx) => (
-                                                    <div key={idx} className="flex items-center justify-between p-6 bg-white rounded-3xl border border-gray-100 group hover:border-primary/20 hover:shadow-xl transition-all font-outfit">
-                                                        <div className="flex items-center gap-6">
-                                                            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-xl font-black text-gray-200 group-hover:text-primary transition-colors border border-gray-100/50">
-                                                                {idx + 1}
-                                                            </div>
-                                                            <div>
-                                                                <p className="text-sm font-black text-brand-carbon uppercase italic">{item.product_name}</p>
-                                                                {item.selected_options && Object.keys(item.selected_options).length > 0 && (
-                                                                    <div className="flex flex-wrap gap-1 mt-1.5">
-                                                                        {Object.entries(item.selected_options).map(([k, v]) => v && (
-                                                                            <span key={k} className="inline-flex items-center gap-1 bg-primary/8 text-primary border border-primary/20 rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wide">
-                                                                                {k}: {v}
-                                                                            </span>
-                                                                        ))}
+                                                {orderItems.map((item, idx) => {
+                                                    const productRef = item.products?.reference;
+                                                    const productImg = item.products?.image_url;
+                                                    
+                                                    // Gather specs from selected_options and product attributes
+                                                    const specs = [];
+                                                    if (item.selected_options && typeof item.selected_options === 'object') {
+                                                        Object.entries(item.selected_options).forEach(([k, v]) => {
+                                                            if (v != null && v !== '') {
+                                                                specs.push({ key: k, value: Array.isArray(v) ? v.join(', ') : String(v), isCustom: true });
+                                                            }
+                                                        });
+                                                    }
+                                                    if (item.products?.attributes && typeof item.products.attributes === 'object') {
+                                                        Object.entries(item.products.attributes).forEach(([k, v]) => {
+                                                            if (!specs.some(s => s.key.toLowerCase() === k.toLowerCase())) {
+                                                                const valStr = Array.isArray(v) ? v.join(', ') : String(v);
+                                                                if (valStr && valStr.trim() !== '') {
+                                                                    specs.push({ key: k, value: valStr, isCustom: false });
+                                                                }
+                                                            }
+                                                        });
+                                                    }
+
+                                                    return (
+                                                        <div key={idx} className="flex items-center justify-between p-6 bg-white rounded-3xl border border-gray-100 group hover:border-primary/20 hover:shadow-xl transition-all font-outfit">
+                                                            <div className="flex items-center gap-5 min-w-0">
+                                                                {productImg ? (
+                                                                    <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100/70 p-1 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                                                                        <img src={productImg} alt={item.product_name} className="w-full h-full object-contain" />
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center text-xl font-black text-gray-200 group-hover:text-primary transition-colors border border-gray-100/50 shrink-0">
+                                                                        {idx + 1}
                                                                     </div>
                                                                 )}
-                                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">Precio: {item.unit_price.toFixed(2)} €</p>
+                                                                <div className="min-w-0">
+                                                                    <p className="text-sm font-black text-brand-carbon uppercase italic leading-tight truncate">{item.product_name}</p>
+                                                                    
+                                                                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                                                        {productRef && (
+                                                                            <span className="inline-flex items-center gap-1 bg-brand-carbon text-white rounded-lg px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider">
+                                                                                REF: {productRef}
+                                                                            </span>
+                                                                        )}
+                                                                        {specs.map((spec, sIdx) => {
+                                                                            const isVoltage = spec.key.toLowerCase().includes('volt');
+                                                                            return (
+                                                                                <span
+                                                                                    key={sIdx}
+                                                                                    className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider border ${
+                                                                                        isVoltage
+                                                                                            ? 'bg-amber-500/10 text-amber-700 border-amber-300 font-extrabold'
+                                                                                            : spec.isCustom
+                                                                                            ? 'bg-primary/10 text-primary border-primary/20'
+                                                                                            : 'bg-gray-100 text-gray-600 border-gray-200'
+                                                                                    }`}
+                                                                                >
+                                                                                    <span className="opacity-60">{spec.key}:</span> {spec.value}
+                                                                                </span>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+
+                                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-2">
+                                                                        Precio Unitario: {item.unit_price.toFixed(2)} €
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <div className="text-right shrink-0 pl-4">
+                                                                <p className="text-[9px] font-black text-gray-300 uppercase mb-1.5 tracking-tighter">Cant: x{item.quantity}</p>
+                                                                <p className="text-lg font-black text-brand-carbon italic">{(item.unit_price * item.quantity).toFixed(2)} €</p>
                                                             </div>
                                                         </div>
-                                                        <div className="text-right">
-                                                            <p className="text-[9px] font-black text-gray-300 uppercase mb-1.5 tracking-tighter">Cant: x{item.quantity}</p>
-                                                            <p className="text-lg font-black text-brand-carbon italic">{(item.unit_price * item.quantity).toFixed(2)} €</p>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
 
                                             <div className="p-10 bg-neutral-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
@@ -2021,121 +2072,138 @@ export default function OrdersList() {
             )
             }
 
-            {/* ── Professional Print Template (Hidden on Screen) ──────────────── */}
-            {
-                selectedOrder && (
-                    <div id="invoice-print" className="hidden print:block font-outfit text-brand-carbon bg-white">
-                        {/* Header: Logo & Branding */}
-                        <div className="flex justify-between items-start border-b-4 border-brand-carbon pb-8 mb-12">
-                            <div>
-                                <h1 className="text-4xl font-black uppercase italic leading-none mb-2">
-                                    Mil Luces <span className="text-gray-300">Iluminación</span>
-                                </h1>
-                                <p className="text-[11px] font-black uppercase tracking-[.4em] text-primary italic">Iluminación Lineal & LED Profesional</p>
-                            </div>
-                            <div className="text-right">
-                                <h2 className="text-xl font-black uppercase italic mb-1">Orden de Pedido</h2>
-                                <p className="text-xl font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
-                                <p className="text-[10px] font-black text-primary uppercase italic mt-1">{formatPaymentMethod(selectedOrder.payment_method)}</p>
-                            </div>
+            {/* ── Professional Print Template (Rendered directly into body via Portal) ──────────────── */}
+            {selectedOrder && typeof document !== 'undefined' && createPortal(
+                <div id="invoice-print" className="font-outfit text-brand-carbon bg-white">
+                    {/* Header: Logo & Branding */}
+                    <div id="invoice-print-header" className="flex justify-between items-start border-b-4 border-brand-carbon pb-6 mb-8">
+                        <div>
+                            <h1 className="text-3xl font-black uppercase italic leading-none mb-1.5">
+                                Mil Luces <span className="text-gray-300">Iluminación</span>
+                            </h1>
+                            <p className="text-[10px] font-black uppercase tracking-[.35em] text-primary italic">Iluminación Lineal & LED Profesional</p>
                         </div>
-
-                        {/* Customer & Shipping Grid */}
-                        <div className="grid grid-cols-2 gap-12 mb-16">
-                            <section className="space-y-4">
-                                <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Información del Cliente</h3>
-                                <div className="space-y-1">
-                                    <p className="text-sm font-black uppercase italic">{selectedOrder.customer_name}</p>
-                                    <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_email}</p>
-                                    <p className="text-[11px] font-bold text-gray-500">{selectedOrder.customer_phone || 'Teléfono no facilitado'}</p>
-                                </div>
-                            </section>
-                            <section className="space-y-4">
-                                <h3 className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-2 mb-4">Método de Entrega / Envío</h3>
-                                <div className="space-y-1">
-                                    {selectedOrder.shipping_method === 'pickup' ? (
-                                        <div className="flex items-center gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                            <p className="text-sm font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
-                                        </div>
-                                    ) : (
-                                        <>
-                                            <p className="text-sm font-black uppercase italic">Entrega a Domicilio</p>
-                                            <p className="text-[11px] font-medium leading-relaxed">
-                                                {selectedOrder.shipping_address}<br />
-                                                {selectedOrder.shipping_zip} {selectedOrder.shipping_city}
-                                            </p>
-                                        </>
-                                    )}
-                                </div>
-                            </section>
-                        </div>
-
-                        {/* Items Table */}
-                        <div className="mb-16">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b-2 border-brand-carbon uppercase text-[10px] font-black tracking-widest text-gray-400">
-                                        <th className="py-4 pr-4">Concepto</th>
-                                        <th className="py-4 px-4 text-center">Cant.</th>
-                                        <th className="py-4 px-4 text-right">Precio Ud.</th>
-                                        <th className="py-4 pl-4 text-right">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {orderItems.map((item, idx) => (
-                                        <tr key={idx} className="group italic">
-                                            <td className="py-6 pr-4">
-                                                <p className="text-[11px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
-                                                {item.selected_options && Object.keys(item.selected_options).length > 0 && (
-                                                    <p className="text-[9px] font-bold text-primary/70 uppercase tracking-tighter mb-0.5">
-                                                        {Object.entries(item.selected_options).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ')}
-                                                    </p>
-                                                )}
-                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">REF: {item.product_id?.slice(-6).toUpperCase()}</p>
-                                            </td>
-                                            <td className="py-6 px-4 text-center font-black text-sm">x{item.quantity}</td>
-                                            <td className="py-6 px-4 text-right text-xs font-bold">{item.unit_price.toFixed(2)}€</td>
-                                            <td className="py-6 pl-4 text-right text-sm font-black italic">{(item.unit_price * item.quantity).toFixed(2)}€</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Totals Summary */}
-                        <div className="flex justify-end mb-12">
-                            <div className="w-full max-w-[280px] space-y-3 bg-gray-50 p-8 rounded-3xl border border-gray-100">
-                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                    <span>Base Imponible</span>
-                                    <span>{(selectedOrder.total / 1.21).toFixed(2)}€</span>
-                                </div>
-                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                    <span>Impuestos (21%)</span>
-                                    <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)}€</span>
-                                </div>
-                                <div className="pt-4 border-t border-gray-200 flex justify-between items-end">
-                                    <span className="text-xs font-black uppercase italic text-brand-carbon">Total Factura</span>
-                                    <div className="text-right leading-none">
-                                        <span className="text-3xl font-black italic">{selectedOrder.total.toFixed(2)}</span>
-                                        <span className="text-lg font-black ml-1">€</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div id="invoice-print-footer" className="border-t border-gray-100 pt-6 text-center space-y-2">
-                            <p className="text-[10px] font-black uppercase tracking-[.4em] text-gray-300 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
-                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
-                                Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
-                                milluces@millucesiluminacion.com · +34 917 654 062
-                            </p>
+                        <div className="text-right">
+                            <h2 className="text-lg font-black uppercase italic mb-0.5">Orden de Pedido</h2>
+                            <p className="text-lg font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
+                            <p className="text-[10px] font-black text-primary uppercase italic mt-0.5">{formatPaymentMethod(selectedOrder.payment_method)}</p>
                         </div>
                     </div>
-                )
-            }
+
+                    {/* Customer & Shipping Grid */}
+                    <div id="invoice-print-customer" className="grid grid-cols-2 gap-8 mb-8">
+                        <section className="space-y-3">
+                            <h3 className="text-[9px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-1 mb-2">Información del Cliente</h3>
+                            <div className="space-y-0.5">
+                                <p className="text-xs font-black uppercase italic">{selectedOrder.customer_name}</p>
+                                <p className="text-[10px] font-bold text-gray-500">{selectedOrder.customer_email}</p>
+                                <p className="text-[10px] font-bold text-gray-500">{selectedOrder.customer_phone || 'Teléfono no facilitado'}</p>
+                            </div>
+                        </section>
+                        <section className="space-y-3">
+                            <h3 className="text-[9px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-1 mb-2">Método de Entrega / Envío</h3>
+                            <div className="space-y-0.5">
+                                {selectedOrder.shipping_method === 'pickup' ? (
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                        <p className="text-xs font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <p className="text-xs font-black uppercase italic">Entrega a Domicilio</p>
+                                        <p className="text-[10px] font-medium leading-relaxed">
+                                            {selectedOrder.shipping_address}<br />
+                                            {selectedOrder.shipping_zip} {selectedOrder.shipping_city}
+                                        </p>
+                                    </>
+                                )}
+                            </div>
+                        </section>
+                    </div>
+
+                    {/* Items Table with automatic multi-page splitting */}
+                    <div className="mb-8">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="border-b-2 border-brand-carbon uppercase text-[9px] font-black tracking-widest text-gray-500">
+                                    <th className="py-2.5 pr-4">Concepto</th>
+                                    <th className="py-2.5 px-4 text-center">Cant.</th>
+                                    <th className="py-2.5 px-4 text-right">Precio Ud.</th>
+                                    <th className="py-2.5 pl-4 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {orderItems.map((item, idx) => {
+                                    const productRef = item.products?.reference || item.product_id?.slice(-6).toUpperCase();
+                                    const specsList = [];
+                                    if (item.selected_options && typeof item.selected_options === 'object') {
+                                        Object.entries(item.selected_options).forEach(([k, v]) => {
+                                            if (v != null && v !== '') specsList.push(`${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
+                                        });
+                                    }
+                                    if (item.products?.attributes && typeof item.products.attributes === 'object') {
+                                        Object.entries(item.products.attributes).forEach(([k, v]) => {
+                                            const valStr = Array.isArray(v) ? v.join(', ') : String(v);
+                                            if (valStr && valStr.trim() !== '' && !specsList.some(s => s.toLowerCase().startsWith(k.toLowerCase()))) {
+                                                specsList.push(`${k}: ${valStr}`);
+                                            }
+                                        });
+                                    }
+
+                                    return (
+                                        <tr key={idx} className="italic">
+                                            <td className="py-4 pr-4">
+                                                <p className="text-[10px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
+                                                {specsList.length > 0 && (
+                                                    <p className="text-[8px] font-bold text-gray-600 uppercase tracking-tighter mb-0.5">
+                                                        {specsList.join(' · ')}
+                                                    </p>
+                                                )}
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">REF: {productRef}</p>
+                                            </td>
+                                            <td className="py-4 px-4 text-center font-black text-xs">x{item.quantity}</td>
+                                            <td className="py-4 px-4 text-right text-xs font-bold">{item.unit_price.toFixed(2)}€</td>
+                                            <td className="py-4 pl-4 text-right text-xs font-black italic">{(item.unit_price * item.quantity).toFixed(2)}€</td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Totals Summary */}
+                    <div id="invoice-print-totals" className="flex justify-end mb-8">
+                        <div className="w-full max-w-[260px] space-y-2 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                            <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                <span>Base Imponible</span>
+                                <span>{(selectedOrder.total / 1.21).toFixed(2)}€</span>
+                            </div>
+                            <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                <span>Impuestos (21%)</span>
+                                <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)}€</span>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200 flex justify-between items-end">
+                                <span className="text-[11px] font-black uppercase italic text-brand-carbon">Total Factura</span>
+                                <div className="text-right leading-none">
+                                    <span className="text-2xl font-black italic">{selectedOrder.total.toFixed(2)}</span>
+                                    <span className="text-base font-black ml-0.5">€</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div id="invoice-print-footer" className="border-t border-gray-100 pt-4 text-center space-y-1">
+                        <p className="text-[9px] font-black uppercase tracking-[.35em] text-gray-400 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
+                            Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
+                            milluces@millucesiluminacion.com · +34 917 654 062
+                        </p>
+                    </div>
+                </div>,
+                document.body
+            )}
         </div >
     );
 }
