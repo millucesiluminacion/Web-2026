@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { sendServerPurchaseEvent } from './ga4-server.js';
+import { sendServerPurchaseEvent } from './_lib/ga4-server.js';
 
 export const config = {
     api: { bodyParser: true }

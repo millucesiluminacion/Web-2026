@@ -2,6 +2,8 @@
  * Helper to send purchase events directly to GA4 via Measurement Protocol from server endpoints.
  * This ensures sales are recorded in Google Analytics even if the customer closes their browser
  * during 3D Secure bank redirects.
+ * 
+ * NOTE: Placed in api/_lib/ so Vercel does NOT treat this helper as a Serverless Function!
  */
 export async function sendServerPurchaseEvent(supabase, orderId) {
     try {
