@@ -83,30 +83,7 @@ export default function RegisterPage({ isPro = false }) {
 
             if (signUpError) throw signUpError;
 
-            // Trigger Welcome Email logic via System Key
-            try {
-                await fetch('/api/send-email', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY
-                    },
-                    body: JSON.stringify({
-                        to: email,
-                        templateKey: 'welcome',
-                        variables: { 
-                            name: fullName, 
-                            site_name: 'Mil Luces Iluminación',
-                            user_type: userType === 'profesional' ? 'Profesional' : 'Particular'
-                        }
-                    })
-                });
-            } catch (emailErr) {
-                console.error('Error triggering welcome email:', emailErr);
-            }
-
-            alert('¡Bienvenido! Registro completado. Revisa tu email para confirmar tu cuenta.');
-            navigate('/login');
+            navigate(`/login?registered=true&email=${encodeURIComponent(email)}`);
         } catch (err) {
             setError(translateError(err.message));
         } finally {

@@ -16,16 +16,46 @@ export default function LoginPage() {
     const [confirmedSuccess, setConfirmedSuccess] = useState(false);
     const [forgotMode, setForgotMode] = useState(false);
     const [forgotSent, setForgotSent] = useState(false);
+    const [registeredNotice, setRegisteredNotice] = useState(false);
+    const [isUnconfirmed, setIsUnconfirmed] = useState(false);
+    const [resending, setResending] = useState(false);
+    const [resendSuccess, setResendSuccess] = useState(false);
 
     // Detectar si el usuario llega desde un enlace de confirmación de email o recuperación
     useEffect(() => {
         const hash = window.location.hash || '';
         const searchParams = new URLSearchParams(window.location.search);
 
+        // Aviso si llega recién registrado
+        const registered = searchParams.get('registered') === 'true';
+        const urlEmail = searchParams.get('email');
+        if (urlEmail) setEmail(urlEmail);
+        if (registered) setRegisteredNotice(true);
+
         // 1. Detección de enlace de confirmación completado (type=signup en hash o confirmed=true en query)
         if (hash.includes('type=signup') || searchParams.get('confirmed') === 'true') {
             setConfirmedSuccess(true);
             setInfoMessage('¡Tu cuenta de correo ha sido confirmada con éxito! Ya puedes iniciar sesión con tus credenciales.');
+
+            // Disparar correo de bienvenida ahora que el email está verificado (una sola vez)
+            const confirmedEmail = urlEmail || searchParams.get('email');
+            if (confirmedEmail && !localStorage.getItem('welcome_sent_' + confirmedEmail)) {
+                localStorage.setItem('welcome_sent_' + confirmedEmail, 'true');
+                fetch('/api/send-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY
+                    },
+                    body: JSON.stringify({
+                        to: confirmedEmail,
+                        templateKey: 'welcome',
+                        variables: {
+                            site_name: 'Mil Luces Iluminación'
+                        }
+                    })
+                }).catch(() => {});
+            }
         }
 
         // 2. Detección de token_hash en query para auto-verificación (fallback si Supabase envía token directo)
@@ -103,21 +133,52 @@ export default function LoginPage() {
         return 'Error al iniciar sesión: ' + message;
     };
 
+    const handleResendConfirmation = async () => {
+        if (!email || !email.trim()) {
+            setError('Introduce tu email para poder reenviarte el enlace de confirmación.');
+            return;
+        }
+        setResending(true);
+        setResendSuccess(false);
+        try {
+            const { error: resendErr } = await supabase.auth.resend({
+                type: 'signup',
+                email: email.trim(),
+                options: {
+                    emailRedirectTo: `${window.location.origin}/login?confirmed=true&email=${encodeURIComponent(email.trim())}`
+                }
+            });
+            if (resendErr) throw resendErr;
+            setResendSuccess(true);
+        } catch (err) {
+            setError('Error al reenviar enlace: ' + err.message);
+        } finally {
+            setResending(false);
+        }
+    };
+
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError(null);
+        setIsUnconfirmed(false);
+        setResendSuccess(false);
 
         try {
             const { error } = await supabase.auth.signInWithPassword({
-                email,
+                email: email.trim(),
                 password,
             });
 
             if (error) throw error;
             navigate('/');
         } catch (err) {
-            setError(translateError(err.message));
+            const msg = (err.message || '').toLowerCase();
+            if (msg.includes('email not confirmed')) {
+                setIsUnconfirmed(true);
+            } else {
+                setError(translateError(err.message));
+            }
         } finally {
             setLoading(false);
         }
@@ -129,6 +190,21 @@ export default function LoginPage() {
                 <h2 className="text-2xl font-black text-gray-800 mb-6 text-center uppercase">
                     {forgotMode ? 'Recuperar Contraseña' : 'Iniciar Sesión'}
                 </h2>
+
+                {registeredNotice && !confirmedSuccess && (
+                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3 text-blue-900 animate-in fade-in slide-in-from-top-2">
+                        <Mail className="w-5 h-5 shrink-0 text-blue-600 mt-0.5" />
+                        <div>
+                            <p className="text-xs font-black uppercase tracking-wider text-blue-950">¡Registro casi completado!</p>
+                            <p className="text-xs text-blue-800 mt-1 leading-relaxed">
+                                Hemos enviado un enlace de confirmación a <strong>{email || 'tu correo'}</strong>. Pulsa en el enlace del email para activar tu cuenta e iniciar sesión.
+                            </p>
+                            <p className="text-[11px] text-blue-600 mt-1.5 font-semibold">
+                                💡 Si no lo ves en tu bandeja en 1 minuto, revisa también la carpeta de <strong>Spam o Correo no deseado</strong>.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {confirmedSuccess && (
                     <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-start gap-3 text-emerald-800 animate-in fade-in slide-in-from-top-2">
@@ -147,6 +223,35 @@ export default function LoginPage() {
                     <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3 text-blue-800 animate-in fade-in slide-in-from-top-2">
                         <Info className="w-5 h-5 shrink-0 text-blue-600 mt-0.5" />
                         <p className="text-xs font-medium leading-relaxed">{infoMessage}</p>
+                    </div>
+                )}
+
+                {isUnconfirmed && (
+                    <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-900 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-start gap-3">
+                            <AlertCircle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+                            <div className="flex-1">
+                                <p className="text-xs font-black uppercase tracking-wider text-amber-950">Correo pendiente de confirmación</p>
+                                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                                    Tu cuenta aún no ha sido confirmada mediante el enlace. Revisa tu bandeja de entrada y la carpeta de <strong>Spam o Correo no deseado</strong> de <strong>{email}</strong>.
+                                </p>
+                                {resendSuccess ? (
+                                    <div className="mt-3 p-2.5 bg-emerald-100/70 border border-emerald-300 rounded-xl text-xs font-bold text-emerald-900 flex items-center gap-2">
+                                        <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
+                                        <span>¡Enlace reenviado con éxito! Revisa tu bandeja y spam.</span>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={handleResendConfirmation}
+                                        disabled={resending}
+                                        className="mt-3 inline-flex items-center gap-2 px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                                    >
+                                        {resending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Reenviando...</> : <><Mail className="w-3.5 h-3.5" /> Reenviar enlace de confirmación</>}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 )}
 

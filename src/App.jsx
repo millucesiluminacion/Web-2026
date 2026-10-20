@@ -70,6 +70,7 @@ function App() {
             <Route path="/" element={<MainLayout />}>
               <Route index element={<HomePage />} />
               <Route path="catalogo" element={<ProductListing />} />
+              <Route path="productos" element={<Navigate to="/catalogo" replace />} />
               <Route path="search" element={<Navigate to="/catalogo" replace />} />
               <Route path="product/:slug" element={<ProductDetail />} />
               <Route path="cart" element={<Cart />} />

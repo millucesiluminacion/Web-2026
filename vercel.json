@@ -21,6 +21,11 @@
   ],
   "redirects": [
     {
+      "source": "/productos",
+      "destination": "/catalogo",
+      "permanent": true
+    },
+    {
       "source": "/tienda/ols/products/:slug",
       "destination": "/product/:slug",
       "permanent": true
