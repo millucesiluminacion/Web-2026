@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { sendServerPurchaseEvent } from './_lib/ga4-server.js';
 
 export const config = {
     api: { bodyParser: true }
@@ -134,6 +135,10 @@ export default async function handler(req, res) {
                             updated_at: new Date().toISOString()
                         })
                         .eq('id', orderId);
+
+                    sendServerPurchaseEvent(supabase, orderId).catch(err => {
+                        console.warn('[PayPal Capture] Error triggering GA4 server purchase:', err);
+                    });
                 }
 
                 return res.status(200).json({ success: true, capture: captureData });
@@ -209,8 +214,8 @@ export default async function handler(req, res) {
                     brand_name: 'Mil Luces',
                     locale: 'es-ES',
                     user_action: 'PAY_NOW',
-                    return_url: `${baseUrl}/cart?paypal=success`,
-                    cancel_url: `${baseUrl}/cart?paypal=cancel`,
+                    return_url: `${baseUrl}/cart?paypal=success${orderId ? `&order=${orderId}` : ''}`,
+                    cancel_url: `${baseUrl}/cart?paypal=cancel${orderId ? `&order=${orderId}` : ''}`,
                 },
             }),
         });

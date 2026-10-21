@@ -130,6 +130,68 @@ export default async function handler(req, res) {
         // Variables consolidadas (las enviadas por el caller tienen prioridad sobre branding)
         const consolidatedVars = { ...defaultBranding, ...(variables || {}) };
 
+        // Procesamiento inteligente de variables para order_status_update y estados de pedido
+        if (templateKey === 'order_status_update' || consolidatedVars.status) {
+            const rawStatus = String(consolidatedVars.status || '').toUpperCase();
+            const statusMap = {
+                'PENDING': { title: 'Tu pedido ha sido recibido', label: 'Pendiente de Pago', desc: 'Tu pedido está registrado y a la espera de la confirmación del pago para iniciar su preparación.', color: '#d97706' },
+                'AWAITING_PAYMENT': { title: 'Esperando Pago', label: 'Pendiente de Pago', desc: 'Estamos a la espera de recibir la confirmación de pago para proceder al envío.', color: '#d97706' },
+                'PAID': { title: '¡Pago Confirmado!', label: 'Pago Confirmado', desc: 'Hemos recibido tu pago con éxito. Tu pedido entra directamente a nuestra cola de preparación en almacén.', color: '#059669' },
+                'PROCESSING': { title: 'Tu pedido se está preparando', label: 'En Preparación', desc: 'Nuestro equipo de almacén está empaquetando con mimo tus luminarias y preparando el envío.', color: '#2563eb' },
+                'READY_TO_SHIP': { title: 'Tu pedido está listo', label: 'Listo para Envío', desc: 'Tus productos ya están embalados y protegidos, esperando la recogida de la empresa de transporte.', color: '#4f46e5' },
+                'SHIPPED': { title: '¡Tu pedido ya está en camino!', label: 'Enviado — En Reparto', desc: '¡Buenas noticias! Tu paquete ha salido de nuestras instalaciones y se encuentra viajando hacia tu dirección.', color: '#1a3a8f' },
+                'IN_TRANSIT': { title: 'Tu pedido está en tránsito', label: 'En Tránsito', desc: 'El transportista está gestionando la entrega de tu pedido.', color: '#0284c7' },
+                'DELIVERED': { title: '¡Pedido Entregado!', label: 'Entregado con Éxito', desc: 'Tu pedido ha sido entregado en la dirección indicada. Esperamos que disfrutes de tu nueva iluminación. ¡Muchas gracias por tu confianza!', color: '#059669' },
+                'CANCELLED': { title: 'Pedido Cancelado', label: 'Cancelado', desc: 'El pedido ha sido cancelado. Si tienes cualquier consulta o necesitas asistencia, contacta con nosotros.', color: '#dc2626' },
+                'RETURNED': { title: 'Devolución Gestionada', label: 'Devuelto / Reembolsado', desc: 'Hemos procesado la devolución y el correspondiente abono de tu pedido.', color: '#64748b' }
+            };
+
+            const info = statusMap[rawStatus] || {
+                title: 'Tu pedido ha sido actualizado',
+                label: consolidatedVars.status || 'Actualizado',
+                desc: 'El estado de tu pedido ha sido actualizado.',
+                color: '#1a3a8f'
+            };
+
+            if (!consolidatedVars.status_title) consolidatedVars.status_title = info.title;
+            if (!consolidatedVars.status_label) consolidatedVars.status_label = info.label;
+            if (!consolidatedVars.status_description) consolidatedVars.status_description = info.desc;
+            if (!consolidatedVars.status_color) consolidatedVars.status_color = info.color;
+            if (statusMap[rawStatus]) {
+                consolidatedVars.status = info.label;
+            }
+
+            // Tracking HTML generation
+            if (!consolidatedVars.tracking_html) {
+                const carrier = consolidatedVars.tracking_carrier || consolidatedVars.carrier || '';
+                const trackingNumber = consolidatedVars.tracking_number || consolidatedVars.tracking || '';
+                const trackingUrl = consolidatedVars.tracking_url || '';
+
+                if (carrier || trackingNumber || trackingUrl) {
+                    consolidatedVars.tracking_html = `
+                    <div style="margin:28px 0;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:24px;text-align:center;">
+                        <p style="margin:0 0 6px 0;font-size:11px;font-weight:800;color:#64748b;letter-spacing:2px;text-transform:uppercase;">
+                            🚚 Información de Envío y Transporte
+                        </p>
+                        ${carrier ? `<p style="margin:0 0 6px 0;font-size:17px;font-weight:900;color:#0f172a;">${carrier}</p>` : ''}
+                        ${trackingNumber ? `<p style="margin:0 0 16px 0;font-size:13px;color:#475569;">Localizador / Seguimiento: <strong style="font-family:monospace;color:#0f172a;font-size:14px;background:#e2e8f0;padding:3px 10px;border-radius:6px;letter-spacing:1px;">${trackingNumber}</strong></p>` : '<div style="height:12px;"></div>'}
+                        ${trackingUrl ? `
+                        <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin:16px auto 0 auto;">
+                          <tr>
+                            <td align="center" bgcolor="#1a3a8f" style="border-radius:10px;background-color:#1a3a8f;">
+                              <a href="${trackingUrl}" target="_blank" style="display:inline-block;padding:14px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:13px;font-weight:800;color:#ffffff !important;text-decoration:none;border-radius:10px;background-color:#1a3a8f;border:1px solid #1a3a8f;letter-spacing:0.5px;">
+                                Rastrear mi paquete en tiempo real →
+                              </a>
+                            </td>
+                          </tr>
+                        </table>` : ''}
+                    </div>`;
+                } else {
+                    consolidatedVars.tracking_html = '';
+                }
+            }
+        }
+
         // Interceptor de Plantillas Avanzadas
         if (templateKey) {
             console.log(`[send-email] Autogenerando correo con templateKey: ${templateKey}`);
@@ -155,13 +217,15 @@ export default async function handler(req, res) {
                         rawBody = rawBody.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
                     });
 
-                    // Renderizar Markdown
+                    // Renderizar Markdown solo si es texto plano / markdown no HTML
                     let bodyHtml = rawBody;
-                    try {
-                        const { marked } = await import('marked');
-                        bodyHtml = marked.parse(rawBody);
-                    } catch (e) {
-                        console.warn('[send-email] Error compilando markdown:', e);
+                    if (!rawBody.trim().startsWith('<') && !rawBody.includes('</div>')) {
+                        try {
+                            const { marked } = await import('marked');
+                            bodyHtml = marked.parse(rawBody);
+                        } catch (e) {
+                            console.warn('[send-email] Error compilando markdown:', e);
+                        }
                     }
 
                     // Envolver en master_layout (Layout Maestro)

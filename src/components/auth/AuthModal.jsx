@@ -89,7 +89,7 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
         }
 
         try {
-            const { error: signUpError } = await supabase.auth.signUp({
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
                 email: regEmail,
                 password: regPassword,
                 options: {
@@ -105,26 +105,28 @@ export function AuthModal({ isOpen, onClose, defaultTab = 'login', defaultType =
             });
             if (signUpError) throw signUpError;
 
-            // Trigger Welcome Email logic via System Key
-            try {
-                await fetch('/api/send-email', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY
-                    },
-                    body: JSON.stringify({
-                        to: regEmail,
-                        templateKey: 'welcome',
-                        variables: {
-                            name: regFullName,
-                            site_name: 'Mil Luces Iluminación',
-                            user_type: userType === 'profesional' ? 'Profesional' : 'Particular'
-                        }
-                    })
-                });
-            } catch (emailErr) {
-                console.error('Error triggering welcome email:', emailErr);
+            // Solo enviar correo de bienvenida de inmediato si la sesión ya está activa (sin confirmación pendiente)
+            if (signUpData?.session) {
+                try {
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'x-api-key': import.meta.env.VITE_EMAIL_SYSTEM_KEY
+                        },
+                        body: JSON.stringify({
+                            to: regEmail,
+                            templateKey: 'welcome',
+                            variables: {
+                                name: regFullName,
+                                site_name: 'Mil Luces Iluminación',
+                                user_type: userType === 'profesional' ? 'Profesional' : 'Particular'
+                            }
+                        })
+                    });
+                } catch (emailErr) {
+                    console.error('Error triggering welcome email:', emailErr);
+                }
             }
 
             onClose();

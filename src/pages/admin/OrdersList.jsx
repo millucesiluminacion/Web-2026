@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 
-import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag, ExternalLink, Send } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
+import { CARRIER_PRESETS, buildTrackingUrl, parseOrderTracking, serializeOrderTracking, saveOrderTracking } from '../../lib/orderTrackingUtils';
 
 export default function OrdersList() {
     const location = useLocation();
@@ -22,6 +23,13 @@ export default function OrdersList() {
     const [adminNotes, setAdminNotes] = useState('');
     const [orderItems, setOrderItems] = useState([]);
     const [fetchingItems, setFetchingItems] = useState(false);
+
+    // Shipping & Tracking State
+    const [trackingCarrier, setTrackingCarrier] = useState('');
+    const [trackingNumber, setTrackingNumber] = useState('');
+    const [trackingUrl, setTrackingUrl] = useState('');
+    const [isSavingTracking, setIsSavingTracking] = useState(false);
+    const [shippingModalData, setShippingModalData] = useState(null);
 
     // Pagination state
     const [page, setPage] = useState(1);
@@ -72,6 +80,19 @@ export default function OrdersList() {
         const emailParam = params.get('email');
         setSearchQuery(emailParam || '');
     }, [location.search]);
+
+    async function syncOrderToGA4(orderId, action = 'sync-ga4') {
+        if (!orderId) return;
+        try {
+            await fetch('/api/create-payment-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action, orderId })
+            });
+        } catch (e) {
+            console.warn(`[GA4 Admin Sync] Failed to ${action} for order ${orderId}:`, e);
+        }
+    }
 
     useEffect(() => {
         fetchOrders();
@@ -601,6 +622,11 @@ export default function OrdersList() {
                 console.error('Error sending emails:', err);
             }
 
+            // Sincronizar con Google Analytics si el pedido nace confirmado, pagado o enviado
+            if (order?.id && (['PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED'].includes(order.status) || order.payment_status === 'PAID')) {
+                syncOrderToGA4(order.id, 'sync-ga4');
+            }
+
             setIsCreateModalOpen(false);
             fetchOrders();
         } catch (error) {
@@ -629,7 +655,11 @@ export default function OrdersList() {
 
     const handleViewOrder = (order) => {
         setSelectedOrder(order);
-        setAdminNotes(order.admin_notes || '');
+        const tracking = parseOrderTracking(order);
+        setTrackingCarrier(tracking.carrier || '');
+        setTrackingNumber(tracking.number || '');
+        setTrackingUrl(tracking.url || '');
+        setAdminNotes(tracking.cleanNotes || '');
         fetchOrderItems(order.id);
     };
 
@@ -664,16 +694,51 @@ export default function OrdersList() {
     async function saveAdminNotes() {
         if (!selectedOrder) return;
         try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ admin_notes: adminNotes })
-                .eq('id', selectedOrder.id);
-            if (error) throw error;
-            setOrders(orders.map(o => o.id === selectedOrder.id ? { ...o, admin_notes: adminNotes } : o));
-            setSelectedOrder({ ...selectedOrder, admin_notes: adminNotes });
+            const tracking = {
+                carrier: trackingCarrier,
+                number: trackingNumber,
+                url: trackingUrl
+            };
+            const result = await saveOrderTracking(supabase, selectedOrder.id, tracking, adminNotes);
+            const updated = { ...selectedOrder, admin_notes: result.serializedNotes || adminNotes };
+            setOrders(orders.map(o => o.id === selectedOrder.id ? updated : o));
+            setSelectedOrder(updated);
             alert('Notas guardadas');
         } catch (error) {
             alert('Error guardando notas: ' + error.message);
+        }
+    }
+
+    async function saveTrackingInfo(notify = false) {
+        if (!selectedOrder) return;
+        setIsSavingTracking(true);
+        try {
+            const tracking = {
+                carrier: trackingCarrier,
+                number: trackingNumber,
+                url: trackingUrl
+            };
+            const result = await saveOrderTracking(supabase, selectedOrder.id, tracking, adminNotes);
+            const updated = {
+                ...selectedOrder,
+                tracking_carrier: trackingCarrier,
+                tracking_number: trackingNumber,
+                tracking_url: trackingUrl,
+                admin_notes: result.serializedNotes || selectedOrder.admin_notes
+            };
+            setOrders(orders.map(o => o.id === selectedOrder.id ? updated : o));
+            setSelectedOrder(updated);
+
+            if (notify) {
+                await sendStatusUpdateEmail(updated, selectedOrder.status, tracking);
+                alert('✅ Datos de seguimiento guardados y notificación enviada al cliente.');
+            } else {
+                alert('✅ Datos de seguimiento guardados correctamente.');
+            }
+        } catch (error) {
+            alert('Error guardando datos de envío: ' + error.message);
+        } finally {
+            setIsSavingTracking(false);
         }
     }
 
@@ -765,6 +830,14 @@ export default function OrdersList() {
 
             const { error } = await supabase.from('orders').update({ status: newStatus }).in('id', selectedOrders);
             if (error) throw error;
+
+            // Sincronizar con Google Analytics según el nuevo estado
+            if (['PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED'].includes(newStatus)) {
+                selectedOrders.forEach(orderId => syncOrderToGA4(orderId, 'sync-ga4'));
+            } else if (newStatus === 'CANCELLED' || newStatus === 'RETURNED') {
+                selectedOrders.forEach(orderId => syncOrderToGA4(orderId, 'refund-ga4'));
+            }
+
             setOrders(orders.map(o => selectedOrders.includes(o.id) ? { ...o, status: newStatus } : o));
             setSelectedOrders([]);
         } catch (error) {
@@ -786,9 +859,94 @@ export default function OrdersList() {
         }
     }
 
-    async function updateStatus(id, newStatus) {
+    async function sendStatusUpdateEmail(order, status, tracking = null) {
+        try {
+            const track = tracking || parseOrderTracking(order);
+            const emailKey = import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026';
+            const resp = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': emailKey
+                },
+                body: JSON.stringify({
+                    to: order.customer_email,
+                    templateKey: 'order_status_update',
+                    variables: {
+                        name: order.customer_name || 'Cliente',
+                        order_id: order.id.slice(0, 8).toUpperCase(),
+                        status: status,
+                        tracking_carrier: track.carrier,
+                        tracking_number: track.number,
+                        tracking_url: track.url,
+                        site_name: 'Mil Luces Iluminación'
+                    }
+                })
+            });
+            console.log('[OrdersList] Status Update Email:', resp.status);
+            return resp.ok;
+        } catch (emailErr) {
+            console.error('Error triggering status update email:', emailErr);
+            return false;
+        }
+    }
+
+    async function handleConfirmShipping() {
+        if (!shippingModalData) return;
+        const { order, carrier, trackingNumber, trackingUrl, notifyCustomer } = shippingModalData;
+        try {
+            const tracking = { carrier, number: trackingNumber, url: trackingUrl };
+            const result = await saveOrderTracking(supabase, order.id, tracking, order.admin_notes, 'SHIPPED');
+
+            if (notifyCustomer) {
+                await sendStatusUpdateEmail(order, 'SHIPPED', tracking);
+            }
+
+            // Sincronizar con Google Analytics como venta confirmada / enviada
+            syncOrderToGA4(order.id, 'sync-ga4');
+
+            const updated = {
+                ...order,
+                status: 'SHIPPED',
+                tracking_carrier: carrier,
+                tracking_number: trackingNumber,
+                tracking_url: trackingUrl,
+                admin_notes: result.serializedNotes || order.admin_notes
+            };
+
+            setOrders(orders.map(o => o.id === order.id ? updated : o));
+            if (selectedOrder?.id === order.id) {
+                setSelectedOrder(updated);
+                setTrackingCarrier(carrier);
+                setTrackingNumber(trackingNumber);
+                setTrackingUrl(trackingUrl);
+            }
+            setShippingModalData(null);
+            alert('✅ Pedido marcado como Enviado correctamente.');
+        } catch (err) {
+            alert('Error al confirmar envío: ' + err.message);
+        }
+    }
+
+    async function updateStatus(id, newStatus, trackingOverride = null, skipModal = false) {
         try {
             const currentOrder = orders.find(o => o.id === id);
+            if (!currentOrder) return;
+
+            // Si se pasa a SHIPPED y no venimos del modal, abrir modal para pedir tracking
+            if (newStatus === 'SHIPPED' && !skipModal) {
+                const existing = parseOrderTracking(currentOrder);
+                const defaultCarrier = existing.carrier || (currentOrder.shipping_method === 'pickup' ? 'Recogida en Tienda (Showroom)' : 'Correos Express');
+                const defaultNum = existing.number || '';
+                setShippingModalData({
+                    order: currentOrder,
+                    carrier: defaultCarrier,
+                    trackingNumber: defaultNum,
+                    trackingUrl: existing.url || (defaultNum ? buildTrackingUrl(defaultCarrier, defaultNum) : ''),
+                    notifyCustomer: true
+                });
+                return;
+            }
 
             // Restore stock on cancellation/return
             if (currentOrder && (newStatus === 'CANCELLED' || newStatus === 'RETURNED') &&
@@ -812,32 +970,14 @@ export default function OrdersList() {
             if (error) throw error;
 
             // Trigger Status Update Email
-            try {
-                const emailKey = import.meta.env.VITE_EMAIL_SYSTEM_KEY || 'MilLucesSeguro2026';
-                const resp = await fetch('/api/send-email', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': emailKey
-                    },
-                    body: JSON.stringify({
-                        to: currentOrder.customer_email,
-                        templateKey: 'order_status_update',
-                        variables: {
-                            name: currentOrder.customer_name || 'Cliente',
-                            order_id: id.slice(0, 8).toUpperCase(),
-                            status: newStatus,
-                            site_name: 'Mil Luces Iluminación'
-                        }
-                    })
-                });
-                console.log('[OrdersList] Status Update Email:', resp.status);
-                if (!resp.ok) {
-                    const err = await resp.json().catch(() => ({}));
-                    console.error('[OrdersList] Email Error:', err);
-                }
-            } catch (emailErr) {
-                console.error('Error triggering status update email:', emailErr);
+            const tracking = trackingOverride || parseOrderTracking(currentOrder);
+            await sendStatusUpdateEmail(currentOrder, newStatus, tracking);
+
+            // Sincronizar con Google Analytics según el nuevo estado
+            if (['PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED'].includes(newStatus)) {
+                syncOrderToGA4(id, 'sync-ga4');
+            } else if (newStatus === 'CANCELLED' || newStatus === 'RETURNED') {
+                syncOrderToGA4(id, 'refund-ga4');
             }
 
             setOrders(orders.map(o => o.id === id ? { ...o, status: newStatus } : o));
@@ -1364,6 +1504,119 @@ export default function OrdersList() {
                                                     <p className="text-xs font-bold text-brand-carbon italic">{selectedOrder.notes}</p>
                                                 </div>
                                             )}
+                                        </div>
+                                    </section>
+
+                                    <section>
+                                        <div className="flex items-center justify-between mb-8">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center text-primary shadow-sm border border-primary/20">
+                                                    <Truck className="w-5 h-5" />
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit">Envío y Seguimiento</h3>
+                                                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none mt-0.5">Empresa y enlace para el cliente</p>
+                                                </div>
+                                            </div>
+                                            {trackingUrl && (
+                                                <a
+                                                    href={trackingUrl}
+                                                    target="_blank"
+                                                    rel="noreferrer"
+                                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                                                >
+                                                    <ExternalLink className="w-3.5 h-3.5" /> Probar enlace
+                                                </a>
+                                            )}
+                                        </div>
+                                        <div className="bg-gray-50/50 p-8 rounded-[2rem] border border-gray-100 font-outfit space-y-4">
+                                            <div>
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Empresa de Transporte / Agencia</label>
+                                                <select
+                                                    value={CARRIER_PRESETS.some(c => c.name === trackingCarrier) ? trackingCarrier : (trackingCarrier ? 'custom' : '')}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        if (val === 'custom') {
+                                                            setTrackingCarrier('');
+                                                        } else {
+                                                            setTrackingCarrier(val);
+                                                            if (trackingNumber) {
+                                                                const genUrl = buildTrackingUrl(val, trackingNumber);
+                                                                if (genUrl) setTrackingUrl(genUrl);
+                                                            }
+                                                        }
+                                                    }}
+                                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-brand-carbon mb-2"
+                                                >
+                                                    <option value="">-- Seleccionar Agencia Habitual --</option>
+                                                    {CARRIER_PRESETS.map(c => (
+                                                        <option key={c.id} value={c.name}>{c.name}</option>
+                                                    ))}
+                                                </select>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Nombre de la agencia (ej. GLS, SEUR, Tipsa...)"
+                                                    value={trackingCarrier}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value;
+                                                        setTrackingCarrier(val);
+                                                        if (trackingNumber && !trackingUrl) {
+                                                            const genUrl = buildTrackingUrl(val, trackingNumber);
+                                                            if (genUrl) setTrackingUrl(genUrl);
+                                                        }
+                                                    }}
+                                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-brand-carbon"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Nº de Seguimiento / Localizador</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Ej. ES0987654321"
+                                                    value={trackingNumber}
+                                                    onChange={(e) => {
+                                                        const num = e.target.value;
+                                                        setTrackingNumber(num);
+                                                        if (trackingCarrier) {
+                                                            const genUrl = buildTrackingUrl(trackingCarrier, num);
+                                                            if (genUrl) setTrackingUrl(genUrl);
+                                                        }
+                                                    }}
+                                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-mono font-bold text-brand-carbon"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Enlace Web de Seguimiento</label>
+                                                <input
+                                                    type="url"
+                                                    placeholder="https://..."
+                                                    value={trackingUrl}
+                                                    onChange={(e) => setTrackingUrl(e.target.value)}
+                                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold text-brand-carbon"
+                                                />
+                                                <p className="text-[8px] text-gray-400 mt-1 font-bold">El cliente verá un botón directo para rastrear su paquete con este enlace.</p>
+                                            </div>
+
+                                            <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                                                <button
+                                                    type="button"
+                                                    disabled={isSavingTracking}
+                                                    onClick={() => saveTrackingInfo(false)}
+                                                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50"
+                                                >
+                                                    {isSavingTracking ? 'Guardando...' : 'Guardar Datos'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    disabled={isSavingTracking}
+                                                    onClick={() => saveTrackingInfo(true)}
+                                                    className="flex-1 px-4 py-2.5 bg-brand-carbon hover:bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 disabled:opacity-50 shadow-md shadow-brand-carbon/10"
+                                                >
+                                                    <Send className="w-3.5 h-3.5" /> Guardar y Notificar
+                                                </button>
+                                            </div>
                                         </div>
                                     </section>
 
@@ -2200,6 +2453,116 @@ export default function OrdersList() {
                             Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
                             milluces@millucesiluminacion.com · +34 917 654 062
                         </p>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* Modal de Envío y Seguimiento al cambiar a SHIPPED */}
+            {shippingModalData && createPortal(
+                <div className="fixed inset-0 bg-brand-carbon/60 backdrop-blur-md z-[250] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-luxury overflow-hidden p-8 font-outfit border border-gray-100 animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between pb-6 border-b border-gray-100">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary/10 text-primary rounded-2xl flex items-center justify-center">
+                                    <Truck className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-brand-carbon uppercase italic">Marcar Pedido como Enviado</h3>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ref: #{shippingModalData.order.id.slice(0, 8).toUpperCase()}</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShippingModalData(null)}
+                                className="p-2 hover:bg-gray-100 rounded-full text-gray-400 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <div className="py-6 space-y-4">
+                            <div className="p-4 bg-blue-50/60 rounded-2xl border border-blue-100 text-xs">
+                                <span className="font-bold text-blue-900 block">Cliente: {shippingModalData.order.customer_name}</span>
+                                <span className="text-blue-700">{shippingModalData.order.customer_email}</span>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Empresa de Transporte</label>
+                                <select
+                                    value={shippingModalData.carrier}
+                                    onChange={(e) => {
+                                        const c = e.target.value;
+                                        const genUrl = buildTrackingUrl(c, shippingModalData.trackingNumber);
+                                        setShippingModalData({
+                                            ...shippingModalData,
+                                            carrier: c,
+                                            trackingUrl: genUrl || shippingModalData.trackingUrl
+                                        });
+                                    }}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-brand-carbon focus:ring-2 focus:ring-primary/20 outline-none"
+                                >
+                                    {CARRIER_PRESETS.map(c => (
+                                        <option key={c.id} value={c.name}>{c.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Nº de Seguimiento / Localizador</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej. ES01928374"
+                                    value={shippingModalData.trackingNumber}
+                                    onChange={(e) => {
+                                        const num = e.target.value;
+                                        const genUrl = buildTrackingUrl(shippingModalData.carrier, num);
+                                        setShippingModalData({
+                                            ...shippingModalData,
+                                            trackingNumber: num,
+                                            trackingUrl: genUrl || shippingModalData.trackingUrl
+                                        });
+                                    }}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-mono font-bold text-brand-carbon focus:ring-2 focus:ring-primary/20 outline-none"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">Enlace Web de Seguimiento</label>
+                                <input
+                                    type="url"
+                                    placeholder="https://..."
+                                    value={shippingModalData.trackingUrl}
+                                    onChange={(e) => setShippingModalData({ ...shippingModalData, trackingUrl: e.target.value })}
+                                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-brand-carbon focus:ring-2 focus:ring-primary/20 outline-none"
+                                />
+                                <p className="text-[9px] text-gray-400 mt-1">El cliente recibirá un botón en su correo para rastrear el paquete en esta dirección.</p>
+                            </div>
+
+                            <label className="flex items-center gap-3 p-3.5 bg-gray-50 rounded-2xl border border-gray-100 cursor-pointer hover:bg-gray-100/70 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={shippingModalData.notifyCustomer}
+                                    onChange={(e) => setShippingModalData({ ...shippingModalData, notifyCustomer: e.target.checked })}
+                                    className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300"
+                                />
+                                <span className="text-xs font-bold text-brand-carbon">Enviar correo de notificación con botón de seguimiento</span>
+                            </label>
+                        </div>
+
+                        <div className="flex gap-3 pt-4 border-t border-gray-100">
+                            <button
+                                onClick={() => setShippingModalData(null)}
+                                className="flex-1 py-3 px-4 border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmShipping}
+                                className="flex-1 py-3 px-4 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
+                            >
+                                <Truck className="w-4 h-4" /> Confirmar Envío
+                            </button>
+                        </div>
                     </div>
                 </div>,
                 document.body

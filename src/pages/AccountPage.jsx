@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
+import { parseOrderTracking } from '../lib/orderTrackingUtils';
 
 export default function AccountPage() {
     const { user, profile, signOut, isPartner, userTier, refreshProfile } = useAuth();
@@ -338,6 +339,27 @@ export default function AccountPage() {
                                                         <p className="text-lg font-black uppercase italic text-brand-carbon tracking-tight">
                                                             {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
                                                         </p>
+                                                        {(() => {
+                                                            const track = parseOrderTracking(order);
+                                                            if (!track.carrier && !track.number && !track.url) return null;
+                                                            return (
+                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                    <span className="text-[10px] font-bold text-gray-500 uppercase">
+                                                                        🚚 {track.carrier || 'Envío'}{track.number ? `: #${track.number}` : ''}
+                                                                    </span>
+                                                                    {track.url && (
+                                                                        <a
+                                                                            href={track.url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="text-[10px] font-black text-primary uppercase underline hover:text-brand-carbon transition-colors"
+                                                                        >
+                                                                            Seguir mi paquete →
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
 

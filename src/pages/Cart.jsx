@@ -86,10 +86,11 @@ export default function Cart() {
     // Verificar si venimos de un pago exitoso (incluyendo redirecciones como Bizum o 3DSecure)
     useEffect(() => {
         const paymentStatus = searchParams.get('payment');
+        const paypalStatus = searchParams.get('paypal');
         const orderId = searchParams.get('order');
         const paymentIntentId = searchParams.get('payment_intent');
 
-        if ((paymentStatus === 'success' || paymentIntentId) && orderId) {
+        if ((paymentStatus === 'success' || paymentIntentId || paypalStatus === 'success') && orderId) {
             async function confirmRedirectPayment() {
                 let confirmedOrder = null;
                 try {
@@ -716,7 +717,8 @@ export default function Cart() {
             if (formData.paymentMethod === 'transfer' || formData.paymentMethod === 'in_store') {
                 setOrderRef(order.id.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
-                trackPurchase(order, cart, effectiveTotalPrice, effectiveShippingCost);
+                // Para pedidos por transferencia / en tienda (PENDING), la compra se registrará en Google Analytics
+                // de forma segura en cuanto el pedido pase a CONFIRMED, SHIPPED o PAID en el panel admin.
                 clearCart();
                 return;
             }

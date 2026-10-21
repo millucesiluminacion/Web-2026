@@ -120,13 +120,15 @@ export default async function handler(req, res) {
             rawBody = rawBody.replace(new RegExp(`\\{${key}\\}`, 'g'), val);
         });
 
-        // Renderizar Markdown si aplica
+        // Renderizar Markdown si aplica (solo si no es ya HTML)
         let bodyHtml = rawBody;
-        try {
-            const { marked } = await import('marked');
-            bodyHtml = marked.parse(rawBody);
-        } catch (e) {
-            console.warn('[auth/recover] Marked parse error:', e.message);
+        if (!rawBody.trim().startsWith('<') && !rawBody.includes('</div>')) {
+            try {
+                const { marked } = await import('marked');
+                bodyHtml = marked.parse(rawBody);
+            } catch (e) {
+                console.warn('[auth/recover] Marked parse error:', e.message);
+            }
         }
 
         // Envolver en master_layout si está configurado

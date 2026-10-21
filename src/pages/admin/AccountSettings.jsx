@@ -780,8 +780,23 @@ export default function AccountSettings() {
 
                         const mockData = {
                             name: 'Juan Pérez',
-                            order_id: '#100042',
-                            status: 'Enviado con Correos Express (Tracking: ES8291)',
+                            order_id: '5E3874A6',
+                            status: 'Enviado — En Reparto',
+                            status_title: '¡Tu pedido ya está en camino!',
+                            status_label: 'Enviado — En Reparto',
+                            status_description: '¡Buenas noticias! Tu paquete ha salido de nuestras instalaciones y se encuentra viajando hacia tu dirección de entrega.',
+                            status_color: '#1a3a8f',
+                            tracking_carrier: 'Correos Express',
+                            tracking_number: 'ES092837461',
+                            tracking_url: 'https://www.correosexpress.com/localizador-envios?envio=ES092837461',
+                            tracking_html: `<div style="margin:28px 0;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:14px;padding:24px;text-align:center;">
+                                <p style="margin:0 0 6px 0;font-size:11px;font-weight:800;color:#64748b;letter-spacing:2px;text-transform:uppercase;">🚚 Información de Envío y Transporte</p>
+                                <p style="margin:0 0 6px 0;font-size:17px;font-weight:900;color:#0f172a;">Correos Express</p>
+                                <p style="margin:0 0 16px 0;font-size:13px;color:#475569;">Localizador / Seguimiento: <strong style="font-family:monospace;color:#0f172a;font-size:14px;background:#e2e8f0;padding:3px 10px;border-radius:6px;letter-spacing:1px;">ES092837461</strong></p>
+                                <a href="https://www.correosexpress.com" target="_blank" style="display:inline-block;background:#1a3a8f;color:#ffffff;padding:14px 28px;border-radius:10px;font-weight:800;text-decoration:none;font-size:13px;letter-spacing:0.5px;box-shadow:0 4px 14px rgba(26,58,143,0.3);">
+                                    Rastrear mi paquete en tiempo real →
+                                </a>
+                            </div>`,
                             site_name: branding?.site_name || 'Mil Luces',
                             contact_email: branding?.contact_email || 'milluces@millucesiluminacion.com',
                             support_phone: branding?.support_phone || '917654062',
@@ -803,7 +818,8 @@ export default function AccountSettings() {
                                     htmlContent = rawBody.replace('{body}', '<div style="padding:24px;background:#f9fafb;border:2px dashed #cbd5e1;border-radius:12px;text-align:center;color:#64748b;font-weight:600;font-size:14px;">[Aquí se inserta el contenido específico de cada correo]</div>');
                                 } else {
                                     const master = emailTemplates['master_layout']?.body || '{body}';
-                                    let wrapped = master.replace('{body}', () => marked.parse(rawBody));
+                                    const bodyContent = (!rawBody.trim().startsWith('<') && !rawBody.includes('</div>')) ? marked.parse(rawBody) : rawBody;
+                                    let wrapped = master.replace('{body}', () => bodyContent);
                                     Object.keys(mockData).forEach(key => {
                                         wrapped = wrapped.replace(new RegExp(`\\{${key}\\}`, 'g'), mockData[key]);
                                     });
@@ -876,7 +892,7 @@ export default function AccountSettings() {
                                                 <p className="text-[9px] text-gray-400 font-bold uppercase tracking-tight mb-4">
                                                     Variables soportadas:
                                                     <span className="text-primary ml-1">&#123;name&#125;, &#123;site_name&#125;, &#123;contact_email&#125;, &#123;support_phone&#125;, &#123;logo_url&#125;, &#123;site_url&#125;</span>
-                                                    {selectedTemplate.includes('order') && <span className="text-primary ml-1">, &#123;order_id&#125;, &#123;status&#125;</span>}
+                                                    {selectedTemplate.includes('order') && <span className="text-primary ml-1">, &#123;order_id&#125;, &#123;status&#125;, &#123;status_title&#125;, &#123;status_label&#125;, &#123;status_description&#125;, &#123;tracking_carrier&#125;, &#123;tracking_number&#125;, &#123;tracking_url&#125;, &#123;tracking_html&#125;</span>}
                                                     {selectedTemplate === 'password_reset' && <span className="text-primary ml-1">, &#123;reset_url&#125;</span>}
                                                     {selectedTemplate === 'master_layout' && <span className="font-black text-brand-carbon ml-1">¡IMPRESCINDIBLE INCLUIR &#123;body&#125;!</span>}
                                                 </p>

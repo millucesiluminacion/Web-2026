@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
-import { sendServerPurchaseEvent } from './_lib/ga4-server.js';
+import { sendServerPurchaseEvent, sendServerRefundEvent } from './_lib/ga4-server.js';
 
 export const config = {
     api: { bodyParser: true }
@@ -122,6 +122,18 @@ export default async function handler(req, res) {
             });
 
             return res.status(200).json({ success: true, order: updatedOrder });
+        }
+
+        // SINCRONIZAR COMPRA A GA4 (DESDE PANEL ADMIN O CONFIRMACIÓN)
+        if (body.action === 'sync-ga4') {
+            await sendServerPurchaseEvent(supabase, orderId);
+            return res.status(200).json({ success: true, message: 'Event sent to GA4' });
+        }
+
+        // ANULAR / REEMBOLSAR COMPRA EN GA4
+        if (body.action === 'refund-ga4') {
+            await sendServerRefundEvent(supabase, orderId);
+            return res.status(200).json({ success: true, message: 'Refund sent to GA4' });
         }
 
         // SERVER-SIDE PRICE VERIFICATION
