@@ -243,16 +243,23 @@
 
   #invoice-print-header,
   #invoice-print-customer,
+  #invoice-print-kpis,
   #invoice-print-totals,
   #invoice-print-footer {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
 
-  #invoice-print .grid {
+  #invoice-print-customer {
     display: grid !important;
     grid-template-columns: 1fr 1fr !important;
     gap: 2.5rem !important;
+  }
+
+  #invoice-print-kpis {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 0.75rem !important;
   }
 
   /* Multi-page table handling */

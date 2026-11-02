@@ -32,9 +32,26 @@ import {
 } from 'recharts';
 
 const COLORS = ['#111827', '#EAB308', '#3B82F6', '#10B981', '#6366F1', '#8B5CF6', '#EC4899'];
+const MONTH_NAMES = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+];
+
+const pad2 = (n) => String(n).padStart(2, '0');
+const formatLocalYMD = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const formatLocalYM = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
+const parseLocalStart = (ymd) => {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(y, m - 1, d, 0, 0, 0, 0);
+};
+const parseLocalEnd = (ymd) => {
+    const [y, m, d] = ymd.split('-').map(Number);
+    return new Date(y, m - 1, d, 23, 59, 59, 999);
+};
 
 export default function Statistics() {
-    const [loading, setLoading] = useState(true);
+    const [initialLoading, setInitialLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [stats, setStats] = useState({
         totalSales: 0,
         totalOrders: 0,
@@ -49,12 +66,22 @@ export default function Statistics() {
         comparison: { revenue: 0, orders: 0 },
         topClients: [],
         projection: 0,
+        projectionSub: 'Estimado lineal',
         rawOrders: [],
         rawCustomers: [],
         rawItems: []
     });
     const [timeRange, setTimeRange] = useState('MONTH'); // MONTH, YEAR, ALL, CUSTOM
-    const [customRange, setCustomRange] = useState({ start: '', end: '' });
+    const [selectedMonth, setSelectedMonth] = useState(() => new Date().getMonth());
+    const [selectedYear, setSelectedYear] = useState(() => new Date().getFullYear());
+    const [customDraft, setCustomDraft] = useState(() => {
+        const now = new Date();
+        return {
+            start: formatLocalYMD(new Date(now.getFullYear(), now.getMonth(), 1)),
+            end: formatLocalYMD(now)
+        };
+    });
+    const [appliedCustomRange, setAppliedCustomRange] = useState({ start: '', end: '' });
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [drillDown, setDrillDown] = useState(null); // { type, data, title }
     const [allProducts, setAllProducts] = useState([]);
@@ -68,6 +95,9 @@ export default function Statistics() {
         useDaily: false
     });
 
+    const currentYear = new Date().getFullYear();
+    const availableYears = Array.from({ length: 4 }, (_, i) => currentYear - i);
+
     useEffect(() => {
         const fetchAllProducts = async () => {
             const { data } = await supabase.from('products').select('id, name').order('name');
@@ -76,25 +106,79 @@ export default function Statistics() {
         fetchAllProducts();
     }, []);
 
+    const handleSelectTimeRange = (nextRange) => {
+        if (nextRange === 'CUSTOM') {
+            let nextDraft = customDraft;
+            if (!appliedCustomRange.start && !appliedCustomRange.end) {
+                if (rawStats.startDate && rawStats.endDate) {
+                    const startD = new Date(rawStats.startDate);
+                    const endD = new Date(Math.min(new Date(rawStats.endDate).getTime(), Date.now()));
+                    nextDraft = {
+                        start: formatLocalYMD(startD),
+                        end: formatLocalYMD(endD)
+                    };
+                    setCustomDraft(nextDraft);
+                    setAppliedCustomRange(nextDraft);
+                } else {
+                    setAppliedCustomRange(customDraft);
+                }
+            }
+        }
+        setTimeRange(nextRange);
+    };
+
+    const handleApplyCustomRange = () => {
+        if (!customDraft.start && !customDraft.end) return;
+        let { start, end } = customDraft;
+        if (start && end && start > end) {
+            [start, end] = [end, start];
+            setCustomDraft({ start, end });
+        }
+        setAppliedCustomRange({ start, end });
+    };
+
     const fetchData = useCallback(async () => {
+        if (timeRange === 'CUSTOM' && !appliedCustomRange.start && !appliedCustomRange.end) {
+            setInitialLoading(false);
+            return;
+        }
+
         try {
-            setLoading(true);
+            setIsRefreshing(true);
 
             // Confirmed statuses for "Revenue"
             const confirmedStatuses = ['PAID', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'READY_TO_SHIP', 'PROCESSING'];
 
             // Time filters
-            let startDate, endDate;
+            let startDate = null;
+            let endDate = new Date().toISOString();
             const now = new Date();
-            endDate = new Date().toISOString();
+
+            let prevStartIso = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0).toISOString();
+            let prevEndIso = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
 
             if (timeRange === 'MONTH') {
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+                startDate = new Date(selectedYear, selectedMonth, 1, 0, 0, 0, 0).toISOString();
+                endDate = new Date(selectedYear, selectedMonth + 1, 0, 23, 59, 59, 999).toISOString();
+                prevStartIso = new Date(selectedYear, selectedMonth - 1, 1, 0, 0, 0, 0).toISOString();
+                prevEndIso = new Date(selectedYear, selectedMonth, 0, 23, 59, 59, 999).toISOString();
             } else if (timeRange === 'YEAR') {
-                startDate = new Date(now.getFullYear(), 0, 1).toISOString();
-            } else if (timeRange === 'CUSTOM' && customRange.start) {
-                startDate = new Date(customRange.start).toISOString();
-                if (customRange.end) endDate = new Date(customRange.end).toISOString();
+                startDate = new Date(selectedYear, 0, 1, 0, 0, 0, 0).toISOString();
+                endDate = new Date(selectedYear, 11, 31, 23, 59, 59, 999).toISOString();
+                prevStartIso = new Date(selectedYear - 1, 0, 1, 0, 0, 0, 0).toISOString();
+                prevEndIso = new Date(selectedYear - 1, 11, 31, 23, 59, 59, 999).toISOString();
+            } else if (timeRange === 'CUSTOM') {
+                if (appliedCustomRange.start) {
+                    startDate = parseLocalStart(appliedCustomRange.start).toISOString();
+                }
+                if (appliedCustomRange.end) {
+                    endDate = parseLocalEnd(appliedCustomRange.end).toISOString();
+                }
+                if (startDate && endDate) {
+                    const durationMs = Math.max(86400000, new Date(endDate).getTime() - new Date(startDate).getTime());
+                    prevEndIso = new Date(new Date(startDate).getTime() - 1).toISOString();
+                    prevStartIso = new Date(new Date(startDate).getTime() - durationMs - 1).toISOString();
+                }
             } else {
                 startDate = null; // ALL
             }
@@ -112,30 +196,38 @@ export default function Statistics() {
 
             // 2. Fetch Order Items for ALL orders in period
             const orderIds = orders?.map(o => o.id) || [];
-            const { data: orderItems } = await supabase
-                .from('order_items')
-                .select('quantity, product_name, product_id, order_id, unit_price')
-                .in('order_id', orderIds);
+            let orderItems = [];
+            if (orderIds.length > 0) {
+                const { data: itemsData } = await supabase
+                    .from('order_items')
+                    .select('quantity, product_name, product_id, order_id, unit_price')
+                    .in('order_id', orderIds);
+                orderItems = itemsData || [];
+            }
 
             // 3. Fetch Customers
             let customersQuery = supabase
                 .from('customers')
                 .select('id, created_at, full_name, email');
             if (startDate) customersQuery = customersQuery.gte('created_at', startDate);
+            if (endDate) customersQuery = customersQuery.lte('created_at', endDate);
             const { data: customers } = await customersQuery;
 
-            // 4. Comparison (vs Prev Month)
-            const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-            const prevMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
-            const { data: prevOrders } = await supabase.from('orders').select('total').in('status', confirmedStatuses).gte('created_at', prevMonthStart).lte('created_at', prevMonthEnd);
+            // 4. Comparison (vs Previous Equivalent Period)
+            const { data: prevOrders } = await supabase
+                .from('orders')
+                .select('total')
+                .in('status', confirmedStatuses)
+                .gte('created_at', prevStartIso)
+                .lte('created_at', prevEndIso);
             const prevRevenue = prevOrders?.reduce((acc, o) => acc + (o.total || 0), 0) || 0;
 
             const diffDays = startDate ? (new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24) : 999;
-            const useDaily = diffDays <= 31 && timeRange !== 'ALL';
+            const useDaily = (timeRange === 'MONTH' || diffDays <= 45) && timeRange !== 'ALL';
 
             setRawStats({
                 orders: orders || [],
-                items: orderItems || [],
+                items: orderItems,
                 customers: customers || [],
                 prevRevenue,
                 startDate,
@@ -146,15 +238,15 @@ export default function Statistics() {
         } catch (error) {
             console.error('Error fetching statistics:', error);
         } finally {
-            setLoading(false);
+            setInitialLoading(false);
+            setIsRefreshing(false);
         }
-    }, [timeRange, customRange]);
+    }, [timeRange, selectedMonth, selectedYear, appliedCustomRange]);
 
     // In-memory Processing Effect
     useEffect(() => {
-        const { orders: rawOrders, items: rawItems, customers: rawCustomers, prevRevenue, startDate, useDaily } = rawStats;
+        const { orders: rawOrders, items: rawItems, customers: rawCustomers, prevRevenue, startDate, endDate, useDaily } = rawStats;
 
-        // Use local now to avoid stale closure issues if needed, but here it's fine
         const now = new Date();
 
         let filteredOrders = [...rawOrders];
@@ -169,9 +261,8 @@ export default function Statistics() {
 
         const historyMap = {};
         filteredOrders.forEach(o => {
-            const dateKey = useDaily
-                ? new Date(o.created_at).toISOString().slice(0, 10)
-                : new Date(o.created_at).toISOString().slice(0, 7);
+            const d = new Date(o.created_at);
+            const dateKey = useDaily ? formatLocalYMD(d) : formatLocalYM(d);
 
             if (!historyMap[dateKey]) historyMap[dateKey] = { date: dateKey, sales: 0, orders: 0 };
 
@@ -190,14 +281,27 @@ export default function Statistics() {
         if (useDaily && startDate) {
             const filledHistory = [];
             const start = new Date(startDate);
-            const end = new Date(now);
-            let current = new Date(start);
-            while (current <= end) {
-                const key = current.toISOString().slice(0, 10);
-                filledHistory.push(historyMap[key] || { date: key, sales: 0, orders: 0 });
-                current.setDate(current.getDate() + 1);
+            const rawEnd = endDate ? new Date(endDate) : now;
+            const effectiveEnd = rawEnd > now ? now : rawEnd;
+
+            if (start <= effectiveEnd) {
+                let current = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                const lastDay = new Date(effectiveEnd.getFullYear(), effectiveEnd.getMonth(), effectiveEnd.getDate());
+                while (current <= lastDay) {
+                    const key = formatLocalYMD(current);
+                    filledHistory.push(historyMap[key] || { date: key, sales: 0, orders: 0 });
+                    current.setDate(current.getDate() + 1);
+                }
             }
             salesHistory = filledHistory;
+        } else if (!useDaily && timeRange === 'YEAR') {
+            const maxMonth = selectedYear === now.getFullYear() ? now.getMonth() : (selectedYear < now.getFullYear() ? 11 : -1);
+            const filledMonths = [];
+            for (let m = 0; m <= maxMonth; m++) {
+                const key = `${selectedYear}-${pad2(m + 1)}`;
+                filledMonths.push(historyMap[key] || { date: key, sales: 0, orders: 0 });
+            }
+            salesHistory = filledMonths;
         }
 
         const currentRevenue = filteredOrders.reduce((acc, o) => {
@@ -212,7 +316,9 @@ export default function Statistics() {
 
         const productStats = {};
         filteredItems.forEach(item => {
-            if (!productStats[item.product_name]) productStats[item.product_name] = { name: item.product_name, quantity: 0, revenue: 0 };
+            if (!productStats[item.product_name]) {
+                productStats[item.product_name] = { id: item.product_id, name: item.product_name, quantity: 0, revenue: 0 };
+            }
             productStats[item.product_name].quantity += item.quantity;
             productStats[item.product_name].revenue += item.quantity * item.unit_price;
         });
@@ -233,7 +339,7 @@ export default function Statistics() {
 
         const growthHistoryData = {};
         rawCustomers?.forEach(c => {
-            const day = new Date(c.created_at).toISOString().slice(0, 10);
+            const day = formatLocalYMD(new Date(c.created_at));
             growthHistoryData[day] = (growthHistoryData[day] || 0) + 1;
         });
         let cumCustomers = 0;
@@ -246,22 +352,46 @@ export default function Statistics() {
         filteredOrders.forEach(o => weekdayStats[new Date(o.created_at).getDay()]++);
         const ordersByDay = weekdayStats.map((count, i) => ({ day: dayNames[i], count }));
 
-        // Sales Projection (Always based on current month for "Proyección Mes")
-        const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        const currentMonthOrders = rawOrders.filter(o => o.created_at >= currentMonthStart);
-        let currentMonthRevenue = 0;
-        if (selectedProduct) {
-            const currentMonthItems = rawItems.filter(i => {
-                const order = rawOrders.find(o => o.id === i.order_id);
-                return i.product_id === selectedProduct && order && order.created_at >= currentMonthStart;
-            });
-            currentMonthRevenue = currentMonthItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
-        } else {
-            currentMonthRevenue = currentMonthOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-        }
+        // Sales Projection / Closed Month Handling
+        let projection = 0;
+        let projectionSub = 'Estimado lineal';
+        const isSelectedCurrentMonth = timeRange === 'MONTH' && selectedYear === now.getFullYear() && selectedMonth === now.getMonth();
+        const isSelectedPastMonth = timeRange === 'MONTH' && (
+            selectedYear < now.getFullYear() ||
+            (selectedYear === now.getFullYear() && selectedMonth < now.getMonth())
+        );
+        const isSelectedFutureMonth = timeRange === 'MONTH' && (
+            selectedYear > now.getFullYear() ||
+            (selectedYear === now.getFullYear() && selectedMonth > now.getMonth())
+        );
 
-        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-        const projection = now.getDate() > 0 ? (currentMonthRevenue / now.getDate()) * daysInMonth : 0;
+        if (isSelectedPastMonth) {
+            projection = currentRevenue;
+            projectionSub = `Cierre ${MONTH_NAMES[selectedMonth]}`;
+        } else if (isSelectedFutureMonth) {
+            projection = 0;
+            projectionSub = 'Mes no iniciado';
+        } else if (isSelectedCurrentMonth) {
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            projection = now.getDate() > 0 ? (currentRevenue / now.getDate()) * daysInMonth : 0;
+            projectionSub = 'Estimado lineal';
+        } else {
+            const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+            const currentMonthOrders = rawOrders.filter(o => o.created_at >= currentMonthStart);
+            let currentMonthRevenue = 0;
+            if (selectedProduct) {
+                const currentMonthItems = rawItems.filter(i => {
+                    const order = rawOrders.find(o => o.id === i.order_id);
+                    return i.product_id === selectedProduct && order && order.created_at >= currentMonthStart;
+                });
+                currentMonthRevenue = currentMonthItems.reduce((sum, i) => sum + (i.quantity * i.unit_price), 0);
+            } else {
+                currentMonthRevenue = currentMonthOrders.reduce((sum, o) => sum + (o.total || 0), 0);
+            }
+            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+            projection = now.getDate() > 0 ? (currentMonthRevenue / now.getDate()) * daysInMonth : 0;
+            projectionSub = 'Estimado lineal (mes actual)';
+        }
 
         setStats({
             totalSales: currentRevenue,
@@ -277,17 +407,23 @@ export default function Statistics() {
             comparison: { revenue: revenueDelta, orders: 0 },
             topClients,
             projection,
+            projectionSub,
             rawOrders: filteredOrders,
             rawCustomers: rawCustomers,
             rawItems: filteredItems
         });
-    }, [rawStats, selectedProduct]);
+    }, [rawStats, selectedProduct, timeRange, selectedMonth, selectedYear]);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    if (loading) {
+    const hasPendingCustomChanges = timeRange === 'CUSTOM' && (
+        customDraft.start !== appliedCustomRange.start ||
+        customDraft.end !== appliedCustomRange.end
+    );
+
+    if (initialLoading) {
         return (
             <div className="flex flex-col items-center justify-center py-40">
                 <Loader2 className="w-12 h-12 animate-spin text-primary/20 mb-4" />
@@ -304,7 +440,13 @@ export default function Statistics() {
                     <div className="flex items-center gap-3 mb-2">
                         <span className="text-[10px] font-black text-primary uppercase tracking-[.4em] font-outfit">Stats Suite v3.0</span>
                         <div className="h-px w-8 bg-primary/20"></div>
-                        <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest font-outfit ring-1 ring-emerald-500/20 px-2 py-0.5 rounded-full bg-emerald-500/5">Data Verified</span>
+                        {isRefreshing ? (
+                            <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-primary uppercase tracking-widest font-outfit ring-1 ring-primary/20 px-2.5 py-0.5 rounded-full bg-primary/5">
+                                <Loader2 className="w-3 h-3 animate-spin" /> Actualizando...
+                            </span>
+                        ) : (
+                            <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest font-outfit ring-1 ring-emerald-500/20 px-2 py-0.5 rounded-full bg-emerald-500/5">Data Verified</span>
+                        )}
                     </div>
                     <h1 className="text-2xl lg:text-3xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter font-outfit">
                         Centro de <span className="text-primary/40">Inteligencia</span>
@@ -315,14 +457,15 @@ export default function Statistics() {
                     {/* Time Range Selector */}
                     <div className="flex bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm overflow-x-auto whitespace-nowrap">
                         {[
-                            { label: 'Este Mes', value: 'MONTH' },
-                            { label: 'Este Año', value: 'YEAR' },
+                            { label: 'Por Mes', value: 'MONTH' },
+                            { label: 'Año', value: 'YEAR' },
                             { label: 'Todo', value: 'ALL' },
                             { label: 'Custom', value: 'CUSTOM' }
                         ].map((opt) => (
                             <button
                                 key={opt.value}
-                                onClick={() => setTimeRange(opt.value)}
+                                type="button"
+                                onClick={() => handleSelectTimeRange(opt.value)}
                                 className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${timeRange === opt.value ? 'bg-brand-carbon text-white shadow-lg' : 'text-gray-400 hover:text-brand-carbon'}`}
                             >
                                 {opt.label}
@@ -330,24 +473,78 @@ export default function Statistics() {
                         ))}
                     </div>
 
-                    {/* Custom Range Inputs */}
+                    {/* Month & Year Selector */}
+                    {timeRange === 'MONTH' && (
+                        <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+                            <Calendar className="w-3.5 h-3.5 text-primary ml-2.5 shrink-0" />
+                            <select
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                                className="text-[10px] font-black uppercase tracking-widest text-brand-carbon bg-transparent px-2.5 py-2 rounded-xl hover:bg-gray-50 outline-none cursor-pointer"
+                            >
+                                {MONTH_NAMES.map((name, idx) => (
+                                    <option key={name} value={idx}>{name}</option>
+                                ))}
+                            </select>
+                            <div className="h-4 w-px bg-gray-100" />
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                                className="text-[10px] font-black uppercase tracking-widest text-brand-carbon bg-transparent px-2.5 py-2 rounded-xl hover:bg-gray-50 outline-none cursor-pointer"
+                            >
+                                {availableYears.map((yr) => (
+                                    <option key={yr} value={yr}>{yr}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Year Selector when YEAR mode is active */}
+                    {timeRange === 'YEAR' && (
+                        <div className="flex items-center gap-1.5 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+                            <Calendar className="w-3.5 h-3.5 text-primary ml-2.5 shrink-0" />
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                                className="text-[10px] font-black uppercase tracking-widest text-brand-carbon bg-transparent px-3 py-2 rounded-xl hover:bg-gray-50 outline-none cursor-pointer"
+                            >
+                                {availableYears.map((yr) => (
+                                    <option key={yr} value={yr}>Año {yr}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {/* Custom Range Inputs (No premature reloads) */}
                     {timeRange === 'CUSTOM' && (
-                        <div className="flex items-center gap-2 bg-white p-1.5 rounded-2xl border border-gray-100 shadow-sm">
+                        <div className="flex items-center gap-2 bg-white p-1.5 pl-3 rounded-2xl border border-gray-100 shadow-sm">
                             <input
                                 type="date"
-                                value={customRange.start}
-                                onChange={(e) => setCustomRange({ ...customRange, start: e.target.value })}
-                                className="text-[10px] font-bold bg-transparent outline-none p-1"
+                                value={customDraft.start}
+                                onChange={(e) => setCustomDraft(prev => ({ ...prev, start: e.target.value }))}
+                                onKeyDown={(e) => e.key === 'Enter' && handleApplyCustomRange()}
+                                className="text-[10px] font-bold bg-transparent outline-none p-1 cursor-pointer"
                             />
                             <span className="text-gray-300">-</span>
                             <input
                                 type="date"
-                                value={customRange.end}
-                                onChange={(e) => setCustomRange({ ...customRange, end: e.target.value })}
-                                className="text-[10px] font-bold bg-transparent outline-none p-1"
+                                value={customDraft.end}
+                                onChange={(e) => setCustomDraft(prev => ({ ...prev, end: e.target.value }))}
+                                onKeyDown={(e) => e.key === 'Enter' && handleApplyCustomRange()}
+                                className="text-[10px] font-bold bg-transparent outline-none p-1 cursor-pointer"
                             />
-                            <button onClick={fetchData} className="p-2 bg-primary text-white rounded-lg hover:bg-primary/80">
-                                <Activity className="w-3 h-3" />
+                            <button
+                                type="button"
+                                onClick={handleApplyCustomRange}
+                                disabled={isRefreshing}
+                                className={`px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-1.5 transition-all ${
+                                    hasPendingCustomChanges
+                                        ? 'bg-primary text-white shadow-md ring-2 ring-primary/20'
+                                        : 'bg-brand-carbon text-white hover:bg-primary'
+                                }`}
+                            >
+                                {isRefreshing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Activity className="w-3 h-3" />}
+                                Aplicar
                             </button>
                         </div>
                     )}
@@ -357,7 +554,7 @@ export default function Statistics() {
                         <select
                             value={selectedProduct || ''}
                             onChange={(e) => setSelectedProduct(e.target.value || null)}
-                            className="w-full appearance-none bg-white px-5 py-3.5 rounded-2x border border-gray-100 shadow-sm text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary/50 transition-all cursor-pointer"
+                            className="w-full appearance-none bg-white px-5 py-3.5 rounded-2xl border border-gray-100 shadow-sm text-[10px] font-black uppercase tracking-widest outline-none focus:border-primary/50 transition-all cursor-pointer"
                         >
                             <option value="">Todos los Productos</option>
                             {allProducts.map(p => (
@@ -398,7 +595,7 @@ export default function Statistics() {
                         icon: Activity,
                         color: 'text-indigo-500',
                         bg: 'bg-indigo-50',
-                        sub: 'Estimado lineal',
+                        sub: stats.projectionSub || 'Estimado lineal',
                         type: 'orders'
                     },
                     {

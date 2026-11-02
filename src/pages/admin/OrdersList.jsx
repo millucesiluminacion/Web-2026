@@ -23,6 +23,10 @@ export default function OrdersList() {
     const [adminNotes, setAdminNotes] = useState('');
     const [orderItems, setOrderItems] = useState([]);
     const [fetchingItems, setFetchingItems] = useState(false);
+    const [printMode, setPrintMode] = useState(null); // 'list' | 'single' | null
+    const [singlePrintData, setSinglePrintData] = useState(null);
+    const [listToPrint, setListToPrint] = useState(null);
+    const [isPrintingList, setIsPrintingList] = useState(false);
 
     // Shipping & Tracking State
     const [trackingCarrier, setTrackingCarrier] = useState('');
@@ -622,8 +626,8 @@ export default function OrdersList() {
                 console.error('Error sending emails:', err);
             }
 
-            // Sincronizar con Google Analytics si el pedido nace confirmado, pagado o enviado
-            if (order?.id && (['PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED'].includes(order.status) || order.payment_status === 'PAID')) {
+            // Sincronizar con Google Analytics si el pedido nace pagado, enviado o completado
+            if (order?.id && (['PAID', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(order.status) || order.payment_status === 'PAID')) {
                 syncOrderToGA4(order.id, 'sync-ga4');
             }
 
@@ -663,8 +667,18 @@ export default function OrdersList() {
         fetchOrderItems(order.id);
     };
 
+    const triggerBrowserPrint = (onComplete) => {
+        document.body.classList.add('is-printing');
+        const cleanup = () => {
+            document.body.classList.remove('is-printing');
+            window.removeEventListener('afterprint', cleanup);
+            if (onComplete) onComplete();
+        };
+        window.addEventListener('afterprint', cleanup, { once: true });
+        window.print();
+    };
+
     const handlePrintOrder = async (order) => {
-        setSelectedOrder(order);
         try {
             setFetchingItems(true);
             const { data, error } = await supabase
@@ -673,21 +687,91 @@ export default function OrdersList() {
                 .eq('order_id', order.id);
 
             if (error) throw error;
-            setOrderItems(data || []);
+            setSinglePrintData({ order, items: data || [] });
+            setPrintMode('single');
 
-            // Critical: Add the 'is-printing' class to force print layout and visibility
-            document.body.classList.add('is-printing');
-
-            // Wait for React to render the hidden print template with all items
             setTimeout(() => {
-                window.print();
-                document.body.classList.remove('is-printing');
-            }, 800); // Increased timeout to ensure full render
+                triggerBrowserPrint(() => {
+                    setPrintMode(null);
+                    setSinglePrintData(null);
+                });
+            }, 250);
         } catch (error) {
             console.error('Error printing order:', error.message);
             alert('Error al generar la factura para imprimir');
         } finally {
             setFetchingItems(false);
+        }
+    };
+
+    const handlePrintOrdersList = async () => {
+        if (filteredOrders.length === 0 && selectedOrders.length === 0) {
+            return alert('No hay pedidos para imprimir');
+        }
+        try {
+            setIsPrintingList(true);
+            let targetOrders = [];
+
+            if (selectedOrders.length > 0) {
+                const inMemory = orders.filter(o => selectedOrders.includes(o.id));
+                if (inMemory.length === selectedOrders.length) {
+                    targetOrders = inMemory;
+                } else {
+                    const { data, error } = await supabase
+                        .from('orders')
+                        .select('*')
+                        .in('id', selectedOrders)
+                        .order('created_at', { ascending: false });
+                    if (error) throw error;
+                    targetOrders = data || inMemory;
+                }
+            } else if (totalCount > filteredOrders.length) {
+                let query = supabase.from('orders').select('*');
+                if (searchQuery) {
+                    if (searchQuery.includes('@')) {
+                        query = query.ilike('customer_email', `%${searchQuery}%`);
+                    } else {
+                        query = query.or(`customer_email.ilike.%${searchQuery}%,customer_name.ilike.%${searchQuery}%`);
+                    }
+                }
+                if (statusFilter !== 'ALL') {
+                    query = query.eq('status', statusFilter);
+                }
+                if (dateFilter !== 'ALL') {
+                    const now = new Date();
+                    let cutoff;
+                    if (dateFilter === 'TODAY') cutoff = new Date(now.setHours(0, 0, 0, 0)).toISOString();
+                    if (dateFilter === 'WEEK') cutoff = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000)).toISOString();
+                    if (dateFilter === 'MONTH') cutoff = new Date(now.getTime() - (30 * 24 * 60 * 60 * 1000)).toISOString();
+                    if (cutoff) query = query.gte('created_at', cutoff);
+                }
+                const { data, error } = await query
+                    .order('created_at', { ascending: false })
+                    .limit(1000);
+                if (error) throw error;
+                targetOrders = data || filteredOrders;
+            } else {
+                targetOrders = filteredOrders;
+            }
+
+            if (targetOrders.length === 0) {
+                return alert('No hay pedidos para imprimir');
+            }
+
+            setListToPrint(targetOrders);
+            setPrintMode('list');
+
+            setTimeout(() => {
+                triggerBrowserPrint(() => {
+                    setPrintMode(null);
+                    setListToPrint(null);
+                });
+            }, 200);
+        } catch (error) {
+            console.error('Error printing orders list:', error.message);
+            alert('Error al preparar el listado para imprimir');
+        } finally {
+            setIsPrintingList(false);
         }
     };
 
@@ -743,11 +827,15 @@ export default function OrdersList() {
     }
 
     const printOrder = () => {
-        document.body.classList.add('is-printing');
-        window.print();
+        if (!selectedOrder) return;
+        setSinglePrintData({ order: selectedOrder, items: orderItems });
+        setPrintMode('single');
         setTimeout(() => {
-            document.body.classList.remove('is-printing');
-        }, 100);
+            triggerBrowserPrint(() => {
+                setPrintMode(null);
+                setSinglePrintData(null);
+            });
+        }, 150);
     };
 
     const exportToCSV = () => {
@@ -831,8 +919,8 @@ export default function OrdersList() {
             const { error } = await supabase.from('orders').update({ status: newStatus }).in('id', selectedOrders);
             if (error) throw error;
 
-            // Sincronizar con Google Analytics según el nuevo estado
-            if (['PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED'].includes(newStatus)) {
+            // Sincronizar con Google Analytics cuando los pedidos pasen a PAGADO, ENVIADO o ENTREGADO
+            if (['PAID', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(newStatus)) {
                 selectedOrders.forEach(orderId => syncOrderToGA4(orderId, 'sync-ga4'));
             } else if (newStatus === 'CANCELLED' || newStatus === 'RETURNED') {
                 selectedOrders.forEach(orderId => syncOrderToGA4(orderId, 'refund-ga4'));
@@ -902,9 +990,6 @@ export default function OrdersList() {
                 await sendStatusUpdateEmail(order, 'SHIPPED', tracking);
             }
 
-            // Sincronizar con Google Analytics como venta confirmada / enviada
-            syncOrderToGA4(order.id, 'sync-ga4');
-
             const updated = {
                 ...order,
                 status: 'SHIPPED',
@@ -973,8 +1058,8 @@ export default function OrdersList() {
             const tracking = trackingOverride || parseOrderTracking(currentOrder);
             await sendStatusUpdateEmail(currentOrder, newStatus, tracking);
 
-            // Sincronizar con Google Analytics según el nuevo estado
-            if (['PAID', 'CONFIRMED', 'SHIPPED', 'DELIVERED'].includes(newStatus)) {
+            // Sincronizar con Google Analytics cuando el pedido pase a PAGADO, ENVIADO o ENTREGADO
+            if (['PAID', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(newStatus)) {
                 syncOrderToGA4(id, 'sync-ga4');
             } else if (newStatus === 'CANCELLED' || newStatus === 'RETURNED') {
                 syncOrderToGA4(id, 'refund-ga4');
@@ -1035,6 +1120,32 @@ export default function OrdersList() {
         return method.toUpperCase();
     };
 
+    const formatStatusLabel = (status) => {
+        switch (status?.toUpperCase()) {
+            case 'PENDING': return 'Pendiente';
+            case 'AWAITING_PAYMENT': return 'Pago Pendiente';
+            case 'PAID': return 'Pagado';
+            case 'PROCESSING': return 'Procesando';
+            case 'READY_TO_SHIP': return 'Listo Envío';
+            case 'SHIPPED': return 'Enviado';
+            case 'IN_TRANSIT': return 'En Tránsito';
+            case 'DELIVERED': return 'Entregado';
+            case 'COMPLETED': return 'Completado';
+            case 'CANCELLED': return 'Cancelado';
+            case 'RETURNED': return 'Devuelto';
+            default: return status || 'Pendiente';
+        }
+    };
+
+    const formatDateFilterLabel = (df) => {
+        switch (df) {
+            case 'TODAY': return 'Hoy';
+            case 'WEEK': return 'Últimos 7 días';
+            case 'MONTH': return 'Últimos 30 días';
+            default: return 'Todo el tiempo';
+        }
+    };
+
     const filteredOrders = orders; // Ahora el filtrado es servidor, así que usamos el estado directo
 
     return (
@@ -1047,6 +1158,15 @@ export default function OrdersList() {
                     </h1>
                 </div>
                 <div className="flex flex-wrap items-center gap-4">
+                    <button
+                        onClick={handlePrintOrdersList}
+                        disabled={isPrintingList}
+                        title={selectedOrders.length > 0 ? 'Imprimir pedidos seleccionados' : 'Imprimir listado filtrado'}
+                        className="flex items-center gap-2 bg-white text-gray-500 border border-gray-100 h-12 px-6 rounded-2xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary/30 hover:text-primary transition-all font-outfit disabled:opacity-50"
+                    >
+                        {isPrintingList ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                        {selectedOrders.length > 0 ? `Imprimir (${selectedOrders.length})` : 'Imprimir'}
+                    </button>
                     <button
                         onClick={exportToCSV}
                         className="flex items-center gap-2 bg-white text-gray-500 border border-gray-100 h-12 px-6 rounded-2xl font-black uppercase italic text-[10px] shadow-sm hover:border-primary/30 hover:text-primary transition-all font-outfit"
@@ -1157,6 +1277,14 @@ export default function OrdersList() {
                                 <option value="DELIVERED">Entregado</option>
                                 <option value="CANCELLED">Cancelado</option>
                             </select>
+                            <button
+                                onClick={handlePrintOrdersList}
+                                disabled={isPrintingList || isBulkLoading}
+                                className="flex items-center gap-2 bg-white text-brand-carbon px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:border-primary/40 hover:text-primary transition-all border border-primary/20 shadow-sm disabled:opacity-50"
+                            >
+                                {isPrintingList ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+                                Imprimir ({selectedOrders.length})
+                            </button>
                             <button
                                 onClick={handleBulkDelete}
                                 disabled={isBulkLoading}
@@ -2326,137 +2454,341 @@ export default function OrdersList() {
             }
 
             {/* ── Professional Print Template (Rendered directly into body via Portal) ──────────────── */}
-            {selectedOrder && typeof document !== 'undefined' && createPortal(
-                <div id="invoice-print" className="font-outfit text-brand-carbon bg-white">
-                    {/* Header: Logo & Branding */}
-                    <div id="invoice-print-header" className="flex justify-between items-start border-b-4 border-brand-carbon pb-6 mb-8">
-                        <div>
-                            <h1 className="text-3xl font-black uppercase italic leading-none mb-1.5">
-                                Mil Luces <span className="text-gray-300">Iluminación</span>
-                            </h1>
-                            <p className="text-[10px] font-black uppercase tracking-[.35em] text-primary italic">Iluminación Lineal & LED Profesional</p>
-                        </div>
-                        <div className="text-right">
-                            <h2 className="text-lg font-black uppercase italic mb-0.5">Orden de Pedido</h2>
-                            <p className="text-lg font-black text-brand-carbon tabular-nums uppercase">Ref: #{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(selectedOrder.created_at).toLocaleDateString()}</p>
-                            <p className="text-[10px] font-black text-primary uppercase italic mt-0.5">{formatPaymentMethod(selectedOrder.payment_method)}</p>
-                        </div>
-                    </div>
+            {typeof document !== 'undefined' && createPortal((() => {
+                const isSinglePrint = printMode === 'single' || (printMode !== 'list' && Boolean(selectedOrder));
+                const activePrintOrder = singlePrintData?.order || selectedOrder;
+                const activePrintItems = singlePrintData?.items || orderItems;
 
-                    {/* Customer & Shipping Grid */}
-                    <div id="invoice-print-customer" className="grid grid-cols-2 gap-8 mb-8">
-                        <section className="space-y-3">
-                            <h3 className="text-[9px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-1 mb-2">Información del Cliente</h3>
-                            <div className="space-y-0.5">
-                                <p className="text-xs font-black uppercase italic">{selectedOrder.customer_name}</p>
-                                <p className="text-[10px] font-bold text-gray-500">{selectedOrder.customer_email}</p>
-                                <p className="text-[10px] font-bold text-gray-500">{selectedOrder.customer_phone || 'Teléfono no facilitado'}</p>
+                if (isSinglePrint && activePrintOrder) {
+                    const orderTotal = Number(activePrintOrder.total || 0);
+                    return (
+                        <div id="invoice-print" className="font-outfit text-brand-carbon bg-white">
+                            {/* Header: Logo & Branding */}
+                            <div id="invoice-print-header" className="flex justify-between items-start border-b-4 border-brand-carbon pb-6 mb-8">
+                                <div>
+                                    <h1 className="text-3xl font-black uppercase italic leading-none mb-1.5">
+                                        Mil Luces <span className="text-gray-300">Iluminación</span>
+                                    </h1>
+                                    <p className="text-[10px] font-black uppercase tracking-[.35em] text-primary italic">Iluminación Lineal & LED Profesional</p>
+                                </div>
+                                <div className="text-right">
+                                    <h2 className="text-lg font-black uppercase italic mb-0.5">Orden de Pedido</h2>
+                                    <p className="text-lg font-black text-brand-carbon tabular-nums uppercase">Ref: #{(activePrintOrder.id || '').slice(0, 8).toUpperCase()}</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">{new Date(activePrintOrder.created_at).toLocaleDateString('es-ES')}</p>
+                                    <p className="text-[10px] font-black text-primary uppercase italic mt-0.5">{formatPaymentMethod(activePrintOrder.payment_method)}</p>
+                                </div>
                             </div>
-                        </section>
-                        <section className="space-y-3">
-                            <h3 className="text-[9px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-1 mb-2">Método de Entrega / Envío</h3>
-                            <div className="space-y-0.5">
-                                {selectedOrder.shipping_method === 'pickup' ? (
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                                        <p className="text-xs font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
+
+                            {/* Customer & Shipping Grid */}
+                            <div id="invoice-print-customer" className="grid grid-cols-2 gap-8 mb-8">
+                                <section className="space-y-3">
+                                    <h3 className="text-[9px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-1 mb-2">Información del Cliente</h3>
+                                    <div className="space-y-0.5">
+                                        <p className="text-xs font-black uppercase italic">{activePrintOrder.customer_name}</p>
+                                        <p className="text-[10px] font-bold text-gray-500">{activePrintOrder.customer_email}</p>
+                                        <p className="text-[10px] font-bold text-gray-500">{activePrintOrder.customer_phone || 'Teléfono no facilitado'}</p>
                                     </div>
-                                ) : (
-                                    <>
-                                        <p className="text-xs font-black uppercase italic">Entrega a Domicilio</p>
-                                        <p className="text-[10px] font-medium leading-relaxed">
-                                            {selectedOrder.shipping_address}<br />
-                                            {selectedOrder.shipping_zip} {selectedOrder.shipping_city}
-                                        </p>
-                                    </>
+                                </section>
+                                <section className="space-y-3">
+                                    <h3 className="text-[9px] font-black uppercase tracking-widest text-primary border-b border-primary/10 pb-1 mb-2">Método de Entrega / Envío</h3>
+                                    <div className="space-y-0.5">
+                                        {activePrintOrder.shipping_method === 'pickup' ? (
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                                <p className="text-xs font-black uppercase italic text-emerald-600">RECOGIDA EN TIENDA</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <p className="text-xs font-black uppercase italic">Entrega a Domicilio</p>
+                                                <p className="text-[10px] font-medium leading-relaxed">
+                                                    {activePrintOrder.shipping_address}<br />
+                                                    {activePrintOrder.shipping_zip} {activePrintOrder.shipping_city}
+                                                </p>
+                                            </>
+                                        )}
+                                    </div>
+                                </section>
+                            </div>
+
+                            {/* Items Table with automatic multi-page splitting */}
+                            <div className="mb-8">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="border-b-2 border-brand-carbon uppercase text-[9px] font-black tracking-widest text-gray-500">
+                                            <th className="py-2.5 pr-4">Concepto</th>
+                                            <th className="py-2.5 px-4 text-center">Cant.</th>
+                                            <th className="py-2.5 px-4 text-right">Precio Ud.</th>
+                                            <th className="py-2.5 pl-4 text-right">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {activePrintItems.map((item, idx) => {
+                                            const productRef = item.products?.reference || item.product_id?.slice(-6).toUpperCase();
+                                            const specsList = [];
+                                            if (item.selected_options && typeof item.selected_options === 'object') {
+                                                Object.entries(item.selected_options).forEach(([k, v]) => {
+                                                    if (v != null && v !== '') specsList.push(`${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
+                                                });
+                                            }
+                                            if (item.products?.attributes && typeof item.products.attributes === 'object') {
+                                                Object.entries(item.products.attributes).forEach(([k, v]) => {
+                                                    const valStr = Array.isArray(v) ? v.join(', ') : String(v);
+                                                    if (valStr && valStr.trim() !== '' && !specsList.some(s => s.toLowerCase().startsWith(k.toLowerCase()))) {
+                                                        specsList.push(`${k}: ${valStr}`);
+                                                    }
+                                                });
+                                            }
+                                            const unitPrice = Number(item.unit_price || 0);
+                                            const qty = Number(item.quantity || 1);
+
+                                            return (
+                                                <tr key={idx} className="italic">
+                                                    <td className="py-4 pr-4">
+                                                        <p className="text-[10px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
+                                                        {specsList.length > 0 && (
+                                                            <p className="text-[8px] font-bold text-gray-600 uppercase tracking-tighter mb-0.5">
+                                                                {specsList.join(' · ')}
+                                                            </p>
+                                                        )}
+                                                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">REF: {productRef}</p>
+                                                    </td>
+                                                    <td className="py-4 px-4 text-center font-black text-xs">x{qty}</td>
+                                                    <td className="py-4 px-4 text-right text-xs font-bold">{unitPrice.toFixed(2)}€</td>
+                                                    <td className="py-4 pl-4 text-right text-xs font-black italic">{(unitPrice * qty).toFixed(2)}€</td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Totals Summary */}
+                            <div id="invoice-print-totals" className="flex justify-end mb-8">
+                                <div className="w-full max-w-[260px] space-y-2 bg-gray-50 p-6 rounded-2xl border border-gray-100">
+                                    <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                        <span>Base Imponible</span>
+                                        <span>{(orderTotal / 1.21).toFixed(2)}€</span>
+                                    </div>
+                                    <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                        <span>Impuestos (21%)</span>
+                                        <span>{(orderTotal - (orderTotal / 1.21)).toFixed(2)}€</span>
+                                    </div>
+                                    <div className="pt-3 border-t border-gray-200 flex justify-between items-end">
+                                        <span className="text-[11px] font-black uppercase italic text-brand-carbon">Total Factura</span>
+                                        <div className="text-right leading-none">
+                                            <span className="text-2xl font-black italic">{orderTotal.toFixed(2)}</span>
+                                            <span className="text-base font-black ml-0.5">€</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Footer */}
+                            <div id="invoice-print-footer" className="border-t border-gray-100 pt-4 text-center space-y-1">
+                                <p className="text-[9px] font-black uppercase tracking-[.35em] text-gray-400 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
+                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
+                                    Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
+                                    milluces@millucesiluminacion.com · +34 917 654 062
+                                </p>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // ── Orders List Report Print Template ──────────────────────────────────────────
+                const ordersForReport = listToPrint || (
+                    selectedOrders.length > 0
+                        ? filteredOrders.filter(o => selectedOrders.includes(o.id))
+                        : filteredOrders
+                );
+                const isExplicitCancelledView = statusFilter === 'CANCELLED' || statusFilter === 'RETURNED';
+                const activeOrders = ordersForReport.filter(o => o.status !== 'CANCELLED' && o.status !== 'RETURNED');
+                const cancelledCount = ordersForReport.length - activeOrders.length;
+                const computableOrders = isExplicitCancelledView ? ordersForReport : activeOrders;
+                const reportTotal = computableOrders.reduce((acc, o) => acc + Number(o.total || 0), 0);
+                const reportBase = reportTotal / 1.21;
+                const reportTax = reportTotal - reportBase;
+
+                const filterDescriptionParts = [
+                    selectedOrders.length > 0
+                        ? `Selección manual (${ordersForReport.length})`
+                        : `Periodo: ${formatDateFilterLabel(dateFilter)}`,
+                    statusFilter === 'ALL' ? 'Todos los estados' : `Estado: ${formatStatusLabel(statusFilter)}`
+                ];
+                if (searchQuery) {
+                    filterDescriptionParts.push(`Búsqueda: "${searchQuery}"`);
+                }
+
+                return (
+                    <div id="invoice-print" className="font-outfit text-brand-carbon bg-white">
+                        {/* Header: Branding & Report Meta */}
+                        <div id="invoice-print-header" className="flex justify-between items-start border-b-4 border-brand-carbon pb-5 mb-6">
+                            <div>
+                                <h1 className="text-2xl font-black uppercase italic leading-none mb-1">
+                                    Mil Luces <span className="text-gray-400">Iluminación</span>
+                                </h1>
+                                <p className="text-[9px] font-black uppercase tracking-[.3em] text-primary italic">
+                                    Iluminación Lineal & LED Profesional
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <h2 className="text-base font-black uppercase italic leading-tight">
+                                    Informe de Pedidos
+                                </h2>
+                                <p className="text-[9px] font-bold text-gray-500 uppercase tracking-wider mt-0.5">
+                                    Emitido: {new Date().toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}
+                                </p>
+                                <p className="text-[8px] font-black text-primary uppercase tracking-wider mt-0.5">
+                                    {filterDescriptionParts.join(' · ')}
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Executive KPI Summary Strip */}
+                        <div id="invoice-print-kpis" className="grid grid-cols-4 gap-3 mb-6">
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Nº Pedidos</p>
+                                <p className="text-base font-black text-brand-carbon tabular-nums mt-0.5">{ordersForReport.length}</p>
+                                {!isExplicitCancelledView && cancelledCount > 0 && (
+                                    <p className="text-[7px] font-bold text-gray-500 uppercase mt-0.5">
+                                        {activeOrders.length} activos · {cancelledCount} canc./dev.
+                                    </p>
                                 )}
                             </div>
-                        </section>
-                    </div>
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">Base Imponible</p>
+                                <p className="text-base font-black text-brand-carbon tabular-nums mt-0.5">{reportBase.toFixed(2)} €</p>
+                            </div>
+                            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-gray-400">IVA (21%)</p>
+                                <p className="text-base font-black text-brand-carbon tabular-nums mt-0.5">{reportTax.toFixed(2)} €</p>
+                            </div>
+                            <div className="p-3 bg-gray-100 rounded-xl border border-brand-carbon/20">
+                                <p className="text-[8px] font-black uppercase tracking-widest text-primary">
+                                    {isExplicitCancelledView ? 'Total Filtrado' : 'Total Facturado'}
+                                </p>
+                                <p className="text-base font-black italic text-brand-carbon tabular-nums mt-0.5">{reportTotal.toFixed(2)} €</p>
+                            </div>
+                        </div>
 
-                    {/* Items Table with automatic multi-page splitting */}
-                    <div className="mb-8">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="border-b-2 border-brand-carbon uppercase text-[9px] font-black tracking-widest text-gray-500">
-                                    <th className="py-2.5 pr-4">Concepto</th>
-                                    <th className="py-2.5 px-4 text-center">Cant.</th>
-                                    <th className="py-2.5 px-4 text-right">Precio Ud.</th>
-                                    <th className="py-2.5 pl-4 text-right">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {orderItems.map((item, idx) => {
-                                    const productRef = item.products?.reference || item.product_id?.slice(-6).toUpperCase();
-                                    const specsList = [];
-                                    if (item.selected_options && typeof item.selected_options === 'object') {
-                                        Object.entries(item.selected_options).forEach(([k, v]) => {
-                                            if (v != null && v !== '') specsList.push(`${k}: ${Array.isArray(v) ? v.join(', ') : v}`);
-                                        });
-                                    }
-                                    if (item.products?.attributes && typeof item.products.attributes === 'object') {
-                                        Object.entries(item.products.attributes).forEach(([k, v]) => {
-                                            const valStr = Array.isArray(v) ? v.join(', ') : String(v);
-                                            if (valStr && valStr.trim() !== '' && !specsList.some(s => s.toLowerCase().startsWith(k.toLowerCase()))) {
-                                                specsList.push(`${k}: ${valStr}`);
-                                            }
-                                        });
-                                    }
+                        {/* Orders Table */}
+                        <div className="mb-6">
+                            <table className="w-full text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b-2 border-brand-carbon uppercase text-[8px] font-black tracking-widest text-gray-500">
+                                        <th className="py-2 pr-2">Pedido / Fecha</th>
+                                        <th className="py-2 px-2">Cliente</th>
+                                        <th className="py-2 px-2">Entrega</th>
+                                        <th className="py-2 px-2">Pago</th>
+                                        <th className="py-2 px-2">Estado</th>
+                                        <th className="py-2 pl-2 text-right">Importe</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {ordersForReport.map((order) => {
+                                        const isCancelledOrReturned = order.status === 'CANCELLED' || order.status === 'RETURNED';
+                                        const orderDate = order.created_at
+                                            ? new Date(order.created_at).toLocaleString('es-ES', {
+                                                day: '2-digit',
+                                                month: '2-digit',
+                                                year: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })
+                                            : '-';
+                                        const cityLine = [order.shipping_zip, order.shipping_city].filter(Boolean).join(' ');
 
-                                    return (
-                                        <tr key={idx} className="italic">
-                                            <td className="py-4 pr-4">
-                                                <p className="text-[10px] font-black uppercase text-brand-carbon mb-0.5">{item.product_name}</p>
-                                                {specsList.length > 0 && (
-                                                    <p className="text-[8px] font-bold text-gray-600 uppercase tracking-tighter mb-0.5">
-                                                        {specsList.join(' · ')}
+                                        return (
+                                            <tr key={order.id} className={isCancelledOrReturned && !isExplicitCancelledView ? 'opacity-60' : ''}>
+                                                <td className="py-2.5 pr-2 align-top">
+                                                    <p className="text-[9px] font-black uppercase tabular-nums text-brand-carbon">
+                                                        #{(order.id || '').slice(0, 8).toUpperCase()}
                                                     </p>
-                                                )}
-                                                <p className="text-[8px] font-bold text-gray-400 uppercase tracking-tighter">REF: {productRef}</p>
-                                            </td>
-                                            <td className="py-4 px-4 text-center font-black text-xs">x{item.quantity}</td>
-                                            <td className="py-4 px-4 text-right text-xs font-bold">{item.unit_price.toFixed(2)}€</td>
-                                            <td className="py-4 pl-4 text-right text-xs font-black italic">{(item.unit_price * item.quantity).toFixed(2)}€</td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
+                                                    <p className="text-[8px] font-bold text-gray-500 tabular-nums">{orderDate}</p>
+                                                </td>
+                                                <td className="py-2.5 px-2 align-top">
+                                                    <p className="text-[9px] font-black uppercase text-brand-carbon leading-tight">
+                                                        {order.customer_name || 'Invitado'}
+                                                    </p>
+                                                    {order.customer_email && (
+                                                        <p className="text-[8px] font-medium text-gray-500 leading-tight">{order.customer_email}</p>
+                                                    )}
+                                                    {order.customer_phone && (
+                                                        <p className="text-[8px] font-medium text-gray-400 leading-tight">{order.customer_phone}</p>
+                                                    )}
+                                                </td>
+                                                <td className="py-2.5 px-2 align-top">
+                                                    {order.shipping_method === 'pickup' ? (
+                                                        <p className="text-[8px] font-black uppercase text-emerald-700">Recogida tienda</p>
+                                                    ) : (
+                                                        <>
+                                                            <p className="text-[8px] font-black uppercase text-brand-carbon">Envío domicilio</p>
+                                                            {cityLine && (
+                                                                <p className="text-[8px] font-medium text-gray-500 leading-tight">{cityLine}</p>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </td>
+                                                <td className="py-2.5 px-2 align-top">
+                                                    <p className="text-[8px] font-bold uppercase text-gray-600">
+                                                        {formatPaymentMethod(order.payment_method)}
+                                                    </p>
+                                                </td>
+                                                <td className="py-2.5 px-2 align-top">
+                                                    <span className="text-[8px] font-black uppercase tracking-wider text-brand-carbon">
+                                                        {formatStatusLabel(order.status)}
+                                                    </span>
+                                                </td>
+                                                <td className="py-2.5 pl-2 align-top text-right tabular-nums">
+                                                    <span className={`text-[10px] font-black ${isCancelledOrReturned && !isExplicitCancelledView ? 'line-through text-gray-400' : 'text-brand-carbon'}`}>
+                                                        {Number(order.total || 0).toFixed(2)} €
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
 
-                    {/* Totals Summary */}
-                    <div id="invoice-print-totals" className="flex justify-end mb-8">
-                        <div className="w-full max-w-[260px] space-y-2 bg-gray-50 p-6 rounded-2xl border border-gray-100">
-                            <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                                <span>Base Imponible</span>
-                                <span>{(selectedOrder.total / 1.21).toFixed(2)}€</span>
-                            </div>
-                            <div className="flex justify-between text-[9px] font-bold text-gray-400 uppercase tracking-widest">
-                                <span>Impuestos (21%)</span>
-                                <span>{(selectedOrder.total - (selectedOrder.total / 1.21)).toFixed(2)}€</span>
-                            </div>
-                            <div className="pt-3 border-t border-gray-200 flex justify-between items-end">
-                                <span className="text-[11px] font-black uppercase italic text-brand-carbon">Total Factura</span>
-                                <div className="text-right leading-none">
-                                    <span className="text-2xl font-black italic">{selectedOrder.total.toFixed(2)}</span>
-                                    <span className="text-base font-black ml-0.5">€</span>
+                        {/* Bottom Totals Box */}
+                        <div id="invoice-print-totals" className="flex justify-end mb-6">
+                            <div className="w-full max-w-[280px] space-y-1.5 bg-gray-50 p-4 rounded-xl border border-gray-200">
+                                <div className="flex justify-between text-[8px] font-bold text-gray-500 uppercase tracking-widest">
+                                    <span>Pedidos Computados</span>
+                                    <span className="tabular-nums">{computableOrders.length}</span>
+                                </div>
+                                <div className="flex justify-between text-[8px] font-bold text-gray-500 uppercase tracking-widest">
+                                    <span>Base Imponible</span>
+                                    <span className="tabular-nums">{reportBase.toFixed(2)} €</span>
+                                </div>
+                                <div className="flex justify-between text-[8px] font-bold text-gray-500 uppercase tracking-widest">
+                                    <span>IVA (21%)</span>
+                                    <span className="tabular-nums">{reportTax.toFixed(2)} €</span>
+                                </div>
+                                <div className="pt-2 border-t border-gray-300 flex justify-between items-end">
+                                    <span className="text-[10px] font-black uppercase italic text-brand-carbon">
+                                        {isExplicitCancelledView ? 'Total Filtrado' : 'Total Facturado'}
+                                    </span>
+                                    <span className="text-lg font-black italic text-brand-carbon tabular-nums">
+                                        {reportTotal.toFixed(2)} €
+                                    </span>
                                 </div>
                             </div>
                         </div>
-                    </div>
 
-                    {/* Footer */}
-                    <div id="invoice-print-footer" className="border-t border-gray-100 pt-4 text-center space-y-1">
-                        <p className="text-[9px] font-black uppercase tracking-[.35em] text-gray-400 italic">Mil Luces Iluminación · Iluminación Lineal & LED Profesional</p>
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest leading-relaxed">
-                            Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid<br />
-                            milluces@millucesiluminacion.com · +34 917 654 062
-                        </p>
+                        {/* Footer */}
+                        <div id="invoice-print-footer" className="border-t border-gray-200 pt-3 text-center space-y-0.5">
+                            <p className="text-[8px] font-black uppercase tracking-[.3em] text-gray-400 italic">
+                                Mil Luces Iluminación · Iluminación Lineal & LED Profesional
+                            </p>
+                            <p className="text-[7px] font-bold text-gray-400 uppercase tracking-widest">
+                                Calle Rio Tormes, 5, Local 3 · 28943 Fuenlabrada, Madrid · milluces@millucesiluminacion.com · +34 917 654 062
+                            </p>
+                        </div>
                     </div>
-                </div>,
-                document.body
-            )}
+                );
+            })(), document.body)}
 
             {/* Modal de Envío y Seguimiento al cambiar a SHIPPED */}
             {shippingModalData && createPortal(

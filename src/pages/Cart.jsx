@@ -148,7 +148,11 @@ export default function Cart() {
                 const orderTotal = Number(confirmedOrder?.total || effectiveTotalPrice || 0);
                 const orderShipping = Number(confirmedOrder?.shipping_cost ?? effectiveShippingCost ?? 0);
 
-                trackPurchase(confirmedOrder || { id: orderId, total: orderTotal }, itemsForGA4, orderTotal, orderShipping);
+                const redirectTrackedKey = `ga4_purchase_tracked_${orderId}`;
+                if (!sessionStorage.getItem(redirectTrackedKey)) {
+                    sessionStorage.setItem(redirectTrackedKey, '1');
+                    trackPurchase(confirmedOrder || { id: orderId, total: orderTotal }, itemsForGA4, orderTotal, orderShipping);
+                }
                 clearCart();
             }
             confirmRedirectPayment();
@@ -608,7 +612,8 @@ export default function Cart() {
                     body: JSON.stringify({
                         action: 'confirm',
                         orderId: orderIdToUpdate,
-                        paymentIntentId: paymentIntent?.id
+                        paymentIntentId: paymentIntent?.id,
+                        clientTracked: true
                     })
                 });
 
@@ -647,7 +652,11 @@ export default function Cart() {
 
         setOrderRef(paymentIntent?.id ? paymentIntent.id.slice(-8).toUpperCase() : (orderIdToUpdate ? orderIdToUpdate.slice(0, 8).toUpperCase() : 'OK'));
         setOrderCompleted(true);
-        trackPurchase(updatedOrder || { id: orderIdToUpdate, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
+        const cardTrackedKey = `ga4_purchase_tracked_${orderIdToUpdate}`;
+        if (!sessionStorage.getItem(cardTrackedKey)) {
+            sessionStorage.setItem(cardTrackedKey, '1');
+            trackPurchase(updatedOrder || { id: orderIdToUpdate, total: effectiveTotalPrice }, cart, effectiveTotalPrice, effectiveShippingCost);
+        }
         clearCart();
         setLoading(false);
     };
@@ -1215,7 +1224,8 @@ export default function Cart() {
                                                                     headers: { 'Content-Type': 'application/json' },
                                                                     body: JSON.stringify({
                                                                         action: 'capture',
-                                                                        paypalOrderId: data.orderID
+                                                                        paypalOrderId: data.orderID,
+                                                                        clientTracked: true
                                                                     }),
                                                                 });
                                                                 const result = await res.json();
@@ -1223,7 +1233,11 @@ export default function Cart() {
                                                                     const savedOrder = await saveOrder({ status: 'PAID', payment_status: 'completed' });
                                                                     setOrderRef(savedOrder.id.slice(0, 8).toUpperCase());
                                                                     setOrderCompleted(true);
-                                                                    trackPurchase(savedOrder, cart, effectiveTotalPrice, effectiveShippingCost);
+                                                                    const paypalTrackedKey = `ga4_purchase_tracked_${savedOrder.id}`;
+                                                                    if (!sessionStorage.getItem(paypalTrackedKey)) {
+                                                                        sessionStorage.setItem(paypalTrackedKey, '1');
+                                                                        trackPurchase(savedOrder, cart, effectiveTotalPrice, effectiveShippingCost);
+                                                                    }
                                                                     clearCart();
                                                                 } else {
                                                                     setPayError(result.error || 'Error completando el pago con PayPal.');
