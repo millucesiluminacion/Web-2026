@@ -107,7 +107,7 @@ export default async function handler(req, res) {
             }
         }
 
-        const { action, paypalOrderId, orderId, items, shippingCost, appliedCoupon, total } = req.body;
+        const { action, paypalOrderId, orderId, items, shippingCost, appliedCoupon, total, clientTracked } = req.body;
 
         // ── ACTION 1: CAPTURE PAYPAL ORDER ──
         if (action === 'capture' || paypalOrderId) {
@@ -136,9 +136,18 @@ export default async function handler(req, res) {
                         })
                         .eq('id', orderId);
 
-                    sendServerPurchaseEvent(supabase, orderId).catch(err => {
-                        console.warn('[PayPal Capture] Error triggering GA4 server purchase:', err);
-                    });
+                    if (clientTracked) {
+                        const { data: ord } = await supabase.from('orders').select('admin_notes').eq('id', orderId).maybeSingle();
+                        const currentNotes = ord?.admin_notes ? ord.admin_notes.trim() : '';
+                        if (!currentNotes.includes('[GA4_PURCHASE_SYNCED]')) {
+                            const newNotes = currentNotes ? `${currentNotes} [GA4_PURCHASE_SYNCED]` : '[GA4_PURCHASE_SYNCED]';
+                            await supabase.from('orders').update({ admin_notes: newNotes }).eq('id', orderId);
+                        }
+                    } else {
+                        sendServerPurchaseEvent(supabase, orderId).catch(err => {
+                            console.warn('[PayPal Capture] Error triggering GA4 server purchase:', err);
+                        });
+                    }
                 }
 
                 return res.status(200).json({ success: true, capture: captureData });

@@ -116,7 +116,8 @@ export default async function handler(req, res) {
 
             console.log(`[Stripe Confirm API] Order ${orderId} successfully marked as PAID.`);
             
-            // Enviar compra a GA4 desde el servidor (por si el usuario cerró el navegador tras validar en la app del banco)
+            // Sincronización GA4 robusta: enviamos por servidor con deduplicación e idempotencia
+            // Esto garantiza que la compra quede registrada aunque el navegador del cliente use AdBlock/Brave
             sendServerPurchaseEvent(supabase, orderId).catch(err => {
                 console.warn('[Stripe Confirm API] Error triggering GA4 server purchase:', err);
             });

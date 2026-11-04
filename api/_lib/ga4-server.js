@@ -7,15 +7,34 @@
  */
 export async function sendServerPurchaseEvent(supabase, orderId) {
     try {
-        const apiSecret = process.env.GA4_API_SECRET;
+        const apiSecret = process.env.GA4_API_SECRET || 'SeqhU2SYTsWQuXbRLJP8Sg';
         const measurementId = process.env.GA4_MEASUREMENT_ID || 'G-8Z16FYML7H';
-        if (!apiSecret || !orderId) return;
+        if (!apiSecret || !orderId) return { success: false, reason: 'missing_config_or_id' };
 
         const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
-        if (!order) return;
+        if (!order) return { success: false, reason: 'order_not_found' };
 
-        // Verificar que no sea un pedido cancelado o fallido
-        if (order.status === 'CANCELLED' || order.status === 'failed') return;
+        // 1. REGLA: Solo pedidos efectivamente confirmados (PAGADOS, ENVIADOS o ENTREGADOS)
+        // Pedidos cancelados o fallidos NO deben registrarse como compra
+        if (order.status === 'CANCELLED' || order.status === 'failed') {
+            return { success: false, reason: 'order_cancelled_or_failed' };
+        }
+
+        const isPaidOrShipped = 
+            String(order.payment_status || '').toUpperCase() === 'PAID' || 
+            String(order.payment_status || '').toLowerCase() === 'completed' || 
+            ['PAID', 'SHIPPED', 'DELIVERED', 'COMPLETED'].includes(String(order.status || '').toUpperCase());
+
+        if (!isPaidOrShipped) {
+            console.log(`[GA4 Server] Skipping order #${order.id.slice(0, 8).toUpperCase()}: payment/order is still pending (status: ${order.status}, payment_status: ${order.payment_status}).`);
+            return { success: false, reason: 'payment_pending' };
+        }
+
+        // 2. CONTROL DE IDEMPOTENCIA: Verificar si ya fue sincronizado con GA4 previamente
+        if (order.admin_notes && order.admin_notes.includes('[GA4_PURCHASE_SYNCED]')) {
+            console.log(`[GA4 Server] Order #${order.id.slice(0, 8).toUpperCase()} already synced to GA4 previously. Skipping duplicate.`);
+            return { success: false, reason: 'already_synced' };
+        }
 
         const { data: items } = await supabase.from('order_items').select('*, products(*)').eq('order_id', orderId);
 
@@ -55,20 +74,33 @@ export async function sendServerPurchaseEvent(supabase, orderId) {
 
         if (res.ok) {
             console.log(`[GA4 Server] Successfully tracked purchase for order #${order.id.slice(0, 8).toUpperCase()}`);
+            // Marcar en admin_notes para asegurar que NUNCA vuelva a duplicarse
+            const currentNotes = order.admin_notes ? order.admin_notes.trim() : '';
+            const updatedNotes = currentNotes ? `${currentNotes} [GA4_PURCHASE_SYNCED]` : '[GA4_PURCHASE_SYNCED]';
+            await supabase.from('orders').update({ admin_notes: updatedNotes }).eq('id', order.id);
+            return { success: true };
         }
+        return { success: false, status: res.status };
     } catch (e) {
         console.warn('[GA4 Server] Could not send purchase event:', e.message);
+        return { success: false, error: e.message };
     }
 }
 
 export async function sendServerRefundEvent(supabase, orderId) {
     try {
-        const apiSecret = process.env.GA4_API_SECRET;
+        const apiSecret = process.env.GA4_API_SECRET || 'SeqhU2SYTsWQuXbRLJP8Sg';
         const measurementId = process.env.GA4_MEASUREMENT_ID || 'G-8Z16FYML7H';
-        if (!apiSecret || !orderId) return;
+        if (!apiSecret || !orderId) return { success: false, reason: 'missing_config_or_id' };
 
         const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
-        if (!order) return;
+        if (!order) return { success: false, reason: 'order_not_found' };
+
+        // Si ya fue reembolsado en GA4, evitar duplicar el reembolso
+        if (order.admin_notes && order.admin_notes.includes('[GA4_REFUND_SYNCED]')) {
+            console.log(`[GA4 Server] Order #${order.id.slice(0, 8).toUpperCase()} already refunded in GA4 previously. Skipping duplicate.`);
+            return { success: false, reason: 'already_refunded' };
+        }
 
         const { data: items } = await supabase.from('order_items').select('*, products(*)').eq('order_id', orderId);
 
@@ -106,8 +138,14 @@ export async function sendServerRefundEvent(supabase, orderId) {
 
         if (res.ok) {
             console.log(`[GA4 Server] Successfully refunded order #${order.id.slice(0, 8).toUpperCase()}`);
+            const currentNotes = order.admin_notes ? order.admin_notes.trim() : '';
+            const updatedNotes = currentNotes ? `${currentNotes} [GA4_REFUND_SYNCED]` : '[GA4_REFUND_SYNCED]';
+            await supabase.from('orders').update({ admin_notes: updatedNotes }).eq('id', order.id);
+            return { success: true };
         }
+        return { success: false, status: res.status };
     } catch (e) {
         console.warn('[GA4 Server] Could not send refund event:', e.message);
+        return { success: false, error: e.message };
     }
 }
