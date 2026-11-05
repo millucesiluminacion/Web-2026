@@ -136,17 +136,13 @@ export default async function handler(req, res) {
                         })
                         .eq('id', orderId);
 
-                    if (clientTracked) {
-                        const { data: ord } = await supabase.from('orders').select('admin_notes').eq('id', orderId).maybeSingle();
-                        const currentNotes = ord?.admin_notes ? ord.admin_notes.trim() : '';
-                        if (!currentNotes.includes('[GA4_PURCHASE_SYNCED]')) {
-                            const newNotes = currentNotes ? `${currentNotes} [GA4_PURCHASE_SYNCED]` : '[GA4_PURCHASE_SYNCED]';
-                            await supabase.from('orders').update({ admin_notes: newNotes }).eq('id', orderId);
-                        }
-                    } else {
-                        sendServerPurchaseEvent(supabase, orderId).catch(err => {
-                            console.warn('[PayPal Capture] Error triggering GA4 server purchase:', err);
+                    try {
+                        await sendServerPurchaseEvent(supabase, orderId, {
+                            clientTracked: Boolean(clientTracked),
+                            gaClientId: req.body?.gaClientId || null
                         });
+                    } catch (err) {
+                        console.warn('[PayPal Capture] Error triggering GA4 server purchase:', err);
                     }
                 }
 

@@ -3,6 +3,32 @@
  * Measurement ID: G-8Z16FYML7H (configured in index.html)
  */
 
+/**
+ * Detecta si Google Analytics 4 se ha cargado realmente en el navegador
+ * (si el usuario tiene AdBlock o Brave Shields, window.gtag existe como stub inline,
+ * pero window.google_tag_manager y la cookie _ga NO llegan a crearse).
+ */
+export function isGA4Active() {
+    if (typeof window === 'undefined' || typeof window.gtag !== 'function') return false;
+    const hasGtmContainer = Boolean(window.google_tag_manager && window.google_tag_manager['G-8Z16FYML7H']);
+    const hasGaCookie = Boolean(getGA4ClientId());
+    return hasGtmContainer || hasGaCookie;
+}
+
+/**
+ * Obtiene el client_id real de la cookie _ga (ej. GA1.1.123456789.1730000000 -> "123456789.1730000000")
+ * para mantener la misma sesión/usuario y deduplicación nativa en GA4.
+ */
+export function getGA4ClientId() {
+    if (typeof document === 'undefined' || !document.cookie) return null;
+    try {
+        const match = document.cookie.match(/(?:^|;\s*)_ga=GA\d+\.\d+\.(\d+\.\d+)/);
+        return match ? match[1] : null;
+    } catch {
+        return null;
+    }
+}
+
 function safeGtag(event, params) {
     if (typeof window !== 'undefined' && typeof window.gtag === 'function') {
         try {
@@ -10,10 +36,12 @@ function safeGtag(event, params) {
             if (import.meta.env.DEV) {
                 console.log(`[GA4 Event] ${event}:`, params);
             }
+            return isGA4Active();
         } catch (err) {
             console.warn('[GA4 Event Error]', err);
         }
     }
+    return false;
 }
 
 /**
@@ -101,13 +129,13 @@ export function trackBeginCheckout(cart, total) {
  * 6. Compra realizada (purchase)
  */
 export function trackPurchase(order, cart, total, shippingCost = 0) {
-    if (!order) return;
+    if (!order) return false;
     const items = Array.isArray(cart) ? cart.map(i => formatGA4Item(i, i.quantity)).filter(Boolean) : [];
     const totalVal = parseFloat(total || order.total || 0);
     const shippingVal = parseFloat(shippingCost || 0);
     const taxVal = Number((totalVal - (totalVal / 1.21)).toFixed(2));
 
-    safeGtag('purchase', {
+    return safeGtag('purchase', {
         transaction_id: String(order.id ? order.id.slice(0, 8).toUpperCase() : Date.now()),
         value: Number(totalVal.toFixed(2)),
         tax: taxVal,

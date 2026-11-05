@@ -14,7 +14,7 @@ import { Elements } from '@stripe/react-stripe-js';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import StripePaymentForm from '../components/commerce/StripePaymentForm';
 import { IVA_RATE } from '../lib/pricingUtils';
-import { trackViewCart, trackBeginCheckout, trackPurchase } from '../lib/analytics';
+import { trackViewCart, trackBeginCheckout, trackPurchase, isGA4Active, getGA4ClientId } from '../lib/analytics';
 
 const INPUT_CLASS = "w-full bg-gray-50/80 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all placeholder:font-normal placeholder:text-gray-300";
 const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1.5 block ml-1";
@@ -92,6 +92,8 @@ export default function Cart() {
 
         if ((paymentStatus === 'success' || paymentIntentId || paypalStatus === 'success') && orderId) {
             async function confirmRedirectPayment() {
+                const canBrowserTrack = isGA4Active();
+                const gaClientId = getGA4ClientId();
                 let confirmedOrder = null;
                 try {
                     const res = await fetch('/api/create-payment-intent', {
@@ -100,7 +102,9 @@ export default function Cart() {
                         body: JSON.stringify({
                             action: 'confirm',
                             orderId: orderId,
-                            paymentIntentId: paymentIntentId
+                            paymentIntentId: paymentIntentId,
+                            clientTracked: canBrowserTrack,
+                            gaClientId: gaClientId
                         })
                     });
                     if (res.ok) {
@@ -600,6 +604,8 @@ export default function Cart() {
 
     const handlePaymentSucceeded = async (paymentIntent, overrideOrderId) => {
         const orderIdToUpdate = overrideOrderId || createdOrderIdRef.current || createdOrderId;
+        const canBrowserTrack = isGA4Active();
+        const gaClientId = getGA4ClientId();
 
         if (orderIdToUpdate) {
             let updatedOrder = null;
@@ -613,7 +619,8 @@ export default function Cart() {
                         action: 'confirm',
                         orderId: orderIdToUpdate,
                         paymentIntentId: paymentIntent?.id,
-                        clientTracked: true
+                        clientTracked: canBrowserTrack,
+                        gaClientId: gaClientId
                     })
                 });
 
@@ -1234,10 +1241,21 @@ export default function Cart() {
                                                                     setOrderRef(savedOrder.id.slice(0, 8).toUpperCase());
                                                                     setOrderCompleted(true);
                                                                     const paypalTrackedKey = `ga4_purchase_tracked_${savedOrder.id}`;
+                                                                    let didClientTrack = false;
                                                                     if (!sessionStorage.getItem(paypalTrackedKey)) {
                                                                         sessionStorage.setItem(paypalTrackedKey, '1');
-                                                                        trackPurchase(savedOrder, cart, effectiveTotalPrice, effectiveShippingCost);
+                                                                        didClientTrack = trackPurchase(savedOrder, cart, effectiveTotalPrice, effectiveShippingCost);
                                                                     }
+                                                                    fetch('/api/create-payment-intent', {
+                                                                        method: 'POST',
+                                                                        headers: { 'Content-Type': 'application/json' },
+                                                                        body: JSON.stringify({
+                                                                            action: 'sync-ga4',
+                                                                            orderId: savedOrder.id,
+                                                                            clientTracked: didClientTrack,
+                                                                            gaClientId: getGA4ClientId()
+                                                                        })
+                                                                    }).catch(() => {});
                                                                     clearCart();
                                                                 } else {
                                                                     setPayError(result.error || 'Error completando el pago con PayPal.');

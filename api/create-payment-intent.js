@@ -116,19 +116,27 @@ export default async function handler(req, res) {
 
             console.log(`[Stripe Confirm API] Order ${orderId} successfully marked as PAID.`);
             
-            // Sincronización GA4 robusta: enviamos por servidor con deduplicación e idempotencia
-            // Esto garantiza que la compra quede registrada aunque el navegador del cliente use AdBlock/Brave
-            sendServerPurchaseEvent(supabase, orderId).catch(err => {
+            // Sincronización GA4 con await (imprescindible en Vercel Serverless para que no corte la ejecución)
+            // Si clientTracked=true, solo marca [GA4_PURCHASE_SYNCED] evitando duplicados; si había AdBlock, envía por servidor.
+            try {
+                await sendServerPurchaseEvent(supabase, orderId, {
+                    clientTracked: Boolean(body.clientTracked),
+                    gaClientId: body.gaClientId || null
+                });
+            } catch (err) {
                 console.warn('[Stripe Confirm API] Error triggering GA4 server purchase:', err);
-            });
+            }
 
             return res.status(200).json({ success: true, order: updatedOrder });
         }
 
         // SINCRONIZAR COMPRA A GA4 (DESDE PANEL ADMIN O CONFIRMACIÓN)
         if (body.action === 'sync-ga4') {
-            await sendServerPurchaseEvent(supabase, orderId);
-            return res.status(200).json({ success: true, message: 'Event sent to GA4' });
+            const result = await sendServerPurchaseEvent(supabase, orderId, {
+                clientTracked: Boolean(body.clientTracked),
+                gaClientId: body.gaClientId || null
+            });
+            return res.status(200).json({ success: true, result });
         }
 
         // ANULAR / REEMBOLSAR COMPRA EN GA4
