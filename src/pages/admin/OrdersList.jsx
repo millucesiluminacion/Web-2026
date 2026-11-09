@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 
-import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag, ExternalLink, Send } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag, ExternalLink, Send, Receipt, FileText, FileCheck2, Upload, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
-import { CARRIER_PRESETS, buildTrackingUrl, parseOrderTracking, serializeOrderTracking, saveOrderTracking } from '../../lib/orderTrackingUtils';
+import { CARRIER_PRESETS, buildTrackingUrl, parseOrderTracking, serializeOrderTracking, saveOrderTracking, parseOrderInvoiceMeta, saveOfficialInvoiceMeta, saveOrderInvoiceRequest, serializeInvoiceRequestInNotes } from '../../lib/orderTrackingUtils';
+import { generateOrderTicketPDF } from '../../lib/pdfGenerator';
 
 export default function OrdersList() {
     const location = useLocation();
@@ -34,6 +35,11 @@ export default function OrdersList() {
     const [trackingUrl, setTrackingUrl] = useState('');
     const [isSavingTracking, setIsSavingTracking] = useState(false);
     const [shippingModalData, setShippingModalData] = useState(null);
+    const [isUploadingOfficialInvoice, setIsUploadingOfficialInvoice] = useState(false);
+    const [uploadingOrderId, setUploadingOrderId] = useState(null);
+    const [isEditingFiscalData, setIsEditingFiscalData] = useState(false);
+    const [adminFiscalForm, setAdminFiscalForm] = useState({ company_name: '', vat_id: '', fiscal_address: '' });
+    const [isSavingFiscalData, setIsSavingFiscalData] = useState(false);
 
     // Pagination state
     const [page, setPage] = useState(1);
@@ -76,6 +82,19 @@ export default function OrdersList() {
         company_name: '',
         vat_id: '',
         is_partner: false
+    });
+    const [isGuestModeOpen, setIsGuestModeOpen] = useState(false);
+    const [guestOrderForm, setGuestOrderForm] = useState({
+        full_name: '',
+        email: '',
+        phone: '',
+        address: '',
+        city: '',
+        zip: '',
+        request_invoice: false,
+        company_name: '',
+        vat_id: '',
+        fiscal_address: ''
     });
 
     // Sync search with URL param changes (e.g. navigating between customers)
@@ -184,12 +203,85 @@ export default function OrdersList() {
         setSelectedCustomer(null);
         setCart([]);
         setOrderForm({ status: 'PENDING', payment_method: 'TRANSFERENCIA', shipping_method: 'pickup', created_at: new Date().toISOString().slice(0, 16) });
+        setSendEmailToCustomer(true);
         setProductSearch('');
         setCustomerSearch('');
         setIsQuickAddOpen(false);
+        setIsGuestModeOpen(false);
         setQuickAddForm({ full_name: '', email: '', phone: '', address: '', user_type: 'persona', company_name: '', vat_id: '', is_partner: false });
+        setGuestOrderForm({
+            full_name: '',
+            email: '',
+            phone: '',
+            address: '',
+            city: '',
+            zip: '',
+            request_invoice: false,
+            company_name: '',
+            vat_id: '',
+            fiscal_address: ''
+        });
         setIsCreateModalOpen(true);
         fetchCreateData();
+    };
+
+    const handleQuickCounterGuest = () => {
+        setSelectedCustomer({
+            id: null,
+            isGuest: true,
+            full_name: 'Cliente Invitado (Mostrador)',
+            email: '',
+            phone: '',
+            address: 'Venta en Tienda / Mostrador',
+            shipping_city: '',
+            shipping_zip: '',
+            user_type: 'persona',
+            is_partner: false,
+            invoiceRequest: null
+        });
+        setSendEmailToCustomer(false);
+        setIsGuestModeOpen(false);
+        setIsQuickAddOpen(false);
+        setStep(2);
+    };
+
+    const handleConfirmGuestCustomer = (e) => {
+        if (e) e.preventDefault();
+        if (guestOrderForm.request_invoice) {
+            if (!guestOrderForm.company_name.trim() || !guestOrderForm.vat_id.trim()) {
+                alert('Para "Pedir Factura", indica la Razón Social / Nombre Fiscal y el NIF / CIF / DNI.');
+                return;
+            }
+        }
+        const cleanEmail = guestOrderForm.email.trim();
+        const combinedAddress = [
+            guestOrderForm.address.trim(),
+            guestOrderForm.zip.trim(),
+            guestOrderForm.city.trim()
+        ].filter(Boolean).join(', ');
+
+        setSelectedCustomer({
+            id: null,
+            isGuest: true,
+            full_name: guestOrderForm.full_name.trim() || 'Cliente Invitado',
+            email: cleanEmail,
+            phone: guestOrderForm.phone.trim(),
+            address: guestOrderForm.address.trim() || combinedAddress,
+            shipping_city: guestOrderForm.city.trim(),
+            shipping_zip: guestOrderForm.zip.trim(),
+            user_type: 'persona',
+            is_partner: false,
+            invoiceRequest: guestOrderForm.request_invoice ? {
+                requested: true,
+                company_name: guestOrderForm.company_name.trim(),
+                vat_id: guestOrderForm.vat_id.trim().toUpperCase(),
+                fiscal_address: guestOrderForm.fiscal_address.trim() || combinedAddress
+            } : null
+        });
+        setSendEmailToCustomer(Boolean(cleanEmail));
+        setIsGuestModeOpen(false);
+        setIsQuickAddOpen(false);
+        setStep(2);
     };
 
     const handleEditOrder = async (order) => {
@@ -444,24 +536,46 @@ export default function OrdersList() {
             setIsCreating(true);
             const { subtotal, shipping, total } = calculateTotal();
 
+            // Resolver user_id del perfil si el cliente tiene cuenta registrada
+            let resolvedUserId = null;
+            if (selectedCustomer?.email?.trim()) {
+                const { data: matchedProfile } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .ilike('email', selectedCustomer.email.trim())
+                    .maybeSingle();
+                if (matchedProfile?.id) resolvedUserId = matchedProfile.id;
+            }
+
+            const existingOrderObj = isEditing && editingOrderId ? orders.find(o => o.id === editingOrderId) : null;
+            const serializedNotes = selectedCustomer?.invoiceRequest?.requested
+                ? serializeInvoiceRequestInNotes(selectedCustomer.invoiceRequest, existingOrderObj?.notes || '')
+                : (existingOrderObj?.notes ?? undefined);
+
+            const orderPayload = {
+                customer_id: selectedCustomer.id || null,
+                user_id: resolvedUserId,
+                customer_name: selectedCustomer.full_name || 'Cliente Invitado',
+                customer_email: selectedCustomer.email || '',
+                customer_phone: selectedCustomer.phone || '',
+                shipping_address: selectedCustomer.address || '',
+                ...(selectedCustomer.shipping_city !== undefined ? { shipping_city: selectedCustomer.shipping_city } : {}),
+                ...(selectedCustomer.shipping_zip !== undefined ? { shipping_zip: selectedCustomer.shipping_zip } : {}),
+                ...(serializedNotes !== undefined ? { notes: serializedNotes } : {}),
+                total: total,
+                status: orderForm.status,
+                payment_method: orderForm.payment_method,
+                shipping_method: orderForm.shipping_method,
+                created_at: new Date(orderForm.created_at).toISOString(),
+                payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
+            };
+
             let order;
             if (isEditing && editingOrderId) {
                 // 1. Update existing Order
                 const { data: updatedOrder, error: orderError } = await supabase
                     .from('orders')
-                    .update({
-                        customer_id: selectedCustomer.id,
-                        customer_name: selectedCustomer.full_name,
-                        customer_email: selectedCustomer.email,
-                        customer_phone: selectedCustomer.phone,
-                        shipping_address: selectedCustomer.address,
-                        total: total,
-                        status: orderForm.status,
-                        payment_method: orderForm.payment_method,
-                        shipping_method: orderForm.shipping_method,
-                        created_at: new Date(orderForm.created_at).toISOString(),
-                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
-                    })
+                    .update(orderPayload)
                     .eq('id', editingOrderId)
                     .select()
                     .maybeSingle();
@@ -480,19 +594,7 @@ export default function OrdersList() {
                 // 1. Create New Order
                 const { data: newOrder, error: orderError } = await supabase
                     .from('orders')
-                    .insert([{
-                        customer_id: selectedCustomer.id,
-                        customer_name: selectedCustomer.full_name,
-                        customer_email: selectedCustomer.email,
-                        customer_phone: selectedCustomer.phone,
-                        shipping_address: selectedCustomer.address,
-                        total: total,
-                        status: orderForm.status,
-                        payment_method: orderForm.payment_method,
-                        shipping_method: orderForm.shipping_method,
-                        created_at: new Date(orderForm.created_at).toISOString(),
-                        payment_status: orderForm.status === 'PAID' ? 'PAID' : 'PENDING'
-                    }])
+                    .insert([orderPayload])
                     .select()
                     .maybeSingle();
 
@@ -570,7 +672,7 @@ export default function OrdersList() {
                 `;
 
                 // 1. Send to Customer
-                if (sendEmailToCustomer) {
+                if (sendEmailToCustomer && selectedCustomer?.email?.trim()) {
                     await fetch('/api/send-email', {
                         method: 'POST',
                         headers: {
@@ -783,13 +885,92 @@ export default function OrdersList() {
                 number: trackingNumber,
                 url: trackingUrl
             };
-            const result = await saveOrderTracking(supabase, selectedOrder.id, tracking, adminNotes);
-            const updated = { ...selectedOrder, admin_notes: result.serializedNotes || adminNotes };
+            const result = await saveOrderTracking(supabase, selectedOrder.id, tracking, adminNotes, null, selectedOrder.admin_notes || '');
+            const updated = { ...selectedOrder, admin_notes: result.serializedNotes ?? adminNotes };
             setOrders(orders.map(o => o.id === selectedOrder.id ? updated : o));
             setSelectedOrder(updated);
             alert('Notas guardadas');
         } catch (error) {
             alert('Error guardando notas: ' + error.message);
+        }
+    }
+
+    async function handleUploadOfficialInvoice(file, targetOrder = selectedOrder) {
+        if (!file || !targetOrder) return;
+        if (file.size > 15 * 1024 * 1024) {
+            return alert('El archivo PDF no debe superar los 15 MB.');
+        }
+        setIsUploadingOfficialInvoice(true);
+        setUploadingOrderId(targetOrder.id);
+        try {
+            const sanitizedName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const filePath = `invoices/${targetOrder.id}/${Date.now()}_${sanitizedName}`;
+            const { error: upError } = await supabase.storage
+                .from('images')
+                .upload(filePath, file, { upsert: true });
+            if (upError) throw upError;
+
+            const { data: { publicUrl } } = supabase.storage
+                .from('images')
+                .getPublicUrl(filePath);
+
+            const customNotes = selectedOrder?.id === targetOrder.id ? adminNotes : undefined;
+            const { updatedAdminNotes } = await saveOfficialInvoiceMeta(
+                supabase,
+                targetOrder,
+                {
+                    url: publicUrl,
+                    filename: file.name,
+                    uploaded_at: new Date().toISOString()
+                },
+                customNotes
+            );
+
+            const updated = { ...targetOrder, admin_notes: updatedAdminNotes };
+            setOrders(prev => prev.map(o => o.id === targetOrder.id ? updated : o));
+            if (selectedOrder?.id === targetOrder.id) {
+                setSelectedOrder(updated);
+            }
+            alert('✅ Factura Oficial (TPV) adjuntada al pedido. El cliente ya puede descargarla desde su perfil.');
+        } catch (err) {
+            console.error('Error uploading official invoice:', err);
+            alert('Error al subir la factura oficial: ' + err.message);
+        } finally {
+            setIsUploadingOfficialInvoice(false);
+            setUploadingOrderId(null);
+        }
+    }
+
+    async function handleSaveAdminFiscalData(e) {
+        if (e) e.preventDefault();
+        if (!selectedOrder) return;
+        if (!adminFiscalForm.company_name.trim() || !adminFiscalForm.vat_id.trim()) {
+            return alert('Indica Razón Social / Nombre y NIF / CIF.');
+        }
+        setIsSavingFiscalData(true);
+        try {
+            const updatedNotes = await saveOrderInvoiceRequest(supabase, selectedOrder, adminFiscalForm);
+            const updated = { ...selectedOrder, notes: updatedNotes };
+            setOrders(prev => prev.map(o => o.id === selectedOrder.id ? updated : o));
+            setSelectedOrder(updated);
+            setIsEditingFiscalData(false);
+        } catch (err) {
+            alert('Error guardando datos fiscales: ' + err.message);
+        } finally {
+            setIsSavingFiscalData(false);
+        }
+    }
+
+    async function handleRemoveOfficialInvoice() {
+        if (!selectedOrder) return;
+        if (!window.confirm('¿Seguro que deseas desvincular el PDF de factura oficial de este pedido?')) return;
+        try {
+            const { updatedAdminNotes } = await saveOfficialInvoiceMeta(supabase, selectedOrder, null, adminNotes);
+            const updated = { ...selectedOrder, admin_notes: updatedAdminNotes };
+            setOrders(orders.map(o => o.id === selectedOrder.id ? updated : o));
+            setSelectedOrder(updated);
+        } catch (err) {
+            alert('Error al eliminar factura adjunta: ' + err.message);
         }
     }
 
@@ -802,13 +983,13 @@ export default function OrdersList() {
                 number: trackingNumber,
                 url: trackingUrl
             };
-            const result = await saveOrderTracking(supabase, selectedOrder.id, tracking, adminNotes);
+            const result = await saveOrderTracking(supabase, selectedOrder.id, tracking, adminNotes, null, selectedOrder.admin_notes || '');
             const updated = {
                 ...selectedOrder,
                 tracking_carrier: trackingCarrier,
                 tracking_number: trackingNumber,
                 tracking_url: trackingUrl,
-                admin_notes: result.serializedNotes || selectedOrder.admin_notes
+                admin_notes: result.serializedNotes ?? selectedOrder.admin_notes
             };
             setOrders(orders.map(o => o.id === selectedOrder.id ? updated : o));
             setSelectedOrder(updated);
@@ -1320,6 +1501,7 @@ export default function OrdersList() {
                                 <th className="p-7">Estado</th>
                                 <th className="p-7">Tipo</th>
                                 <th className="p-7">Pago</th>
+                                <th className="p-7">Facturación / Ticket</th>
                                 <th className="p-7 text-right">Acciones</th>
                             </tr>
                         </thead>
@@ -1394,6 +1576,73 @@ export default function OrdersList() {
                                             <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{formatPaymentMethod(order.payment_method)}</span>
                                         </div>
                                     </td>
+                                    <td className="p-7">
+                                        {(() => {
+                                            const { invoiceRequest, officialInvoice } = parseOrderInvoiceMeta(order);
+                                            const isUploadingThis = isUploadingOfficialInvoice && uploadingOrderId === order.id;
+                                            return (
+                                                <div className="flex flex-col gap-1.5">
+                                                    {officialInvoice?.url ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-[8px] font-black uppercase tracking-widest w-fit">
+                                                            <FileCheck2 className="w-2.5 h-2.5" /> Factura TPV Subida
+                                                        </span>
+                                                    ) : invoiceRequest?.requested ? (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 text-[8px] font-black uppercase tracking-widest w-fit" title={`${invoiceRequest.company_name || ''} · ${invoiceRequest.vat_id || ''}`}>
+                                                            <Receipt className="w-2.5 h-2.5" /> Pide Factura ({invoiceRequest.vat_id || 'CIF'})
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 text-[8px] font-black uppercase tracking-widest w-fit">
+                                                            <FileText className="w-2.5 h-2.5" /> Ticket Simplificado
+                                                        </span>
+                                                    )}
+
+                                                    <div className="flex items-center gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => generateOrderTicketPDF(order)}
+                                                            title="Descargar Ticket Simplificado (PDF)"
+                                                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white hover:bg-gray-100 text-brand-carbon border border-gray-200 text-[8px] font-black uppercase tracking-wider transition-all shadow-sm"
+                                                        >
+                                                            <FileText className="w-2.5 h-2.5 text-primary" /> Ticket PDF
+                                                        </button>
+
+                                                        {officialInvoice?.url ? (
+                                                            <a
+                                                                href={officialInvoice.url}
+                                                                target="_blank"
+                                                                rel="noreferrer"
+                                                                title="Ver Factura Oficial TPV (PDF)"
+                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[8px] font-black uppercase tracking-wider transition-all shadow-sm"
+                                                            >
+                                                                <ExternalLink className="w-2.5 h-2.5" /> Ver TPV
+                                                            </a>
+                                                        ) : (
+                                                            <label
+                                                                title="Subir Factura Oficial emitida en TPV (PDF)"
+                                                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer ${isUploadingThis ? 'opacity-50 pointer-events-none' : ''}`}
+                                                            >
+                                                                {isUploadingThis ? (
+                                                                    <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Subiendo...</>
+                                                                ) : (
+                                                                    <><Upload className="w-2.5 h-2.5" /> Subir TPV</>
+                                                                )}
+                                                                <input
+                                                                    type="file"
+                                                                    accept="application/pdf"
+                                                                    className="hidden"
+                                                                    onChange={(e) => {
+                                                                        const file = e.target.files?.[0];
+                                                                        if (file) handleUploadOfficialInvoice(file, order);
+                                                                        e.target.value = '';
+                                                                    }}
+                                                                />
+                                                            </label>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })()}
+                                    </td>
                                     <td className="p-7 text-right">
                                         <div className="flex items-center justify-end gap-2">
                                             <button
@@ -1431,7 +1680,7 @@ export default function OrdersList() {
                                 </tr>
                             )) : (
                                 <tr>
-                                    <td colSpan="6" className="p-32 text-center text-gray-200 italic font-black uppercase text-xs tracking-[.4em] font-outfit">
+                                    <td colSpan="9" className="p-32 text-center text-gray-200 italic font-black uppercase text-xs tracking-[.4em] font-outfit">
                                         {orders.length === 0 ? 'Sin pedidos en la boutique' : 'Sin resultados encontrados'}
                                     </td>
                                 </tr>
@@ -1547,7 +1796,14 @@ export default function OrdersList() {
                                 </div>
                                 <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest font-outfit">Ref: {selectedOrder.id} • {new Date(selectedOrder.created_at).toLocaleString()}</p>
                             </div>
-                            <div className="flex items-center gap-3">
+                            <div className="flex flex-wrap items-center gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => generateOrderTicketPDF(selectedOrder, orderItems)}
+                                    className="px-5 py-3 bg-brand-carbon text-white rounded-full flex items-center gap-2 hover:bg-primary transition-all font-outfit text-xs font-black uppercase tracking-widest shadow-sm"
+                                >
+                                    <FileText className="w-4 h-4 text-primary" /> Ticket PDF
+                                </button>
                                 <button
                                     onClick={printOrder}
                                     className="px-5 py-3 border border-gray-200 text-gray-600 rounded-full flex items-center gap-2 hover:bg-gray-50 transition-all font-outfit text-xs font-black uppercase tracking-widest shadow-sm"
@@ -1555,7 +1811,10 @@ export default function OrdersList() {
                                     <Printer className="w-4 h-4" /> Imprimir
                                 </button>
                                 <button
-                                    onClick={() => setSelectedOrder(null)}
+                                    onClick={() => {
+                                        setSelectedOrder(null);
+                                        setIsEditingFiscalData(false);
+                                    }}
                                     className="p-4 bg-white border border-gray-100 rounded-full flex items-center justify-center hover:bg-gray-50 transition-all text-gray-400 shadow-sm"
                                 >
                                     <X className="w-6 h-6" />
@@ -1579,8 +1838,196 @@ export default function OrdersList() {
                             </div>
 
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-16">
-                                {/* Columna Izquierda: Información del Cliente y Envío */}
+                                {/* Columna Izquierda: Facturación, Información del Cliente y Envío */}
                                 <div className="lg:col-span-1 space-y-12">
+                                    <section className="print:hidden">
+                                        {(() => {
+                                            const { invoiceRequest, officialInvoice } = parseOrderInvoiceMeta(selectedOrder);
+                                            return (
+                                                <>
+                                                    <div className="flex items-center justify-between mb-6">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-10 h-10 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 shadow-sm border border-emerald-100">
+                                                                <Receipt className="w-5 h-5" />
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit">Facturación (TPV) & Ticket</h3>
+                                                                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none mt-0.5">Ticket simplificado y factura oficial</p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-gray-50/50 p-6 rounded-[2rem] border border-gray-100 font-outfit space-y-5">
+                                                        {/* Datos Fiscales Solicitados */}
+                                                        {isEditingFiscalData ? (
+                                                            <form onSubmit={handleSaveAdminFiscalData} className="p-4 bg-white rounded-2xl border border-indigo-200 space-y-3">
+                                                                <p className="text-[9px] font-black uppercase tracking-widest text-indigo-700">
+                                                                    Datos Fiscales para Factura Oficial
+                                                                </p>
+                                                                <input
+                                                                    type="text"
+                                                                    required
+                                                                    placeholder="Razón Social o Nombre Fiscal *"
+                                                                    value={adminFiscalForm.company_name}
+                                                                    onChange={e => setAdminFiscalForm({ ...adminFiscalForm, company_name: e.target.value })}
+                                                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-bold text-brand-carbon"
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    required
+                                                                    placeholder="NIF / CIF / DNI *"
+                                                                    value={adminFiscalForm.vat_id}
+                                                                    onChange={e => setAdminFiscalForm({ ...adminFiscalForm, vat_id: e.target.value.toUpperCase() })}
+                                                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-mono font-bold text-brand-carbon uppercase"
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Dirección Fiscal Completa"
+                                                                    value={adminFiscalForm.fiscal_address}
+                                                                    onChange={e => setAdminFiscalForm({ ...adminFiscalForm, fiscal_address: e.target.value })}
+                                                                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium text-brand-carbon"
+                                                                />
+                                                                <div className="flex items-center justify-end gap-2 pt-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setIsEditingFiscalData(false)}
+                                                                        className="px-3 py-1.5 rounded-lg border border-gray-200 text-[9px] font-black uppercase text-gray-500"
+                                                                    >
+                                                                        Cancelar
+                                                                    </button>
+                                                                    <button
+                                                                        type="submit"
+                                                                        disabled={isSavingFiscalData}
+                                                                        className="px-3 py-1.5 rounded-lg bg-brand-carbon text-white text-[9px] font-black uppercase"
+                                                                    >
+                                                                        {isSavingFiscalData ? 'Guardando...' : 'Guardar Datos'}
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        ) : invoiceRequest?.requested ? (
+                                                            <div className="p-4 bg-indigo-50/70 rounded-2xl border border-indigo-100 space-y-2">
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="inline-flex items-center gap-1.5 text-[9px] font-black uppercase tracking-widest text-indigo-700">
+                                                                        <Receipt className="w-3.5 h-3.5" /> El cliente pide Factura Oficial
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            setAdminFiscalForm({
+                                                                                company_name: invoiceRequest.company_name || '',
+                                                                                vat_id: invoiceRequest.vat_id || '',
+                                                                                fiscal_address: invoiceRequest.fiscal_address || ''
+                                                                            });
+                                                                            setIsEditingFiscalData(true);
+                                                                        }}
+                                                                        className="text-[9px] font-black uppercase text-indigo-600 hover:underline"
+                                                                    >
+                                                                        Editar
+                                                                    </button>
+                                                                </div>
+                                                                <div className="text-xs space-y-1 pt-1 border-t border-indigo-100/80">
+                                                                    <p className="font-black text-brand-carbon uppercase">
+                                                                        {invoiceRequest.company_name}
+                                                                    </p>
+                                                                    <p className="font-bold text-indigo-950">
+                                                                        NIF/CIF: <span className="font-mono font-black">{invoiceRequest.vat_id}</span>
+                                                                    </p>
+                                                                    {invoiceRequest.fiscal_address && (
+                                                                        <p className="text-[11px] font-medium text-gray-600">
+                                                                            Dir. Fiscal: {invoiceRequest.fiscal_address}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="p-3.5 bg-white rounded-xl border border-gray-100 flex items-center justify-between gap-2">
+                                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                                                    Ticket Simplificado estándar
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setAdminFiscalForm({
+                                                                            company_name: selectedOrder.customer_name || '',
+                                                                            vat_id: '',
+                                                                            fiscal_address: [selectedOrder.shipping_address, selectedOrder.shipping_zip, selectedOrder.shipping_city].filter(Boolean).join(', ')
+                                                                        });
+                                                                        setIsEditingFiscalData(true);
+                                                                    }}
+                                                                    className="text-[9px] font-black uppercase text-primary hover:underline shrink-0"
+                                                                >
+                                                                    + Pedir Factura / CIF
+                                                                </button>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Descargar Ticket Simplificado Web */}
+                                                        <div>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => generateOrderTicketPDF(selectedOrder, orderItems)}
+                                                                className="w-full py-3 px-4 bg-white hover:bg-gray-100 text-brand-carbon border border-gray-200 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 shadow-sm"
+                                                            >
+                                                                <FileText className="w-3.5 h-3.5 text-primary" /> Descargar Ticket Web (PDF)
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Subir / Ver Factura Oficial del TPV */}
+                                                        <div className="pt-4 border-t border-gray-200/60 space-y-3">
+                                                            <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                                                                Factura Oficial emitida en TPV (PDF para el cliente)
+                                                            </p>
+
+                                                            {officialInvoice?.url ? (
+                                                                <div className="p-3.5 bg-emerald-50/80 border border-emerald-200 rounded-xl space-y-2.5">
+                                                                    <div className="flex items-center justify-between gap-2">
+                                                                        <span className="inline-flex items-center gap-1.5 text-[10px] font-black text-emerald-800 uppercase truncate">
+                                                                            <FileCheck2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                                                            {officialInvoice.filename || 'Factura-TPV.pdf'}
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={handleRemoveOfficialInvoice}
+                                                                            className="text-[9px] font-black text-red-500 hover:text-red-700 uppercase tracking-wider shrink-0"
+                                                                        >
+                                                                            Quitar
+                                                                        </button>
+                                                                    </div>
+                                                                    <a
+                                                                        href={officialInvoice.url}
+                                                                        target="_blank"
+                                                                        rel="noreferrer"
+                                                                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black uppercase text-[9px] tracking-widest transition-all flex items-center justify-center gap-1.5"
+                                                                    >
+                                                                        <ExternalLink className="w-3 h-3" /> Ver Factura TPV Subida
+                                                                    </a>
+                                                                </div>
+                                                            ) : (
+                                                                <label className={`w-full py-3 px-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer ${isUploadingOfficialInvoice ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                                    {isUploadingOfficialInvoice ? (
+                                                                        <><Loader2 className="w-4 h-4 animate-spin" /> Subiendo PDF...</>
+                                                                    ) : (
+                                                                        <><Upload className="w-4 h-4" /> Subir Factura TPV (PDF)</>
+                                                                    )}
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="application/pdf"
+                                                                        className="hidden"
+                                                                        onChange={(e) => {
+                                                                            const file = e.target.files?.[0];
+                                                                            if (file) handleUploadOfficialInvoice(file);
+                                                                            e.target.value = '';
+                                                                        }}
+                                                                    />
+                                                                </label>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            );
+                                        })()}
+                                    </section>
+
                                     <section>
                                         <div className="flex items-center gap-4 mb-8">
                                             <div className="w-10 h-10 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm border border-blue-100">
@@ -1626,12 +2073,15 @@ export default function OrdersList() {
                                                     <span className="text-brand-carbon font-black">{selectedOrder.shipping_zip} {selectedOrder.shipping_city}</span>
                                                 </p>
                                             )}
-                                            {selectedOrder.notes && (
-                                                <div className="pt-4 border-t border-gray-200/50">
-                                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notas del Cliente</p>
-                                                    <p className="text-xs font-bold text-brand-carbon italic">{selectedOrder.notes}</p>
-                                                </div>
-                                            )}
+                                            {(() => {
+                                                const { cleanCustomerNotes } = parseOrderInvoiceMeta(selectedOrder);
+                                                return cleanCustomerNotes ? (
+                                                    <div className="pt-4 border-t border-gray-200/50">
+                                                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Notas del Cliente</p>
+                                                        <p className="text-xs font-bold text-brand-carbon italic">{cleanCustomerNotes}</p>
+                                                    </div>
+                                                ) : null;
+                                            })()}
                                         </div>
                                     </section>
 
@@ -1943,18 +2393,41 @@ export default function OrdersList() {
                         <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
                             {step === 1 && (
                                 <div className="space-y-8 animate-in slide-in-from-right-10 duration-500">
-                                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-4">
-                                        <div className="flex items-center gap-4">
-                                            <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Listado de Clientes</h3>
+                                    <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 mb-4">
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic mr-2">Listado de Clientes</h3>
                                             <button
-                                                onClick={() => setIsQuickAddOpen(!isQuickAddOpen)}
+                                                type="button"
+                                                onClick={handleQuickCounterGuest}
+                                                className="px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 bg-brand-carbon text-white hover:bg-primary shadow-md"
+                                            >
+                                                <ShoppingBag className="w-3 h-3 text-primary" />
+                                                Invitado Mostrador (1 clic)
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsGuestModeOpen(!isGuestModeOpen);
+                                                    setIsQuickAddOpen(false);
+                                                }}
+                                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isGuestModeOpen ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-600 hover:text-white'}`}
+                                            >
+                                                {isGuestModeOpen ? <X className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                                {isGuestModeOpen ? 'Cancelar Invitado' : 'Pedido Invitado (Con Datos)'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setIsQuickAddOpen(!isQuickAddOpen);
+                                                    setIsGuestModeOpen(false);
+                                                }}
                                                 className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${isQuickAddOpen ? 'bg-red-50 text-red-600 border border-red-100' : 'bg-primary/10 text-primary border border-primary/20 hover:bg-primary hover:text-white'}`}
                                             >
                                                 {isQuickAddOpen ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                                                 {isQuickAddOpen ? 'Cancelar' : 'Nuevo Cliente'}
                                             </button>
                                         </div>
-                                        <div className="relative w-full md:w-96">
+                                        <div className="relative w-full lg:w-80">
                                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                             <input
                                                 type="text"
@@ -1966,7 +2439,138 @@ export default function OrdersList() {
                                         </div>
                                     </div>
 
-                                    {isQuickAddOpen ? (
+                                    {isGuestModeOpen ? (
+                                        <div className="bg-indigo-50/40 p-10 rounded-[3rem] border-2 border-indigo-200 animate-in fade-in slide-in-from-top-4 duration-500">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg">
+                                                        <User className="w-6 h-6" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Pedido puntual sin ficha de cliente</p>
+                                                        <h4 className="text-xl font-black text-brand-carbon uppercase italic leading-none font-outfit">Datos del <span className="text-indigo-600/60">Invitado</span></h4>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleQuickCounterGuest}
+                                                    className="px-4 py-2.5 bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all"
+                                                >
+                                                    Saltar sin datos (Mostrador) →
+                                                </button>
+                                            </div>
+
+                                            <form onSubmit={handleConfirmGuestCustomer} className="space-y-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Nombre (Opcional)</label>
+                                                        <input
+                                                            placeholder="EJ. CLIENTE INVITADO / JUAN"
+                                                            className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-outfit uppercase"
+                                                            value={guestOrderForm.full_name}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, full_name: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Teléfono (Opcional)</label>
+                                                        <input
+                                                            placeholder="+34 600 000 000"
+                                                            className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-outfit"
+                                                            value={guestOrderForm.phone}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, phone: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Email (Opcional, para Ticket/Tracking)</label>
+                                                        <input
+                                                            type="email"
+                                                            placeholder="cliente@email.com"
+                                                            className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-outfit lowercase"
+                                                            value={guestOrderForm.email}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, email: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                                    <div className="md:col-span-2 space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Dirección de Entrega (Opcional si recoge)</label>
+                                                        <input
+                                                            placeholder="CALLE, NÚMERO, PISO..."
+                                                            className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-outfit"
+                                                            value={guestOrderForm.address}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, address: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Código Postal</label>
+                                                        <input
+                                                            placeholder="28943"
+                                                            className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-outfit"
+                                                            value={guestOrderForm.zip}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, zip: e.target.value })}
+                                                        />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500">Ciudad / Provincia</label>
+                                                        <input
+                                                            placeholder="MADRID"
+                                                            className="w-full bg-white border border-gray-200 rounded-2xl p-4 text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-outfit uppercase"
+                                                            value={guestOrderForm.city}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, city: e.target.value })}
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                {/* Casilla Pedir Factura para el invitado */}
+                                                <div className="p-5 bg-white rounded-2xl border border-indigo-100 space-y-4">
+                                                    <label className="flex items-center gap-3 cursor-pointer select-none">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={guestOrderForm.request_invoice}
+                                                            onChange={e => setGuestOrderForm({ ...guestOrderForm, request_invoice: e.target.checked })}
+                                                            className="w-5 h-5 rounded-lg border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                        />
+                                                        <span className="text-xs font-black uppercase italic text-brand-carbon flex items-center gap-2">
+                                                            <Receipt className="w-4 h-4 text-indigo-600" /> Pedir Factura (Anotar datos fiscales para TPV)
+                                                        </span>
+                                                    </label>
+
+                                                    {guestOrderForm.request_invoice && (
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-gray-100">
+                                                            <input
+                                                                required={guestOrderForm.request_invoice}
+                                                                placeholder="RAZÓN SOCIAL / NOMBRE FISCAL *"
+                                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-bold uppercase"
+                                                                value={guestOrderForm.company_name}
+                                                                onChange={e => setGuestOrderForm({ ...guestOrderForm, company_name: e.target.value })}
+                                                            />
+                                                            <input
+                                                                required={guestOrderForm.request_invoice}
+                                                                placeholder="NIF / CIF / DNI *"
+                                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-mono font-bold uppercase"
+                                                                value={guestOrderForm.vat_id}
+                                                                onChange={e => setGuestOrderForm({ ...guestOrderForm, vat_id: e.target.value.toUpperCase() })}
+                                                            />
+                                                            <input
+                                                                placeholder="DIRECCIÓN FISCAL COMPLETA"
+                                                                className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3.5 text-xs font-bold"
+                                                                value={guestOrderForm.fiscal_address}
+                                                                onChange={e => setGuestOrderForm({ ...guestOrderForm, fiscal_address: e.target.value })}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <button
+                                                    type="submit"
+                                                    className="w-full py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-[11px] shadow-2xl hover:bg-primary transition-all flex items-center justify-center gap-3 active:scale-95"
+                                                >
+                                                    Continuar al Carrito como Invitado <ChevronRight className="w-5 h-5" />
+                                                </button>
+                                            </form>
+                                        </div>
+                                    ) : isQuickAddOpen ? (
                                         <div className="bg-gray-50/50 p-10 rounded-[3rem] border-2 border-primary/20 animate-in fade-in slide-in-from-top-4 duration-500">
                                             <div className="flex items-center gap-4 mb-8">
                                                 <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center text-white shadow-lg">
@@ -2124,12 +2728,17 @@ export default function OrdersList() {
                                         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                                             <div>
                                                 <h3 className="text-[11px] font-black uppercase text-primary tracking-[.3em] font-outfit italic">Productos de la Boutique</h3>
-                                                <div className="flex items-center gap-3 mt-1">
+                                                <div className="flex flex-wrap items-center gap-3 mt-1">
                                                     <span className="text-[10px] font-bold text-gray-300 uppercase italic">{products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase())).length} Disponibles</span>
                                                     {selectedCustomer && (
-                                                        <span className="text-[9px] font-black px-2 py-0.5 bg-brand-carbon text-white rounded uppercase italic">
-                                                            Tarifa: {selectedCustomer.is_partner ? 'SOCIO VIP' : (selectedCustomer.user_type === 'profesional' && !!selectedCustomer.has_pro_prices) ? 'PROFESIONAL' : 'CLIENTE FINAL'}
-                                                        </span>
+                                                        <>
+                                                            <span className="text-[9px] font-black px-2 py-0.5 bg-brand-carbon text-white rounded uppercase italic">
+                                                                Tarifa: {selectedCustomer.is_partner ? 'SOCIO VIP' : (selectedCustomer.user_type === 'profesional' && !!selectedCustomer.has_pro_prices) ? 'PROFESIONAL' : 'CLIENTE FINAL'}
+                                                            </span>
+                                                            <span className="text-[9px] font-black px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded uppercase italic">
+                                                                Cliente: {selectedCustomer.full_name} {selectedCustomer.isGuest ? '(INVITADO)' : ''}
+                                                            </span>
+                                                        </>
                                                     )}
                                                 </div>
                                             </div>
@@ -2369,19 +2978,30 @@ export default function OrdersList() {
                                     </div>
 
                                     {/* Email Confirmation Toggle */}
-                                    <div className="bg-white border-2 border-gray-100 p-8 rounded-[2.5rem] flex items-center justify-between group hover:border-primary/20 transition-all cursor-pointer" onClick={() => setSendEmailToCustomer(!sendEmailToCustomer)}>
+                                    <div
+                                        className={`bg-white border-2 border-gray-100 p-8 rounded-[2.5rem] flex items-center justify-between group hover:border-primary/20 transition-all ${selectedCustomer?.email?.trim() ? 'cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
+                                        onClick={() => {
+                                            if (selectedCustomer?.email?.trim()) {
+                                                setSendEmailToCustomer(!sendEmailToCustomer);
+                                            }
+                                        }}
+                                    >
                                         <div className="flex items-center gap-6">
-                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${sendEmailToCustomer ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-400'}`}>
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all ${sendEmailToCustomer && selectedCustomer?.email?.trim() ? 'bg-primary text-white shadow-lg shadow-primary/30' : 'bg-gray-100 text-gray-400'}`}>
                                                 <Mail className="w-6 h-6" />
                                             </div>
                                             <div>
                                                 <p className="text-[12px] font-black uppercase italic tracking-widest text-brand-carbon">Confirmación por Email</p>
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                                                    {sendEmailToCustomer ? 'SE ENVIARÁ COPIA AL CLIENTE' : 'NO SE ENVIARÁ COPIA AL CLIENTE'}
+                                                    {!selectedCustomer?.email?.trim()
+                                                        ? 'INVITADO SIN EMAIL · NO SE ENVIARÁ COPIA AL CLIENTE'
+                                                        : sendEmailToCustomer
+                                                            ? `SE ENVIARÁ COPIA A ${selectedCustomer.email}`
+                                                            : 'NO SE ENVIARÁ COPIA AL CLIENTE'}
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className={`w-14 h-8 rounded-full p-1 transition-all flex items-center ${sendEmailToCustomer ? 'bg-emerald-500 justify-end' : 'bg-gray-200 justify-start'}`}>
+                                        <div className={`w-14 h-8 rounded-full p-1 transition-all flex items-center ${sendEmailToCustomer && selectedCustomer?.email?.trim() ? 'bg-emerald-500 justify-end' : 'bg-gray-200 justify-start'}`}>
                                             <div className="w-6 h-6 bg-white rounded-full shadow-md"></div>
                                         </div>
                                     </div>

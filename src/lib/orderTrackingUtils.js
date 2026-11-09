@@ -26,9 +26,164 @@ export const STATUS_LABELS_ES = {
     'SHIPPED': { label: 'Enviado', badgeClass: 'bg-primary/10 text-primary font-black' },
     'IN_TRANSIT': { label: 'En Tránsito', badgeClass: 'bg-sky-100 text-sky-800' },
     'DELIVERED': { label: 'Entregado', badgeClass: 'bg-green-100 text-green-800' },
+    'COMPLETED': { label: 'Entregado', badgeClass: 'bg-emerald-100 text-emerald-800' },
     'CANCELLED': { label: 'Cancelado', badgeClass: 'bg-rose-100 text-rose-800' },
     'RETURNED': { label: 'Devuelto / Abono', badgeClass: 'bg-gray-100 text-gray-800' }
 };
+
+/**
+ * Determina si un pedido está pagado o en un estado posterior (apto para descargar Ticket Simplificado)
+ */
+export function isOrderPaidOrBeyond(order) {
+    if (!order) return false;
+    const status = String(order.status || '').toUpperCase();
+    if (status === 'CANCELLED' || status === 'RETURNED') return false;
+
+    const paidStatuses = ['PAID', 'PROCESSING', 'READY_TO_SHIP', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+    if (paidStatuses.includes(status)) return true;
+
+    const paymentStatus = String(order.payment_status || '').toUpperCase();
+    return paymentStatus === 'PAID';
+}
+
+function stripMetadataTags(text = '') {
+    return String(text || '')
+        .replace(/\[TRACKING:[\s\S]*?\]\n?/g, '')
+        .replace(/\[INVOICE_REQ:[\s\S]*?\]\n?/g, '')
+        .replace(/\[OFFICIAL_INVOICE:[\s\S]*?\]\n?/g, '')
+        .trim();
+}
+
+/**
+ * Extrae metadatos de facturación del pedido:
+ * - invoiceRequest: datos cuando el cliente marca "Pedir Factura" (Razón Social, NIF/CIF, Dirección Fiscal)
+ * - officialInvoice: PDF de factura oficial subida desde el TPV por el administrador
+ */
+export function parseOrderInvoiceMeta(order) {
+    if (!order) {
+        return {
+            invoiceRequest: null,
+            officialInvoice: null,
+            cleanCustomerNotes: '',
+            cleanAdminNotes: ''
+        };
+    }
+
+    const notesStr = String(order.notes || '');
+    const adminNotesStr = String(order.admin_notes || '');
+    const combined = `${notesStr}\n${adminNotesStr}`;
+
+    let invoiceRequest = null;
+    const reqMatch = combined.match(/\[INVOICE_REQ:([\s\S]*?)\]/);
+    if (reqMatch) {
+        try {
+            const parsed = JSON.parse(reqMatch[1]);
+            if (parsed && parsed.requested) {
+                invoiceRequest = {
+                    requested: true,
+                    company_name: parsed.company_name || '',
+                    vat_id: parsed.vat_id || '',
+                    fiscal_address: parsed.fiscal_address || '',
+                    requested_at: parsed.requested_at || null
+                };
+            }
+        } catch (e) {
+            console.warn('[orderTrackingUtils] Error parsing INVOICE_REQ JSON:', e);
+        }
+    }
+
+    let officialInvoice = null;
+    const offMatch = combined.match(/\[OFFICIAL_INVOICE:([\s\S]*?)\]/);
+    if (offMatch) {
+        try {
+            const parsed = JSON.parse(offMatch[1]);
+            if (parsed && parsed.url) {
+                officialInvoice = {
+                    url: parsed.url,
+                    filename: parsed.filename || 'Factura.pdf',
+                    uploaded_at: parsed.uploaded_at || null
+                };
+            }
+        } catch (e) {
+            console.warn('[orderTrackingUtils] Error parsing OFFICIAL_INVOICE JSON:', e);
+        }
+    }
+
+    return {
+        invoiceRequest,
+        officialInvoice,
+        cleanCustomerNotes: stripMetadataTags(notesStr),
+        cleanAdminNotes: stripMetadataTags(adminNotesStr)
+    };
+}
+
+/**
+ * Serializa la solicitud "Pedir Factura" dentro de las notas del pedido
+ */
+export function serializeInvoiceRequestInNotes(invoiceReq, existingNotes = '') {
+    const cleanNotes = stripMetadataTags(existingNotes);
+    if (!invoiceReq || !invoiceReq.requested) return cleanNotes;
+
+    const header = '[INVOICE_REQ:' + JSON.stringify({
+        requested: true,
+        company_name: (invoiceReq.company_name || '').trim(),
+        vat_id: (invoiceReq.vat_id || '').trim().toUpperCase(),
+        fiscal_address: (invoiceReq.fiscal_address || '').trim(),
+        requested_at: invoiceReq.requested_at || new Date().toISOString()
+    }) + ']';
+
+    return cleanNotes ? `${header}\n${cleanNotes}` : header;
+}
+
+/**
+ * Guarda la solicitud "Pedir Factura" de un cliente o invitado en un pedido existente
+ */
+export async function saveOrderInvoiceRequest(supabase, order, invoiceReqData) {
+    const nextNotes = serializeInvoiceRequestInNotes(
+        { ...invoiceReqData, requested: true },
+        order?.notes || ''
+    );
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ notes: nextNotes })
+        .eq('id', order.id);
+
+    if (error) throw error;
+    return { updatedNotes: nextNotes };
+}
+
+/**
+ * Guarda o elimina el enlace al PDF de la Factura Oficial (TPV) en admin_notes preservando el resto de metadatos
+ */
+export async function saveOfficialInvoiceMeta(supabase, order, officialInvoiceData, customHumanAdminNotes = null) {
+    const rawAdminNotes = String(order?.admin_notes || '');
+    const trackingMatch = rawAdminNotes.match(/\[TRACKING:[\s\S]*?\]/);
+    const cleanHumanNotes = customHumanAdminNotes !== null
+        ? stripMetadataTags(customHumanAdminNotes)
+        : stripMetadataTags(rawAdminNotes);
+
+    const parts = [];
+    if (trackingMatch) parts.push(trackingMatch[0]);
+    if (officialInvoiceData && officialInvoiceData.url) {
+        parts.push('[OFFICIAL_INVOICE:' + JSON.stringify({
+            url: officialInvoiceData.url,
+            filename: officialInvoiceData.filename || 'Factura-Oficial.pdf',
+            uploaded_at: officialInvoiceData.uploaded_at || new Date().toISOString()
+        }) + ']');
+    }
+    if (cleanHumanNotes) parts.push(cleanHumanNotes);
+
+    const serializedAdminNotes = parts.join('\n');
+
+    const { error } = await supabase
+        .from('orders')
+        .update({ admin_notes: serializedAdminNotes })
+        .eq('id', order.id);
+
+    if (error) throw error;
+    return { updatedAdminNotes: serializedAdminNotes };
+}
 
 /**
  * Genera la URL de seguimiento a partir del nombre de la agencia y el código
@@ -54,26 +209,26 @@ export function buildTrackingUrl(carrierName, trackingNumber) {
 export function parseOrderTracking(order) {
     if (!order) return { carrier: '', number: '', url: '', cleanNotes: '' };
 
+    const notesStr = order.admin_notes || '';
+
     if (order.tracking_carrier || order.tracking_number || order.tracking_url) {
         return {
             carrier: order.tracking_carrier || '',
             number: order.tracking_number || '',
             url: order.tracking_url || '',
-            cleanNotes: order.admin_notes || ''
+            cleanNotes: stripMetadataTags(notesStr)
         };
     }
 
-    const notesStr = order.admin_notes || '';
     const match = notesStr.match(/\[TRACKING:([\s\S]*?)\]\n?/);
     if (match) {
         try {
             const parsed = JSON.parse(match[1]);
-            const cleanNotes = notesStr.replace(match[0], '');
             return {
                 carrier: parsed.carrier || '',
                 number: parsed.number || '',
                 url: parsed.url || '',
-                cleanNotes: cleanNotes
+                cleanNotes: stripMetadataTags(notesStr)
             };
         } catch (e) {
             console.warn('[orderTrackingUtils] Error parsing tracking JSON from notes:', e);
@@ -84,33 +239,48 @@ export function parseOrderTracking(order) {
         carrier: '',
         number: '',
         url: '',
-        cleanNotes: notesStr
+        cleanNotes: stripMetadataTags(notesStr)
     };
 }
 
 /**
- * Serializa los datos de tracking en el texto de admin_notes
+ * Serializa los datos de tracking en el texto de admin_notes preservando [OFFICIAL_INVOICE:...]
  */
-export function serializeOrderTracking(tracking, existingNotes = '') {
-    const cleanNotes = (existingNotes || '').replace(/\[TRACKING:[\s\S]*?\]\n?/, '').trim();
+export function serializeOrderTracking(tracking, existingNotes = '', rawExistingAdminNotes = '') {
+    const sourceForTags = rawExistingAdminNotes || existingNotes || '';
+    const officialMatch = String(sourceForTags).match(/\[OFFICIAL_INVOICE:[\s\S]*?\]/);
+    const cleanNotes = stripMetadataTags(existingNotes);
     const hasData = tracking && (tracking.carrier || tracking.number || tracking.url);
-    if (!hasData) return cleanNotes;
 
-    const header = '[TRACKING:' + JSON.stringify({
-        carrier: tracking.carrier || '',
-        number: tracking.number || '',
-        url: tracking.url || ''
-    }) + ']\n';
+    const parts = [];
+    if (hasData) {
+        parts.push('[TRACKING:' + JSON.stringify({
+            carrier: tracking.carrier || '',
+            number: tracking.number || '',
+            url: tracking.url || ''
+        }) + ']');
+    }
+    if (officialMatch) {
+        parts.push(officialMatch[0]);
+    }
+    if (cleanNotes) {
+        parts.push(cleanNotes);
+    }
 
-    return cleanNotes ? `${header}${cleanNotes}` : header;
+    return parts.join('\n');
 }
 
 /**
  * Guarda los datos de tracking en Supabase probando columnas nativas primero y fallback en admin_notes
  */
-export async function saveOrderTracking(supabase, orderId, tracking, currentNotes = '', newStatus = null) {
+export async function saveOrderTracking(supabase, orderId, tracking, currentNotes = '', newStatus = null, rawExistingAdminNotes = '') {
     const updatePayload = {};
     if (newStatus) updatePayload.status = newStatus;
+
+    const sourceForTags = rawExistingAdminNotes || currentNotes || '';
+    const officialMatch = String(sourceForTags).match(/\[OFFICIAL_INVOICE:[\s\S]*?\]/);
+    const cleanHumanNotes = stripMetadataTags(currentNotes);
+    const adminNotesWithoutTracking = [officialMatch ? officialMatch[0] : '', cleanHumanNotes].filter(Boolean).join('\n');
 
     // 1. Intentar actualizar columnas nativas
     try {
@@ -120,12 +290,13 @@ export async function saveOrderTracking(supabase, orderId, tracking, currentNote
                 ...updatePayload,
                 tracking_carrier: tracking.carrier || null,
                 tracking_number: tracking.number || null,
-                tracking_url: tracking.url || null
+                tracking_url: tracking.url || null,
+                admin_notes: adminNotesWithoutTracking
             })
             .eq('id', orderId);
 
         if (!nativeError) {
-            return { success: true, mode: 'columns' };
+            return { success: true, mode: 'columns', serializedNotes: adminNotesWithoutTracking };
         }
         console.warn('[saveOrderTracking] Native columns not present, using admin_notes fallback:', nativeError.message);
     } catch (e) {
@@ -133,7 +304,7 @@ export async function saveOrderTracking(supabase, orderId, tracking, currentNote
     }
 
     // 2. Fallback: Serializar dentro de admin_notes
-    const serializedNotes = serializeOrderTracking(tracking, currentNotes);
+    const serializedNotes = serializeOrderTracking(tracking, currentNotes, rawExistingAdminNotes);
     const { error: fallbackError } = await supabase
         .from('orders')
         .update({

@@ -3,11 +3,19 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
     User, Mail, Phone, MapPin, Shield, Star,
     Zap, LogOut, Loader2, Save, Key, ShoppingBag,
-    ArrowRight, Bell, Heart, CreditCard, X, Upload, CheckSquare
+    ArrowRight, Bell, Heart, CreditCard, X, Upload, CheckSquare,
+    FileText, Download, ChevronDown, ChevronUp, Receipt, CheckCircle2, Clock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabaseClient';
-import { parseOrderTracking } from '../lib/orderTrackingUtils';
+import {
+    parseOrderTracking,
+    STATUS_LABELS_ES,
+    isOrderPaidOrBeyond,
+    parseOrderInvoiceMeta,
+    saveOrderInvoiceRequest
+} from '../lib/orderTrackingUtils';
+import { generateOrderTicketPDF } from '../lib/pdfGenerator';
 
 export default function AccountPage() {
     const { user, profile, signOut, isPartner, userTier, refreshProfile } = useAuth();
@@ -20,6 +28,17 @@ export default function AccountPage() {
     const [orders, setOrders] = useState([]);
     const [favorites, setFavorites] = useState([]);
     const [isDataLoading, setIsDataLoading] = useState(false);
+    const [expandedOrderId, setExpandedOrderId] = useState(null);
+    const [downloadingTicketId, setDownloadingTicketId] = useState(null);
+
+    // "Pedir Factura" modal state
+    const [invoiceModalOrder, setInvoiceModalOrder] = useState(null);
+    const [invoiceForm, setInvoiceForm] = useState({
+        company_name: '',
+        vat_id: '',
+        fiscal_address: ''
+    });
+    const [isSavingInvoiceReq, setIsSavingInvoiceReq] = useState(false);
 
     const [formData, setFormData] = useState({
         full_name: '',
@@ -65,11 +84,12 @@ export default function AccountPage() {
         if (!user) return;
         setIsDataLoading(true);
         try {
-            // Fetch Orders (By user_id OR email for redundancy)
+            const cleanEmail = (user.email || '').trim();
+            // Fetch Orders (By user_id OR case-insensitive email for redundancy with manual/guest orders)
             const { data: ordersData } = await supabase
                 .from('orders')
-                .select('*, order_items(*)')
-                .or(`user_id.eq.${user.id},customer_email.eq.${user.email}`)
+                .select('*, order_items(*, products(reference, slug, image_url))')
+                .or(`user_id.eq.${user.id},customer_email.ilike.${cleanEmail}`)
                 .order('created_at', { ascending: false });
 
             // Fetch Favorites
@@ -79,11 +99,72 @@ export default function AccountPage() {
                 .eq('user_id', user.id);
 
             if (ordersData) setOrders(ordersData);
-            if (favsData) setFavorites(favsData.map(f => f.products));
+            if (favsData) setFavorites(favsData.map(f => f.products).filter(Boolean));
         } catch (err) {
             console.error("Error fetching account data:", err);
         } finally {
             setIsDataLoading(false);
+        }
+    };
+
+    const handleDownloadTicket = async (order) => {
+        if (!isOrderPaidOrBeyond(order)) {
+            alert('El ticket simplificado estará disponible para descargar en cuanto el pedido figure como pagado.');
+            return;
+        }
+        try {
+            setDownloadingTicketId(order.id);
+            await generateOrderTicketPDF(order, order.order_items, { profile });
+        } catch (err) {
+            console.error('Error generating ticket PDF:', err);
+            alert('No se pudo generar el ticket en PDF. Por favor, inténtalo de nuevo.');
+        } finally {
+            setDownloadingTicketId(null);
+        }
+    };
+
+    const openRequestInvoiceModal = (order) => {
+        const { invoiceRequest } = parseOrderInvoiceMeta(order);
+        const fallbackAddress = [order.shipping_address, order.shipping_zip, order.shipping_city].filter(Boolean).join(', ');
+        setInvoiceForm({
+            company_name: invoiceRequest?.company_name || formData.company_name || formData.full_name || order.customer_name || '',
+            vat_id: invoiceRequest?.vat_id || formData.vat_id || '',
+            fiscal_address: invoiceRequest?.fiscal_address || formData.address || fallbackAddress || ''
+        });
+        setInvoiceModalOrder(order);
+    };
+
+    const handleRequestInvoiceSubmit = async (e) => {
+        e.preventDefault();
+        if (!invoiceModalOrder) return;
+        if (!invoiceForm.company_name.trim() || !invoiceForm.vat_id.trim()) {
+            alert('Por favor, indica el Nombre Fiscal / Razón Social y el NIF / CIF.');
+            return;
+        }
+        setIsSavingInvoiceReq(true);
+        try {
+            const { updatedNotes } = await saveOrderInvoiceRequest(supabase, invoiceModalOrder, invoiceForm);
+            setOrders(prev => prev.map(o => o.id === invoiceModalOrder.id ? { ...o, notes: updatedNotes } : o));
+
+            // Actualizar también perfil y ficha de cliente para futuras compras
+            if (user?.id) {
+                const profilePatch = {
+                    company_name: invoiceForm.company_name.trim(),
+                    vat_id: invoiceForm.vat_id.trim().toUpperCase(),
+                    address: formData.address || invoiceForm.fiscal_address.trim()
+                };
+                await supabase.from('profiles').update(profilePatch).eq('id', user.id);
+                setFormData(prev => ({ ...prev, ...profilePatch }));
+                await refreshProfile();
+            }
+
+            setInvoiceModalOrder(null);
+            alert('Solicitud de factura registrada correctamente. Nuestro equipo la emitirá desde el sistema TPV con tus datos fiscales.');
+        } catch (err) {
+            console.error('Error requesting invoice:', err);
+            alert('Error al registrar la solicitud de factura: ' + err.message);
+        } finally {
+            setIsSavingInvoiceReq(false);
         }
     };
 
@@ -278,7 +359,7 @@ export default function AccountPage() {
                                                 <h4 className="text-xs font-black uppercase truncate text-brand-carbon mb-1">{product.name}</h4>
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">{product.category}</p>
                                                 <div className="flex items-center justify-between">
-                                                    <Link to={`/producto/${product.slug}`} className="text-[10px] font-black text-primary uppercase italic hover:underline">Ver Producto</Link>
+                                                    <Link to={`/product/${product.slug || product.id}`} className="text-[10px] font-black text-primary uppercase italic hover:underline">Ver Producto</Link>
                                                     <button
                                                         onClick={() => handleRemoveFavorite(product.id)}
                                                         className="p-2 text-gray-300 hover:text-red-500 transition-all"
@@ -312,94 +393,212 @@ export default function AccountPage() {
                                 <div className="bg-white rounded-[3rem] p-20 border border-gray-100 shadow-luxury text-center">
                                     <ShoppingBag className="w-16 h-16 text-gray-100 mx-auto mb-6" />
                                     <p className="text-sm font-black uppercase text-gray-400 italic">Aún no has realizado ningún pedido</p>
-                                    <Link to="/productos" className="mt-8 inline-flex px-10 py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-xs hover:bg-primary transition-all">Empezar a Comprar</Link>
+                                    <Link to="/catalogo" className="mt-8 inline-flex px-10 py-5 bg-brand-carbon text-white rounded-2xl font-black uppercase italic text-xs hover:bg-primary transition-all">Empezar a Comprar</Link>
                                 </div>
                             ) : (
                                 <div className="space-y-6">
-                                    {orders.map(order => (
-                                        <div key={order.id} className="bg-white rounded-[3rem] border border-gray-100 shadow-luxury overflow-hidden group hover:border-primary/20 transition-all">
-                                            <div className="p-8 lg:p-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-                                                <div className="flex items-center gap-8">
-                                                    <div className="w-16 h-16 rounded-[1.5rem] bg-gray-50 flex items-center justify-center text-brand-carbon group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                                                        <ShoppingBag className="w-6 h-6" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="flex items-center gap-3 mb-2">
-                                                            <span className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400">Ref: #{order.id.slice(0, 8).toUpperCase()}</span>
-                                                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded ${order.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
-                                                                order.status === 'SHIPPED' ? 'bg-blue-100 text-blue-700' :
-                                                                    'bg-amber-100 text-amber-700'
-                                                                }`}>
-                                                                {order.status === 'PENDING' ? 'Pendiente' :
-                                                                    order.status === 'PROCESSING' ? 'En Preparación' :
-                                                                        order.status === 'SHIPPED' ? 'Enviado' :
-                                                                            order.status === 'COMPLETED' ? 'Entregado' : order.status}
-                                                            </span>
-                                                        </div>
-                                                        <p className="text-lg font-black uppercase italic text-brand-carbon tracking-tight">
-                                                            {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
-                                                        </p>
-                                                        {(() => {
-                                                            const track = parseOrderTracking(order);
-                                                            if (!track.carrier && !track.number && !track.url) return null;
-                                                            return (
-                                                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                                                    <span className="text-[10px] font-bold text-gray-500 uppercase">
-                                                                        🚚 {track.carrier || 'Envío'}{track.number ? `: #${track.number}` : ''}
-                                                                    </span>
-                                                                    {track.url && (
-                                                                        <a
-                                                                            href={track.url}
-                                                                            target="_blank"
-                                                                            rel="noreferrer"
-                                                                            className="text-[10px] font-black text-primary uppercase underline hover:text-brand-carbon transition-colors"
-                                                                        >
-                                                                            Seguir mi paquete →
-                                                                        </a>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
-                                                </div>
+                                    {orders.map(order => {
+                                        const canDownloadTicket = isOrderPaidOrBeyond(order);
+                                        const { invoiceRequest, officialInvoice } = parseOrderInvoiceMeta(order);
+                                        const isExpanded = expandedOrderId === order.id;
+                                        const statusInfo = STATUS_LABELS_ES[order.status] || {
+                                            label: order.status || 'Pendiente',
+                                            badgeClass: 'bg-amber-100 text-amber-700'
+                                        };
+                                        const isCancelled = order.status === 'CANCELLED' || order.status === 'RETURNED';
 
-                                                <div className="flex items-center gap-10">
-                                                    <div className="text-right hidden sm:block">
-                                                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Método</p>
-                                                        <p className="text-[11px] font-black text-brand-carbon uppercase italic">
-                                                            {order.shipping_method === 'pickup' ? 'Recogida Tienda' : 'Envío Domicilio'}
-                                                        </p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Inversión Total</p>
-                                                        <p className="text-2xl font-black italic text-brand-carbon">{order.total.toFixed(2)}€</p>
-                                                    </div>
-                                                    <div className="w-12 h-12 rounded-full border border-gray-100 flex items-center justify-center group-hover:bg-primary group-hover:text-white group-hover:border-primary transition-all cursor-pointer">
-                                                        <ArrowRight className="w-5 h-5" />
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {/* Order Mini Items List */}
-                                            <div className="px-10 pb-8 flex gap-4 overflow-x-auto scrollbar-hide">
-                                                {order.order_items?.map((item, idx) => (
-                                                    <div key={idx} className="flex-shrink-0 flex items-center gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
-                                                        <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[10px] font-black">
-                                                            {item.quantity}x
+                                        return (
+                                            <div key={order.id} className="bg-white rounded-[3rem] border border-gray-100 shadow-luxury overflow-hidden group hover:border-primary/20 transition-all">
+                                                <div className="p-8 lg:p-10 flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+                                                    <div className="flex items-center gap-8">
+                                                        <div className="w-16 h-16 rounded-[1.5rem] bg-gray-50 flex items-center justify-center text-brand-carbon group-hover:bg-primary/10 group-hover:text-primary transition-all">
+                                                            <ShoppingBag className="w-6 h-6" />
                                                         </div>
                                                         <div>
-                                                            <p className="text-[10px] font-bold text-gray-500 uppercase truncate max-w-[120px]">{item.product_name}</p>
-                                                            {item.selected_options && Object.keys(item.selected_options).length > 0 && (
-                                                                <p className="text-[9px] font-bold text-primary/70 uppercase truncate max-w-[120px] mt-0.5">
-                                                                    {Object.entries(item.selected_options).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ')}
-                                                                </p>
-                                                            )}
+                                                            <div className="flex flex-wrap items-center gap-2.5 mb-2">
+                                                                <span className="text-[10px] font-black uppercase tracking-[.3em] text-gray-400">Ref: #{order.id.slice(0, 8).toUpperCase()}</span>
+                                                                <span className={`text-[8px] font-black uppercase px-2.5 py-0.5 rounded-md ${statusInfo.badgeClass}`}>
+                                                                    {statusInfo.label}
+                                                                </span>
+                                                                {officialInvoice?.url ? (
+                                                                    <span className="text-[8px] font-black uppercase px-2.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
+                                                                        <CheckCircle2 className="w-2.5 h-2.5" /> Factura Oficial Lista
+                                                                    </span>
+                                                                ) : invoiceRequest?.requested ? (
+                                                                    <span className="text-[8px] font-black uppercase px-2.5 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 flex items-center gap-1">
+                                                                        <FileText className="w-2.5 h-2.5" /> Factura Solicitada ({invoiceRequest.vat_id})
+                                                                    </span>
+                                                                ) : null}
+                                                            </div>
+                                                            <p className="text-lg font-black uppercase italic text-brand-carbon tracking-tight">
+                                                                {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                            </p>
+                                                            {(() => {
+                                                                const track = parseOrderTracking(order);
+                                                                if (!track.carrier && !track.number && !track.url) return null;
+                                                                return (
+                                                                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                                        <span className="text-[10px] font-bold text-gray-500 uppercase">
+                                                                            🚚 {track.carrier || 'Envío'}{track.number ? `: #${track.number}` : ''}
+                                                                        </span>
+                                                                        {track.url && (
+                                                                            <a
+                                                                                href={track.url}
+                                                                                target="_blank"
+                                                                                rel="noreferrer"
+                                                                                className="text-[10px] font-black text-primary uppercase underline hover:text-brand-carbon transition-colors"
+                                                                            >
+                                                                                Seguir mi paquete →
+                                                                            </a>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
                                                     </div>
-                                                ))}
+
+                                                    <div className="flex items-center justify-between lg:justify-end gap-8">
+                                                        <div className="text-left sm:text-right hidden sm:block">
+                                                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Método</p>
+                                                            <p className="text-[11px] font-black text-brand-carbon uppercase italic">
+                                                                {order.shipping_method === 'pickup' ? 'Recogida Tienda' : 'Envío Domicilio'}
+                                                            </p>
+                                                        </div>
+                                                        <div className="text-left sm:text-right">
+                                                            <p className="text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1">Inversión Total</p>
+                                                            <p className="text-2xl font-black italic text-brand-carbon">{Number(order.total || 0).toFixed(2)}€</p>
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
+                                                            title={isExpanded ? 'Ocultar desglose del pedido' : 'Ver desglose del pedido'}
+                                                            className={`w-12 h-12 rounded-full border flex items-center justify-center transition-all cursor-pointer ${
+                                                                isExpanded
+                                                                    ? 'bg-primary text-white border-primary'
+                                                                    : 'border-gray-100 text-brand-carbon group-hover:bg-primary group-hover:text-white group-hover:border-primary'
+                                                            }`}
+                                                        >
+                                                            {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* Order Mini Items List */}
+                                                <div className="px-8 lg:px-10 pb-6 flex gap-4 overflow-x-auto scrollbar-hide">
+                                                    {order.order_items?.map((item, idx) => (
+                                                        <div key={idx} className="flex-shrink-0 flex items-center gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50">
+                                                            <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-[10px] font-black">
+                                                                {item.quantity}x
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-[10px] font-bold text-gray-500 uppercase truncate max-w-[140px]">{item.product_name}</p>
+                                                                {item.selected_options && Object.keys(item.selected_options).length > 0 && (
+                                                                    <p className="text-[9px] font-bold text-primary/70 uppercase truncate max-w-[140px] mt-0.5">
+                                                                        {Object.entries(item.selected_options).filter(([,v]) => v).map(([k,v]) => `${k}: ${v}`).join(' · ')}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+
+                                                {/* Expandable Detailed Breakdown */}
+                                                {isExpanded && (
+                                                    <div className="px-8 lg:px-10 pb-6 pt-4 border-t border-gray-50 bg-gray-50/30 space-y-4 animate-in fade-in duration-300">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                                                            <div className="bg-white p-5 rounded-2xl border border-gray-100">
+                                                                <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-2">Detalle de Entrega</p>
+                                                                {order.shipping_method === 'pickup' ? (
+                                                                    <p className="font-black text-emerald-700 uppercase italic text-xs">Recogida en Tienda (C/ Río Tormes, 5, Fuenlabrada)</p>
+                                                                ) : (
+                                                                    <p className="font-bold text-brand-carbon text-xs">
+                                                                        {order.shipping_address || 'Dirección registrada'}
+                                                                        {(order.shipping_zip || order.shipping_city) ? ` · ${[order.shipping_zip, order.shipping_city].filter(Boolean).join(' ')}` : ''}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                            <div className="bg-white p-5 rounded-2xl border border-gray-100 flex flex-col justify-center">
+                                                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                                                                    <span>Base Imponible</span>
+                                                                    <span>{(Number(order.total || 0) / 1.21).toFixed(2)} €</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
+                                                                    <span>IVA (21%)</span>
+                                                                    <span>{(Number(order.total || 0) - Number(order.total || 0) / 1.21).toFixed(2)} €</span>
+                                                                </div>
+                                                                <div className="flex justify-between text-xs font-black text-brand-carbon uppercase italic pt-2 border-t border-gray-100">
+                                                                    <span>Total (IVA Incluido)</span>
+                                                                    <span>{Number(order.total || 0).toFixed(2)} €</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {/* Action Bar: Ticket Simplificado & Pedir Factura Oficial */}
+                                                {!isCancelled && (
+                                                    <div className="px-8 lg:px-10 py-5 bg-gray-50/70 border-t border-gray-100 flex flex-wrap items-center justify-between gap-4">
+                                                        <div className="flex flex-wrap items-center gap-3">
+                                                            {canDownloadTicket ? (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleDownloadTicket(order)}
+                                                                    disabled={downloadingTicketId === order.id}
+                                                                    className="px-5 py-3 bg-brand-carbon hover:bg-primary text-white rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center gap-2 shadow-sm disabled:opacity-50"
+                                                                >
+                                                                    {downloadingTicketId === order.id ? (
+                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                    ) : (
+                                                                        <Download className="w-4 h-4" />
+                                                                    )}
+                                                                    Descargar Ticket (PDF)
+                                                                </button>
+                                                            ) : (
+                                                                <div className="px-4 py-2.5 bg-amber-50 border border-amber-100 text-amber-700 rounded-2xl text-[10px] font-black uppercase tracking-wider flex items-center gap-2">
+                                                                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                                                                    <span>Ticket disponible al confirmarse el pago</span>
+                                                                </div>
+                                                            )}
+
+                                                            {officialInvoice?.url ? (
+                                                                <a
+                                                                    href={officialInvoice.url}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    download={officialInvoice.filename || 'Factura-Oficial.pdf'}
+                                                                    className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center gap-2 shadow-sm"
+                                                                >
+                                                                    <FileText className="w-4 h-4" />
+                                                                    Descargar Factura Oficial (PDF)
+                                                                </a>
+                                                            ) : (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => openRequestInvoiceModal(order)}
+                                                                    className={`px-5 py-3 rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center gap-2 border ${
+                                                                        invoiceRequest?.requested
+                                                                            ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                                                                            : 'bg-white border-gray-200 text-brand-carbon hover:border-primary hover:text-primary'
+                                                                    }`}
+                                                                >
+                                                                    <Receipt className="w-4 h-4" />
+                                                                    {invoiceRequest?.requested ? 'Editar Datos de Factura' : 'Pedir Factura'}
+                                                                </button>
+                                                            )}
+                                                        </div>
+
+                                                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                                                            {officialInvoice?.url
+                                                                ? 'Factura oficial emitida por administración'
+                                                                : invoiceRequest?.requested
+                                                                ? `Datos enviados (${invoiceRequest.company_name} · ${invoiceRequest.vat_id})`
+                                                                : '¿Eres profesional o empresa? Pulsa "Pedir Factura"'}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             )}
                         </div>
@@ -412,7 +611,7 @@ export default function AccountPage() {
                                 <div className="flex items-center justify-between mb-10">
                                     <div className="flex items-center gap-4">
                                         <div className="w-2 h-2 bg-primary rounded-full"></div>
-                                        <h3 className="text-xl font-black text-brand-carbon uppercase italic">Información Personal</h3>
+                                        <h3 className="text-xl font-black text-brand-carbon uppercase italic">Información Personal y de Facturación</h3>
                                     </div>
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tus datos nunca serán compartidos</p>
                                 </div>
@@ -445,7 +644,7 @@ export default function AccountPage() {
                                     </div>
 
                                     <div className="md:col-span-2 space-y-3">
-                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Dirección Principal</label>
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Dirección Principal / Fiscal</label>
                                         <div className="relative">
                                             <MapPin className="absolute left-6 top-6 w-4 h-4 text-gray-300" />
                                             <textarea
@@ -456,28 +655,28 @@ export default function AccountPage() {
                                         </div>
                                     </div>
 
-                                    {(profile?.company_name || profile?.user_type === 'profesional') && (
-                                        <>
-                                            <div className="space-y-3">
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Empresa / Razón Social</label>
-                                                <input
-                                                    type="text"
-                                                    className="premium-input w-full h-16 bg-gray-50/50 hover:bg-white focus:bg-white"
-                                                    value={formData.company_name}
-                                                    onChange={e => setFormData({ ...formData, company_name: e.target.value })}
-                                                />
-                                            </div>
-                                            <div className="space-y-3">
-                                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">CIF / NIF (VAT ID)</label>
-                                                <input
-                                                    type="text"
-                                                    className="premium-input w-full h-16 bg-gray-50/50 hover:bg-white focus:bg-white"
-                                                    value={formData.vat_id}
-                                                    onChange={e => setFormData({ ...formData, vat_id: e.target.value })}
-                                                />
-                                            </div>
-                                        </>
-                                    )}
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">
+                                            {profile?.user_type === 'profesional' ? 'Empresa / Razón Social *' : 'Empresa / Razón Social (Opcional)'}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="Nombre fiscal o empresa para facturas"
+                                            className="premium-input w-full h-16 bg-gray-50/50 hover:bg-white focus:bg-white"
+                                            value={formData.company_name}
+                                            onChange={e => setFormData({ ...formData, company_name: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">DNI / NIF / CIF (Para Facturas)</label>
+                                        <input
+                                            type="text"
+                                            placeholder="Ej. B12345678 o 12345678A"
+                                            className="premium-input w-full h-16 bg-gray-50/50 hover:bg-white focus:bg-white uppercase"
+                                            value={formData.vat_id}
+                                            onChange={e => setFormData({ ...formData, vat_id: e.target.value.toUpperCase() })}
+                                        />
+                                    </div>
 
                                     {/* Professional Document Upload */}
                                     {profile?.user_type === 'profesional' && (
@@ -699,6 +898,100 @@ export default function AccountPage() {
                     )}
                 </div>
             </div>
+
+            {/* Modal "Pedir Factura" (Datos Fiscales para TPV) */}
+            {invoiceModalOrder && (
+                <div className="fixed inset-0 bg-brand-carbon/60 backdrop-blur-md z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-luxury border border-gray-100 p-8 lg:p-10 font-outfit animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between pb-6 border-b border-gray-100 mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center">
+                                    <Receipt className="w-6 h-6" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black text-brand-carbon uppercase italic leading-none mb-1">Pedir Factura</h3>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                        Pedido #{invoiceModalOrder.id.slice(0, 8).toUpperCase()} · Facturación TPV
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setInvoiceModalOrder(null)}
+                                className="p-2 hover:bg-gray-100 rounded-full text-gray-400 transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <p className="text-xs font-bold text-gray-500 leading-relaxed mb-6">
+                            Indica tus datos fiscales para que nuestro equipo emita la factura oficial en el sistema TPV y la asocie a tu pedido.
+                        </p>
+
+                        <form onSubmit={handleRequestInvoiceSubmit} className="space-y-5">
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1.5 block">
+                                    Razón Social / Nombre Fiscal *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="Nombre de empresa, autónomo o particular"
+                                    value={invoiceForm.company_name}
+                                    onChange={e => setInvoiceForm({ ...invoiceForm, company_name: e.target.value })}
+                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold text-brand-carbon focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1.5 block">
+                                    NIF / CIF / DNI *
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    placeholder="Ej. B12345678 o 12345678A"
+                                    value={invoiceForm.vat_id}
+                                    onChange={e => setInvoiceForm({ ...invoiceForm, vat_id: e.target.value.toUpperCase() })}
+                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold text-brand-carbon uppercase focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white"
+                                />
+                            </div>
+
+                            <div>
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1 mb-1.5 block">
+                                    Dirección Fiscal Completa *
+                                </label>
+                                <textarea
+                                    required
+                                    rows="2"
+                                    placeholder="Calle, número, código postal, localidad y provincia"
+                                    value={invoiceForm.fiscal_address}
+                                    onChange={e => setInvoiceForm({ ...invoiceForm, fiscal_address: e.target.value })}
+                                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold text-brand-carbon focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white resize-none"
+                                />
+                            </div>
+
+                            <div className="flex gap-3 pt-4 border-t border-gray-100">
+                                <button
+                                    type="button"
+                                    onClick={() => setInvoiceModalOrder(null)}
+                                    className="flex-1 py-3.5 px-4 border border-gray-200 hover:bg-gray-50 text-gray-600 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSavingInvoiceReq}
+                                    className="flex-1 py-3.5 px-4 bg-brand-carbon hover:bg-primary text-white rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50"
+                                >
+                                    {isSavingInvoiceReq ? <Loader2 className="w-4 h-4 animate-spin" /> : <Receipt className="w-4 h-4" />}
+                                    Pedir Factura
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

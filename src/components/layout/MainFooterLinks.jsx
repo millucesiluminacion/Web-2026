@@ -92,6 +92,7 @@ export function MainFooterLinks() {
                 <ul className="space-y-2 text-xs">
                     <li><Link to="/profesionales" className="text-primary font-black uppercase hover:text-white transition-colors">Área Profesional / B2B</Link></li>
                     {[
+                        { label: 'Seguimiento y Facturas', path: '/seguimiento' },
                         { label: 'Contacto', path: '/contacto' },
                         { label: 'Envíos y Devoluciones', path: '/envios-y-devoluciones' },
                         { label: 'Garantía y RMA', path: '/garantia-y-rma' },

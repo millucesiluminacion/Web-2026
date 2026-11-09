@@ -7,6 +7,7 @@ import Cart from './pages/Cart';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import AccountPage from './pages/AccountPage';
+import OrderTrackingPage from './pages/OrderTrackingPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import { AdminLayout } from './components/layout/AdminLayout';
 import Dashboard from './pages/admin/Dashboard';
@@ -88,6 +89,7 @@ function App() {
               <Route path="marcas" element={<BrandsPage />} />
               <Route path="estancias" element={<RoomsPage />} />
               <Route path="perfil" element={<AccountPage />} />
+              <Route path="seguimiento" element={<OrderTrackingPage />} />
               <Route path="reset-password" element={<ResetPasswordPage />} />
               <Route path=":slug" element={<CMSPage />} />
             </Route>

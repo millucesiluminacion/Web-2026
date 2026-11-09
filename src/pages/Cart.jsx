@@ -7,7 +7,7 @@ import {
     Trash, CreditCard, Truck, ShieldCheck,
     CheckCircle2, Loader2, Lock, Package,
     ChevronDown, ChevronUp, ArrowRight, Sparkles,
-    AlertCircle, Minus, Plus, X
+    AlertCircle, Minus, Plus, X, Download, Receipt, FileText
 } from 'lucide-react';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
@@ -15,6 +15,8 @@ import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import StripePaymentForm from '../components/commerce/StripePaymentForm';
 import { IVA_RATE } from '../lib/pricingUtils';
 import { trackViewCart, trackBeginCheckout, trackPurchase, isGA4Active, getGA4ClientId } from '../lib/analytics';
+import { serializeInvoiceRequestInNotes, isOrderPaidOrBeyond } from '../lib/orderTrackingUtils';
+import { generateOrderTicketPDF } from '../lib/pdfGenerator';
 
 const INPUT_CLASS = "w-full bg-gray-50/80 border border-gray-100 rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:ring-4 focus:ring-primary/10 focus:bg-white focus:border-primary/30 transition-all placeholder:font-normal placeholder:text-gray-300";
 const LABEL_CLASS = "text-[9px] font-black uppercase text-gray-400 tracking-widest mb-1.5 block ml-1";
@@ -32,6 +34,8 @@ export default function Cart() {
     const [paymentloading, setPaymentLoading] = useState(true);
     const [orderCompleted, setOrderCompleted] = useState(false);
     const [orderRef, setOrderRef] = useState('');
+    const [completedOrderData, setCompletedOrderData] = useState(null);
+    const [isDownloadingTicket, setIsDownloadingTicket] = useState(false);
     const [createdOrderId, setCreatedOrderId] = useState('');
     const createdOrderIdRef = useRef('');
     const [showOrderSummary, setShowOrderSummary] = useState(true);
@@ -54,16 +58,37 @@ export default function Cart() {
         return {
             name: draft?.name || profile?.full_name || '',
             email: draft?.email || user?.email || '',
-            phone: draft?.phone || '',
-            address: draft?.address || '',
+            phone: draft?.phone || profile?.phone || '',
+            address: draft?.address || profile?.address || '',
             city: draft?.city || '',
             zip: draft?.zip || '',
             country: draft?.country || 'España',
             notes: draft?.notes || '',
             paymentMethod: draft?.paymentMethod || '',
-            shippingMethod: draft?.shippingMethod || null // 'delivery' or 'pickup'
+            shippingMethod: draft?.shippingMethod || null, // 'delivery' or 'pickup'
+            requestInvoice: draft?.requestInvoice ?? (profile?.user_type === 'profesional' || Boolean(profile?.vat_id)),
+            invoiceCompanyName: draft?.invoiceCompanyName || profile?.company_name || profile?.full_name || '',
+            invoiceVatId: draft?.invoiceVatId || profile?.vat_id || '',
+            invoiceFiscalAddress: draft?.invoiceFiscalAddress || profile?.address || ''
         };
     });
+
+    // Autocompletar campos vacíos cuando el perfil del usuario termine de cargarse
+    useEffect(() => {
+        if (profile || user) {
+            setFormData(prev => ({
+                ...prev,
+                name: prev.name || profile?.full_name || '',
+                email: prev.email || user?.email || '',
+                phone: prev.phone || profile?.phone || '',
+                address: prev.address || profile?.address || '',
+                requestInvoice: prev.requestInvoice || profile?.user_type === 'profesional' || Boolean(profile?.vat_id),
+                invoiceCompanyName: prev.invoiceCompanyName || profile?.company_name || profile?.full_name || '',
+                invoiceVatId: prev.invoiceVatId || profile?.vat_id || '',
+                invoiceFiscalAddress: prev.invoiceFiscalAddress || profile?.address || ''
+            }));
+        }
+    }, [profile, user]);
 
     const isPro = profile?.user_type === 'profesional' && !!profile?.has_pro_prices;
     const isB2B = isPro || !!profile?.is_partner;
@@ -134,6 +159,10 @@ export default function Cart() {
                     } catch (e) { }
                 }
 
+                setCompletedOrderData({
+                    order: confirmedOrder || { id: orderId, status: 'PAID', payment_status: 'PAID', total: effectiveTotalPrice },
+                    items: dbItems.length > 0 ? dbItems : cart
+                });
                 setOrderRef(orderId.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
 
@@ -356,6 +385,14 @@ export default function Cart() {
                     Método de entrega: ${formData.shippingMethod === 'pickup' ? 'RECOGIDA EN TIENDA (0€)' : 'ENVÍO A DOMICILIO'} <br/>
                     Método de pago: ${formData.paymentMethod === 'stripe' ? 'TARJETA' : formData.paymentMethod === 'paypal' ? 'PAYPAL' : formData.paymentMethod === 'transfer' ? 'TRANSFERENCIA' : 'PAGO EN TIENDA'}
                 </div>
+                ${formData.requestInvoice ? `
+                <div style="margin-top: 15px; padding: 15px; background-color: #eef2ff; border-radius: 12px; border: 1px solid #e0e7ff; color: #312e81; font-size: 12px;">
+                    <b>🧾 SOLICITUD DE FACTURA OFICIAL (TPV):</b><br/>
+                    <b>Razón Social / Nombre Fiscal:</b> ${formData.invoiceCompanyName || formData.name}<br/>
+                    <b>NIF / CIF:</b> ${(formData.invoiceVatId || '').toUpperCase()}<br/>
+                    <b>Dirección Fiscal:</b> ${formData.invoiceFiscalAddress || `${formData.address || ''}, ${formData.zip || ''} ${formData.city || ''}`}
+                </div>
+                ` : ''}
             `;
 
             // 1. Send to Customer
@@ -392,7 +429,7 @@ export default function Cart() {
                 },
                 body: JSON.stringify({
                     to: adminEmail,
-                    subject: `🛒 Nuevo Pedido #${order.id.slice(0, 8).toUpperCase()} - Mil Luces Iluminación`,
+                    subject: `🛒 Nuevo Pedido #${order.id.slice(0, 8).toUpperCase()}${formData.requestInvoice ? ' [PIDE FACTURA]' : ''} - Mil Luces Iluminación`,
                     templateKey: 'master_layout',
                     variables: {
                         site_name: 'Mil Luces Iluminación',
@@ -461,6 +498,14 @@ export default function Cart() {
                 throw new Error('Por favor, introduce la localidad o ciudad de entrega.');
             }
         }
+        if (formData.requestInvoice) {
+            if (!formData.invoiceCompanyName?.trim()) {
+                throw new Error('Has marcado "Pedir Factura": por favor, introduce el Nombre Fiscal o Razón Social.');
+            }
+            if (!formData.invoiceVatId?.trim()) {
+                throw new Error('Has marcado "Pedir Factura": por favor, introduce tu NIF, CIF o DNI.');
+            }
+        }
     }
 
     // Guardar pedido en Supabase
@@ -502,6 +547,15 @@ export default function Cart() {
 
                 if (matchedCust?.id) {
                     resolvedCustomerId = matchedCust.id;
+                    if (formData.requestInvoice) {
+                        await supabase
+                            .from('customers')
+                            .update({
+                                company_name: formData.invoiceCompanyName.trim(),
+                                vat_id: formData.invoiceVatId.trim().toUpperCase()
+                            })
+                            .eq('id', matchedCust.id);
+                    }
                 } else {
                     const { data: newCust } = await supabase
                         .from('customers')
@@ -509,8 +563,10 @@ export default function Cart() {
                             full_name: formData.name?.trim() || 'Cliente Web',
                             email: normalizedEmail,
                             phone: formData.phone?.trim() || '',
-                            address: formData.shippingMethod === 'delivery' ? `${formData.address || ''}, ${formData.city || ''} (${formData.zip || ''})`.trim() : '',
-                            user_type: 'persona'
+                            address: formData.shippingMethod === 'delivery' ? `${formData.address || ''}, ${formData.city || ''} (${formData.zip || ''})`.trim() : (formData.invoiceFiscalAddress || ''),
+                            user_type: formData.requestInvoice ? 'profesional' : 'persona',
+                            company_name: formData.requestInvoice ? formData.invoiceCompanyName.trim() : null,
+                            vat_id: formData.requestInvoice ? formData.invoiceVatId.trim().toUpperCase() : null
                         }])
                         .select('id')
                         .maybeSingle();
@@ -519,9 +575,37 @@ export default function Cart() {
                     }
                 }
             }
+
+            // Si el usuario está logueado y pidió factura, guardar también en su perfil
+            if (user?.id && formData.requestInvoice) {
+                await supabase
+                    .from('profiles')
+                    .update({
+                        company_name: formData.invoiceCompanyName.trim(),
+                        vat_id: formData.invoiceVatId.trim().toUpperCase()
+                    })
+                    .eq('id', user.id);
+            }
         } catch (linkErr) {
             console.warn('[saveOrder] Error asociando cliente/usuario:', linkErr);
         }
+
+        const baseCustomerNotes = appliedCoupon
+            ? `${formData.notes}${formData.notes ? ' | ' : ''}CUPÓN: ${appliedCoupon.code} (-${appliedCoupon.discount_percentage}%)`
+            : formData.notes;
+
+        const fallbackDeliveryAddress = formData.shippingMethod === 'delivery'
+            ? [formData.address, [formData.zip, formData.city].filter(Boolean).join(' ')].filter(Boolean).join(', ')
+            : '';
+
+        const finalOrderNotes = formData.requestInvoice
+            ? serializeInvoiceRequestInNotes({
+                requested: true,
+                company_name: formData.invoiceCompanyName.trim(),
+                vat_id: formData.invoiceVatId.trim().toUpperCase(),
+                fiscal_address: (formData.invoiceFiscalAddress || fallbackDeliveryAddress).trim()
+            }, baseCustomerNotes)
+            : baseCustomerNotes;
 
         const { data: order, error } = await supabase
             .from('orders')
@@ -533,9 +617,7 @@ export default function Cart() {
                 shipping_address: formData.address,
                 shipping_city: formData.city,
                 shipping_zip: formData.zip,
-                notes: appliedCoupon
-                    ? `${formData.notes}${formData.notes ? ' | ' : ''}CUPÓN: ${appliedCoupon.code} (-${appliedCoupon.discount_percentage}%)`
-                    : formData.notes,
+                notes: finalOrderNotes,
                 total: effectiveTotalPrice,
                 payment_method: formData.paymentMethod,
                 shipping_method: formData.shippingMethod || 'delivery',
@@ -606,10 +688,9 @@ export default function Cart() {
         const orderIdToUpdate = overrideOrderId || createdOrderIdRef.current || createdOrderId;
         const canBrowserTrack = isGA4Active();
         const gaClientId = getGA4ClientId();
+        let updatedOrder = null;
 
         if (orderIdToUpdate) {
-            let updatedOrder = null;
-
             try {
                 // 1. Confirmar pago en el servidor con service_role (bypasses RLS)
                 const res = await fetch('/api/create-payment-intent', {
@@ -653,11 +734,39 @@ export default function Cart() {
             }
         }
 
+        const cartSnapshot = cart.map(item => ({
+            product_id: item.id,
+            product_name: item.name,
+            quantity: item.quantity,
+            unit_price: item.price,
+            reference: item.reference,
+            selected_options: item.selectedOptions || null
+        }));
+
+        setCompletedOrderData({
+            order: updatedOrder || {
+                id: orderIdToUpdate,
+                customer_name: formData.name,
+                customer_email: formData.email,
+                customer_phone: formData.phone,
+                shipping_address: formData.address,
+                shipping_city: formData.city,
+                shipping_zip: formData.zip,
+                shipping_method: formData.shippingMethod || 'delivery',
+                payment_method: formData.paymentMethod,
+                total: effectiveTotalPrice,
+                status: 'PAID',
+                payment_status: 'PAID',
+                created_at: new Date().toISOString()
+            },
+            items: cartSnapshot
+        });
+
         // Limpiar referencias para evitar colisiones con reintentos
         createdOrderIdRef.current = '';
         setCreatedOrderId('');
 
-        setOrderRef(paymentIntent?.id ? paymentIntent.id.slice(-8).toUpperCase() : (orderIdToUpdate ? orderIdToUpdate.slice(0, 8).toUpperCase() : 'OK'));
+        setOrderRef(orderIdToUpdate ? orderIdToUpdate.slice(0, 8).toUpperCase() : (paymentIntent?.id ? paymentIntent.id.slice(-8).toUpperCase() : 'OK'));
         setOrderCompleted(true);
         const cardTrackedKey = `ga4_purchase_tracked_${orderIdToUpdate}`;
         if (!sessionStorage.getItem(cardTrackedKey)) {
@@ -731,6 +840,15 @@ export default function Cart() {
             }
 
             if (formData.paymentMethod === 'transfer' || formData.paymentMethod === 'in_store') {
+                const cartSnapshot = cart.map(item => ({
+                    product_id: item.id,
+                    product_name: item.name,
+                    quantity: item.quantity,
+                    unit_price: item.price,
+                    reference: item.reference,
+                    selected_options: item.selectedOptions || null
+                }));
+                setCompletedOrderData({ order, items: cartSnapshot });
                 setOrderRef(order.id.slice(0, 8).toUpperCase());
                 setOrderCompleted(true);
                 // Para pedidos por transferencia / en tienda (PENDING), la compra se registrará en Google Analytics
@@ -816,6 +934,20 @@ export default function Cart() {
 
     // ── Pantalla de confirmación ──────────────────────────────────────
     if (orderCompleted) {
+        const canDownloadTicketNow = isOrderPaidOrBeyond(completedOrderData?.order);
+
+        const handleDownloadCompletedTicket = async () => {
+            if (!completedOrderData?.order) return;
+            try {
+                setIsDownloadingTicket(true);
+                await generateOrderTicketPDF(completedOrderData.order, completedOrderData.items, { profile });
+            } catch (e) {
+                alert('Error al descargar el ticket: ' + e.message);
+            } finally {
+                setIsDownloadingTicket(false);
+            }
+        };
+
         return (
             <div className="min-h-screen flex items-center justify-center bg-brand-porcelain px-6 py-20">
                 <div className="max-w-lg w-full text-center animate-in fade-in zoom-in duration-700">
@@ -826,9 +958,25 @@ export default function Cart() {
                     <h1 className="text-3xl sm:text-5xl font-black text-brand-carbon uppercase italic leading-none tracking-tighter mb-4">
                         ¡Pedido <span className="text-gray-300">Recibido!</span>
                     </h1>
-                    <p className="text-sm text-gray-400 font-bold mb-2">
+                    <p className="text-sm text-gray-400 font-bold mb-4">
                         Referencia: <span className="text-brand-carbon font-black italic">#{orderRef}</span>
                     </p>
+
+                    {/* Descarga inmediata de Ticket para compras ya pagadas (Tarjeta / PayPal) */}
+                    {canDownloadTicketNow && (
+                        <div className="mb-6">
+                            <button
+                                type="button"
+                                onClick={handleDownloadCompletedTicket}
+                                disabled={isDownloadingTicket}
+                                className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase italic text-xs tracking-widest transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2.5 disabled:opacity-50"
+                            >
+                                {isDownloadingTicket ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                                Descargar Ticket de Compra (PDF)
+                            </button>
+                        </div>
+                    )}
+
                     {formData.paymentMethod === 'transfer' && transferInfo && (
                         <div className="bg-white rounded-3xl p-6 text-left mb-8 shadow-luxury border border-gray-100 space-y-3">
                             <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-4">Datos para la Transferencia</p>
@@ -836,7 +984,7 @@ export default function Cart() {
                             {transferInfo.titular && <div><span className="text-[9px] font-black text-gray-400 uppercase block">Titular</span><span className="text-sm font-bold text-brand-carbon">{transferInfo.titular}</span></div>}
                             {transferInfo.banco && <div><span className="text-[9px] font-black text-gray-400 uppercase block">Banco</span><span className="text-sm font-bold text-brand-carbon">{transferInfo.banco}</span></div>}
                             <div><span className="text-[9px] font-black text-gray-400 uppercase block">Concepto</span><span className="text-sm font-black text-primary">#{orderRef}</span></div>
-                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest pt-2 border-t border-gray-50">Tu pedido se procesará en cuanto recibamos la transferencia.</p>
+                            <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest pt-2 border-t border-gray-50">Tu pedido se procesará y el ticket se activará en cuanto recibamos la transferencia.</p>
                         </div>
                     )}
                     {formData.paymentMethod === 'in_store' && (
@@ -846,7 +994,27 @@ export default function Cart() {
                             <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest pt-2 border-t border-gray-50">Te avisaremos cuando tu pedido esté listo para ser recogido.</p>
                         </div>
                     )}
-                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-12 max-w-xs mx-auto">
+
+                    {/* Bloque informativo para invitados y seguimiento */}
+                    <div className="bg-white rounded-3xl p-6 text-left mb-8 shadow-luxury border border-gray-100 space-y-3">
+                        <p className="text-[9px] font-black text-primary uppercase tracking-widest">Tickets, Facturas y Seguimiento</p>
+                        <p className="text-xs font-bold text-gray-500 leading-relaxed">
+                            Puedes consultar el estado de tu pedido, descargar tu ticket o pedir factura en cualquier momento desde{' '}
+                            <Link
+                                to={`/seguimiento?ref=${encodeURIComponent(orderRef)}&email=${encodeURIComponent(formData.email || '')}`}
+                                className="text-primary font-black underline"
+                            >
+                                Localizar mi Pedido
+                            </Link>
+                            {user ? (
+                                <> o directamente en <Link to="/perfil" className="text-primary font-black underline">Mi Perfil</Link>.</>
+                            ) : (
+                                <>. Si te registras en <Link to="/register" className="text-primary font-black underline">Crear Cuenta</Link> con tu email (<b>{formData.email}</b>), tendrás todos tus pedidos y facturas vinculados automáticamente.</>
+                            )}
+                        </p>
+                    </div>
+
+                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest mb-8 max-w-xs mx-auto">
                         Gracias por confiar en Mil Luces. Hemos enviado los detalles al email facilitado.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -1082,6 +1250,77 @@ export default function Cart() {
                                     )}
 
                                     <div className="md:col-span-2"><label className={LABEL_CLASS}>Notas del pedido</label><input name="notes" value={formData.notes} onChange={handleChange} type="text" placeholder="Instrucciones especiales..." className={INPUT_CLASS} /></div>
+
+                                    {/* Opción "Pedir Factura" (Profesionales / Empresas / Particulares con NIF) */}
+                                    <div className="md:col-span-2 pt-2">
+                                        <label className={`flex items-center justify-between p-5 rounded-2xl cursor-pointer transition-all border-2 ${formData.requestInvoice ? 'border-primary bg-primary/5' : 'border-gray-100 hover:border-gray-200 bg-gray-50/40'}`}>
+                                            <div className="flex items-center gap-4">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!formData.requestInvoice}
+                                                    onChange={(e) => {
+                                                        const checked = e.target.checked;
+                                                        setFormData(prev => ({
+                                                            ...prev,
+                                                            requestInvoice: checked,
+                                                            invoiceCompanyName: prev.invoiceCompanyName || prev.name || '',
+                                                            invoiceFiscalAddress: prev.invoiceFiscalAddress || (prev.shippingMethod === 'delivery' ? [prev.address, [prev.zip, prev.city].filter(Boolean).join(' ')].filter(Boolean).join(', ') : '')
+                                                        }));
+                                                    }}
+                                                    className="w-5 h-5 rounded text-primary focus:ring-primary border-gray-300"
+                                                />
+                                                <div>
+                                                    <span className="text-xs font-black text-brand-carbon uppercase italic flex items-center gap-2">
+                                                        <Receipt className="w-4 h-4 text-primary" />
+                                                        Pedir Factura
+                                                    </span>
+                                                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest block mt-0.5">
+                                                        Marca esta opción si eres profesional, empresa o necesitas factura oficial con NIF/CIF
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </label>
+
+                                        {formData.requestInvoice && (
+                                            <div className="mt-4 p-6 rounded-2xl bg-gray-50/60 border border-primary/15 grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                                <div>
+                                                    <label className={LABEL_CLASS}>Razón Social / Nombre Fiscal *</label>
+                                                    <input
+                                                        required={!!formData.requestInvoice}
+                                                        name="invoiceCompanyName"
+                                                        value={formData.invoiceCompanyName}
+                                                        onChange={handleChange}
+                                                        type="text"
+                                                        placeholder="Empresa, autónomo o nombre fiscal"
+                                                        className={INPUT_CLASS}
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className={LABEL_CLASS}>NIF / CIF / DNI *</label>
+                                                    <input
+                                                        required={!!formData.requestInvoice}
+                                                        name="invoiceVatId"
+                                                        value={formData.invoiceVatId}
+                                                        onChange={(e) => setFormData(prev => ({ ...prev, invoiceVatId: e.target.value.toUpperCase() }))}
+                                                        type="text"
+                                                        placeholder="B12345678 / 12345678A"
+                                                        className={`${INPUT_CLASS} uppercase`}
+                                                    />
+                                                </div>
+                                                <div className="md:col-span-2">
+                                                    <label className={LABEL_CLASS}>Dirección Fiscal Completa</label>
+                                                    <input
+                                                        name="invoiceFiscalAddress"
+                                                        value={formData.invoiceFiscalAddress}
+                                                        onChange={handleChange}
+                                                        type="text"
+                                                        placeholder="Calle, número, CP, ciudad y provincia (si se deja vacío se usará la dirección de entrega)"
+                                                        className={INPUT_CLASS}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
