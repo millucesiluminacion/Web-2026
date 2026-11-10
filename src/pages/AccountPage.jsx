@@ -18,7 +18,7 @@ import {
 import { generateOrderTicketPDF } from '../lib/pdfGenerator';
 
 export default function AccountPage() {
-    const { user, profile, signOut, isPartner, userTier, refreshProfile } = useAuth();
+    const { user, profile, signOut, isPartner, isPro, userTier, refreshProfile } = useAuth();
     const [loading, setLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isUploadingDoc, setIsUploadingDoc] = useState(false);
@@ -270,7 +270,7 @@ export default function AccountPage() {
                                     {userTier === 'vip' ? 'Socio VIP' : userTier === 'pro' ? 'Cliente Profesional' : 'Cliente Boutique'}
                                 </span>
                             </div>
-                            <h1 className="text-4xl lg:text-6xl font-black uppercase italic leading-none tracking-tighter">
+                            <h1 className="text-white text-4xl lg:text-6xl font-black uppercase italic leading-none tracking-tighter">
                                 Hola, <span className="text-primary">{formData.full_name?.split(' ')[0] || 'Usuario'}</span>
                             </h1>
                             <p className="text-gray-400 text-sm font-bold uppercase tracking-widest mt-4 flex items-center gap-2">
@@ -279,15 +279,76 @@ export default function AccountPage() {
                         </div>
                     </div>
 
-                    {profile?.discount_percent > 0 && (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-8 rounded-[2rem] flex items-center gap-6">
-                            <div className="bg-primary/20 p-4 rounded-2xl">
+                    {/* Tarjeta de Ventaja / Tarifa / Descuento Asignado */}
+                    {profile?.discount_percent > 0 ? (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
+                            <div className="bg-primary/20 p-4 rounded-2xl flex-shrink-0">
                                 <Zap className="w-8 h-8 text-primary shadow-[0_0_20px_rgba(255,5,5,0.4)]" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Tu Ventaja Exclusiva</p>
-                                <p className="text-3xl font-black italic">{profile.discount_percent}% de Descuento</p>
-                                <p className="text-[9px] font-bold text-gray-500 uppercase mt-1 leading-tight">Aplicado automáticamente en todo el catálogo</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
+                                    {(userTier === 'pro' || profile?.has_pro_prices || isPro) ? 'Tarifa Pro + Descuento Especial' : 'Tu Descuento Especial'}
+                                </p>
+                                <p className="text-2xl lg:text-3xl font-black italic">
+                                    {profile.discount_percent}% de Descuento
+                                </p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
+                                    {(userTier === 'pro' || profile?.has_pro_prices || isPro)
+                                        ? `Condiciones profesionales con un ${profile.discount_percent}% de descuento especial asignado a tu cuenta`
+                                        : `Descuento exclusivo asignado por administración aplicado en tu cuenta`}
+                                </p>
+                            </div>
+                        </div>
+                    ) : (userTier === 'pro' || profile?.has_pro_prices || isPro) ? (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
+                            <div className="bg-primary/20 p-4 rounded-2xl flex-shrink-0">
+                                <Zap className="w-8 h-8 text-primary shadow-[0_0_20px_rgba(255,5,5,0.4)]" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Tu Ventaja Comercial</p>
+                                <p className="text-2xl lg:text-3xl font-black italic">Tarifa Profesional</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
+                                    Precios B2B especiales y condiciones de descuento en productos seleccionados
+                                </p>
+                            </div>
+                        </div>
+                    ) : (userTier === 'vip' || isPartner || profile?.is_partner) ? (
+                        <div className="bg-white/5 backdrop-blur-xl border border-yellow-500/20 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
+                            <div className="bg-yellow-400/20 p-4 rounded-2xl flex-shrink-0">
+                                <Star className="w-8 h-8 text-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.4)]" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-yellow-400 mb-1">Tu Ventaja Exclusiva</p>
+                                <p className="text-2xl lg:text-3xl font-black italic text-yellow-400">Tarifa Socio VIP</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
+                                    Precios preferentes y condiciones especiales aplicados automáticamente
+                                </p>
+                            </div>
+                        </div>
+                    ) : profile?.user_type === 'profesional' ? (
+                        <div className="bg-white/5 backdrop-blur-xl border border-amber-500/20 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
+                            <div className="bg-amber-400/20 p-4 rounded-2xl flex-shrink-0">
+                                <Clock className="w-8 h-8 text-amber-400" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-1">Validación en Trámite</p>
+                                <p className="text-xl lg:text-2xl font-black italic">Tarifa Pro Pendiente</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
+                                    Revisaremos tu documentación fiscal para activar tus precios B2B profesionales
+                                </p>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
+                            <div className="bg-primary/20 p-4 rounded-2xl flex-shrink-0">
+                                <Shield className="w-8 h-8 text-primary" />
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Cuenta Boutique</p>
+                                <p className="text-2xl lg:text-3xl font-black italic">Garantía Oficial</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
+                                    Asesoramiento técnico de iluminación y envíos asegurados
+                                </p>
                             </div>
                         </div>
                     )}
