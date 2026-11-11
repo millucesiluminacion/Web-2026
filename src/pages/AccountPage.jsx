@@ -279,79 +279,47 @@ export default function AccountPage() {
                         </div>
                     </div>
 
-                    {/* Tarjeta de Ventaja / Tarifa / Descuento Asignado */}
-                    {profile?.discount_percent > 0 ? (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
-                            <div className="bg-primary/20 p-4 rounded-2xl flex-shrink-0">
-                                <Zap className="w-8 h-8 text-primary shadow-[0_0_20px_rgba(255,5,5,0.4)]" />
+                    {/* Tarjeta de Tarifa (solo para profesionales o socios, sin porcentajes) */}
+                    {(userTier === 'pro' || profile?.has_pro_prices || isPro) ? (
+                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-[2rem] flex items-center gap-5 max-w-sm">
+                            <div className="bg-primary/20 p-3.5 rounded-2xl flex-shrink-0">
+                                <Zap className="w-6 h-6 text-primary shadow-[0_0_15px_rgba(255,5,5,0.3)]" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">
-                                    {(userTier === 'pro' || profile?.has_pro_prices || isPro) ? 'Tarifa Pro + Descuento Especial' : 'Tu Descuento Especial'}
-                                </p>
-                                <p className="text-2xl lg:text-3xl font-black italic">
-                                    {profile.discount_percent}% de Descuento
-                                </p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
-                                    {(userTier === 'pro' || profile?.has_pro_prices || isPro)
-                                        ? `Condiciones profesionales con un ${profile.discount_percent}% de descuento especial asignado a tu cuenta`
-                                        : `Descuento exclusivo asignado por administración aplicado en tu cuenta`}
-                                </p>
-                            </div>
-                        </div>
-                    ) : (userTier === 'pro' || profile?.has_pro_prices || isPro) ? (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
-                            <div className="bg-primary/20 p-4 rounded-2xl flex-shrink-0">
-                                <Zap className="w-8 h-8 text-primary shadow-[0_0_20px_rgba(255,5,5,0.4)]" />
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Tu Ventaja Comercial</p>
-                                <p className="text-2xl lg:text-3xl font-black italic">Tarifa Profesional</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
-                                    Precios B2B especiales y condiciones de descuento en productos seleccionados
+                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-0.5">Tarifa Activa</p>
+                                <p className="text-xl font-black italic text-white">Tarifa Profesional</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-0.5 leading-snug">
+                                    Precios y condiciones profesionales aplicados a tu cuenta
                                 </p>
                             </div>
                         </div>
                     ) : (userTier === 'vip' || isPartner || profile?.is_partner) ? (
-                        <div className="bg-white/5 backdrop-blur-xl border border-yellow-500/20 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
-                            <div className="bg-yellow-400/20 p-4 rounded-2xl flex-shrink-0">
-                                <Star className="w-8 h-8 text-yellow-400 shadow-[0_0_20px_rgba(250,204,21,0.4)]" />
+                        <div className="bg-white/5 backdrop-blur-xl border border-yellow-500/20 p-6 rounded-[2rem] flex items-center gap-5 max-w-sm">
+                            <div className="bg-yellow-400/20 p-3.5 rounded-2xl flex-shrink-0">
+                                <Star className="w-6 h-6 text-yellow-400 shadow-[0_0_15px_rgba(250,204,21,0.3)]" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-yellow-400 mb-1">Tu Ventaja Exclusiva</p>
-                                <p className="text-2xl lg:text-3xl font-black italic text-yellow-400">Tarifa Socio VIP</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
-                                    Precios preferentes y condiciones especiales aplicados automáticamente
+                                <p className="text-[10px] font-black uppercase tracking-widest text-yellow-400 mb-0.5">Tarifa Activa</p>
+                                <p className="text-xl font-black italic text-yellow-400">Tarifa Socio VIP</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-0.5 leading-snug">
+                                    Condiciones preferentes aplicadas a tu cuenta
                                 </p>
                             </div>
                         </div>
                     ) : profile?.user_type === 'profesional' ? (
-                        <div className="bg-white/5 backdrop-blur-xl border border-amber-500/20 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
-                            <div className="bg-amber-400/20 p-4 rounded-2xl flex-shrink-0">
-                                <Clock className="w-8 h-8 text-amber-400" />
+                        <div className="bg-white/5 backdrop-blur-xl border border-amber-500/20 p-6 rounded-[2rem] flex items-center gap-5 max-w-sm">
+                            <div className="bg-amber-400/20 p-3.5 rounded-2xl flex-shrink-0">
+                                <Clock className="w-6 h-6 text-amber-400" />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-1">Validación en Trámite</p>
-                                <p className="text-xl lg:text-2xl font-black italic">Tarifa Pro Pendiente</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
-                                    Revisaremos tu documentación fiscal para activar tus precios B2B profesionales
+                                <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-0.5">Estado</p>
+                                <p className="text-xl font-black italic text-white">Cuenta Profesional</p>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-0.5 leading-snug">
+                                    Validación de documentación en trámite
                                 </p>
                             </div>
                         </div>
-                    ) : (
-                        <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 lg:p-8 rounded-[2rem] flex items-center gap-6 max-w-md">
-                            <div className="bg-primary/20 p-4 rounded-2xl flex-shrink-0">
-                                <Shield className="w-8 h-8 text-primary" />
-                            </div>
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-primary mb-1">Cuenta Boutique</p>
-                                <p className="text-2xl lg:text-3xl font-black italic">Garantía Oficial</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mt-1 leading-snug">
-                                    Asesoramiento técnico de iluminación y envíos asegurados
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                    ) : null}
                 </div>
                 {/* Decorative background elements */}
                 <div className="absolute -top-20 -right-20 w-96 h-96 bg-primary/10 rounded-full blur-[100px]"></div>
