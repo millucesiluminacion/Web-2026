@@ -178,12 +178,15 @@ export async function saveOrderInvoiceRequest(supabase, order, invoiceReqData) {
  */
 export async function saveOfficialInvoiceMeta(supabase, order, officialInvoiceData, customHumanAdminNotes = null) {
     const rawAdminNotes = String(order?.admin_notes || '');
+    const paymentMatch = rawAdminNotes.match(/\[PAYMENT_LINK:[\s\S]*?\]/);
     const trackingMatch = rawAdminNotes.match(/\[TRACKING:[\s\S]*?\]/);
+    const ga4Match = rawAdminNotes.match(/\[GA4_PURCHASE_SYNCED\]/);
     const cleanHumanNotes = customHumanAdminNotes !== null
         ? stripMetadataTags(customHumanAdminNotes)
         : stripMetadataTags(rawAdminNotes);
 
     const parts = [];
+    if (paymentMatch) parts.push(paymentMatch[0]);
     if (trackingMatch) parts.push(trackingMatch[0]);
     if (officialInvoiceData && officialInvoiceData.url) {
         parts.push('[OFFICIAL_INVOICE:' + JSON.stringify({
@@ -192,6 +195,7 @@ export async function saveOfficialInvoiceMeta(supabase, order, officialInvoiceDa
             uploaded_at: officialInvoiceData.uploaded_at || new Date().toISOString()
         }) + ']');
     }
+    if (ga4Match) parts.push(ga4Match[0]);
     if (cleanHumanNotes) parts.push(cleanHumanNotes);
 
     const serializedAdminNotes = parts.join('\n');

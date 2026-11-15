@@ -13,7 +13,8 @@ import {
     STATUS_LABELS_ES,
     isOrderPaidOrBeyond,
     parseOrderInvoiceMeta,
-    saveOrderInvoiceRequest
+    saveOrderInvoiceRequest,
+    parseOrderPaymentMeta
 } from '../lib/orderTrackingUtils';
 import { generateOrderTicketPDF } from '../lib/pdfGenerator';
 
@@ -128,6 +129,7 @@ export default function AccountPage() {
         if (!order) return;
         try {
             setPayingOrderId(order.id);
+
             const res = await fetch('/api/create-payment-intent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -139,10 +141,28 @@ export default function AccountPage() {
             const data = await res.json();
             if (data?.url) {
                 window.location.href = data.url;
-            } else {
-                alert(data?.error || 'No se pudo generar la pasarela de pago seguro.');
+                return;
             }
+            if (data?.isPaid) {
+                alert('¡Tu pedido ya figura como pagado! Actualizando el estado...');
+                fetchAccountData();
+                return;
+            }
+
+            // Fallback al enlace guardado en el pedido si existe
+            const meta = parseOrderPaymentMeta(order);
+            if (meta?.url) {
+                window.location.href = meta.url;
+                return;
+            }
+
+            alert(data?.error || 'No se pudo generar la pasarela de pago seguro.');
         } catch (err) {
+            const meta = parseOrderPaymentMeta(order);
+            if (meta?.url) {
+                window.location.href = meta.url;
+                return;
+            }
             console.error('Error starting Stripe checkout:', err);
             alert('Error al iniciar el pago con tarjeta: ' + err.message);
         } finally {

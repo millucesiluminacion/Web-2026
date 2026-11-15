@@ -56,16 +56,9 @@ export async function sendServerPurchaseEvent(supabase, orderId, options = {}) {
             return { success: false, reason: 'already_synced' };
         }
 
-        // 3. DEDUPLICACIÓN NAVEGADOR vs SERVIDOR:
-        // Si el navegador del cliente ya envió el evento con gtag.js activo (sin AdBlock),
-        // solo marcamos [GA4_PURCHASE_SYNCED] para no duplicar la venta en GA4 ni al cambiar estado en Admin.
-        if (clientTracked) {
-            const currentNotes = order.admin_notes ? order.admin_notes.trim() : '';
-            const updatedNotes = currentNotes ? `${currentNotes} [GA4_PURCHASE_SYNCED]` : '[GA4_PURCHASE_SYNCED]';
-            await supabase.from('orders').update({ admin_notes: updatedNotes }).eq('id', order.id);
-            console.log(`[GA4 Server] Order #${order.id.slice(0, 8).toUpperCase()} tracked by client browser; marked [GA4_PURCHASE_SYNCED].`);
-            return { success: true, mode: 'client_tracked_marked' };
-        }
+        // 3. Sincronización infalible: enviamos SIEMPRE a GA4 via Measurement Protocol.
+        // Google Analytics 4 deduplica de forma nativa por transaction_id, por lo que nunca
+        // se duplica la venta aunque el cliente también lo haya intentado enviar por navegador.
 
         const { data: items } = await supabase.from('order_items').select('*, products(*)').eq('order_id', orderId);
 

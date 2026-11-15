@@ -9,7 +9,8 @@ import {
     parseOrderTracking,
     parseOrderInvoiceMeta,
     isOrderPaidOrBeyond,
-    saveOrderInvoiceRequest
+    saveOrderInvoiceRequest,
+    parseOrderPaymentMeta
 } from '../lib/orderTrackingUtils';
 import { generateOrderTicketPDF } from '../lib/pdfGenerator';
 
@@ -137,6 +138,7 @@ export default function OrderTrackingPage() {
         if (!order) return;
         try {
             setIsStartingPayment(true);
+
             const res = await fetch('/api/create-payment-intent', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -148,10 +150,28 @@ export default function OrderTrackingPage() {
             const data = await res.json();
             if (data?.url) {
                 window.location.href = data.url;
-            } else {
-                alert(data?.error || 'No se pudo generar la pasarela de pago.');
+                return;
             }
+            if (data?.isPaid) {
+                alert('¡Tu pedido ya figura como pagado! Actualizando el estado...');
+                lookupOrder(orderRef || order.id.slice(0, 8), email || order.customer_email);
+                return;
+            }
+
+            // Fallback al enlace guardado en el pedido si existe
+            const meta = parseOrderPaymentMeta(order);
+            if (meta?.url) {
+                window.location.href = meta.url;
+                return;
+            }
+
+            alert(data?.error || 'No se pudo generar la pasarela de pago.');
         } catch (e) {
+            const meta = parseOrderPaymentMeta(order);
+            if (meta?.url) {
+                window.location.href = meta.url;
+                return;
+            }
             console.error('Error starting checkout:', e);
             alert('Error al iniciar el pago con tarjeta: ' + e.message);
         } finally {
@@ -292,7 +312,7 @@ export default function OrderTrackingPage() {
                 {order && (
                     <div className="bg-white rounded-[2.5rem] p-6 md:p-10 border border-gray-100 shadow-sm space-y-6 animate-in fade-in duration-300">
                         {/* Banner Pago Pendiente con Tarjeta si no está pagado */}
-                        {!canDownloadTicket && order.status !== 'CANCELLED' && (
+                        {!canDownloadTicket && order.status !== 'CANCELLED' && order.status !== 'RETURNED' && (!order.payment_method || ['STRIPE', 'TARJETA', 'TARJETA_TIENDA'].includes(String(order.payment_method).toUpperCase())) && (
                             <div className="p-6 bg-gradient-to-r from-slate-900 via-brand-carbon to-blue-950 rounded-3xl text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl border border-white/10">
                                 <div>
                                     <div className="flex items-center gap-2 mb-1">

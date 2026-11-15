@@ -1,5 +1,7 @@
 import Stripe from 'stripe';
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
+dotenv.config();
 import { sendServerPurchaseEvent, sendServerRefundEvent } from './_lib/ga4-server.js';
 
 export const config = {
@@ -7,8 +9,21 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    const allowedOrigin = process.env.VITE_APP_URL || 'https://milluces.vercel.app';
-    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    const allowedOrigins = [
+        'https://www.millucesiluminacion.com',
+        'https://millucesiluminacion.com',
+        'https://milluces.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:3000',
+        process.env.VITE_APP_URL
+    ].filter(Boolean);
+
+    const reqOrigin = req.headers.origin;
+    const corsOrigin = (reqOrigin && allowedOrigins.includes(reqOrigin))
+        ? reqOrigin
+        : 'https://www.millucesiluminacion.com';
+
+    res.setHeader('Access-Control-Allow-Origin', corsOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
@@ -79,7 +94,287 @@ export default async function handler(req, res) {
                 console.error('[Stripe Intent] Could not parse string body:', e.message);
             }
         }
-        const { orderId, metadata = {} } = body;
+        const { orderId, sessionId, metadata = {} } = body;
+
+        // CREAR SESIÓN DE CHECKOUT / ENLACE DE PAGO STRIPE (PARA PEDIDOS MANUALES O PENDIENTES)
+        if (body.action === 'create-checkout-session') {
+            if (!orderId) {
+                return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
+            }
+
+            const { data: order, error: orderErr } = await supabase
+                .from('orders')
+                .select('*')
+                .eq('id', orderId)
+                .maybeSingle();
+
+            if (orderErr || !order) {
+                return res.status(404).json({ error: 'Pedido no encontrado en la base de datos.' });
+            }
+
+            const paidStatuses = ['PAID', 'PROCESSING', 'READY_TO_SHIP', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+            if (paidStatuses.includes(String(order.status || '').toUpperCase()) || String(order.payment_status || '').toUpperCase() === 'PAID') {
+                return res.status(400).json({ error: 'Este pedido ya figura como pagado.', isPaid: true });
+            }
+
+            if (order.status === 'CANCELLED' || order.status === 'RETURNED') {
+                return res.status(400).json({ error: 'Este pedido está cancelado y no admite pagos.' });
+            }
+
+            const totalAmount = Number(order.total);
+            if (!totalAmount || totalAmount <= 0) {
+                return res.status(400).json({ error: 'El importe total del pedido no es válido para cobrar.' });
+            }
+
+            const expectedCents = Math.round(totalAmount * 100);
+            const shortRef = String(order.id || '').slice(0, 8).toUpperCase();
+
+            // Si ya existe una sesión registrada en admin_notes, verificar si ya está pagada o sigue abierta con el mismo importe
+            const existingMatch = String(order.admin_notes || '').match(/\[PAYMENT_LINK:([\s\S]*?)\]/);
+            if (existingMatch && !body.forceNew) {
+                try {
+                    const parsedMeta = JSON.parse(existingMatch[1]);
+                    if (parsedMeta?.session_id) {
+                        const existingSession = await stripe.checkout.sessions.retrieve(parsedMeta.session_id, stripeOptions);
+                        if (existingSession) {
+                            if (existingSession.payment_status === 'paid') {
+                                const paymentId = (typeof existingSession.payment_intent === 'string' ? existingSession.payment_intent : existingSession.payment_intent?.id) || existingSession.id;
+                                await supabase
+                                    .from('orders')
+                                    .update({ status: 'PAID', payment_status: 'PAID', payment_id: paymentId })
+                                    .eq('id', order.id);
+                                try {
+                                    await sendServerPurchaseEvent(supabase, order.id, { clientTracked: false });
+                                } catch (e) {}
+                                return res.status(400).json({ error: 'Este pedido ya ha sido abonado.', isPaid: true });
+                            }
+                            if (existingSession.status === 'open' && existingSession.amount_total === expectedCents && existingSession.url) {
+                                return res.status(200).json({
+                                    success: true,
+                                    url: existingSession.url,
+                                    sessionId: existingSession.id,
+                                    shortRef,
+                                    reused: true
+                                });
+                            }
+                        }
+                    }
+                } catch (reuseErr) {
+                    console.warn('[Stripe Checkout Session] Could not reuse existing session, creating a new one:', reuseErr.message);
+                }
+            }
+
+            // Determinar URL del sitio validada contra lista blanca
+            const rawOrigin = req.headers.origin || process.env.VITE_APP_URL || 'https://www.millucesiluminacion.com';
+            let siteUrl = 'https://www.millucesiluminacion.com';
+            try {
+                const parsed = new URL(rawOrigin);
+                const candidate = `${parsed.protocol}//${parsed.host}`;
+                if (allowedOrigins.includes(candidate)) {
+                    siteUrl = candidate;
+                }
+            } catch (e) {
+                siteUrl = 'https://www.millucesiluminacion.com';
+            }
+
+            const cleanCustomerEmail = (order.customer_email || '').trim();
+
+            const session = await stripe.checkout.sessions.create({
+                payment_method_types: ['card'],
+                mode: 'payment',
+                customer_email: cleanCustomerEmail || undefined,
+                client_reference_id: order.id,
+                metadata: {
+                    orderId: order.id,
+                    shortRef: shortRef,
+                    customerName: order.customer_name || ''
+                },
+                line_items: [
+                    {
+                        price_data: {
+                            currency: 'eur',
+                            product_data: {
+                                name: `Pedido #${shortRef} - Mil Luces Iluminación`,
+                                description: `Abono del pedido #${shortRef} (${order.customer_name || 'Cliente'})`
+                            },
+                            unit_amount: expectedCents
+                        },
+                        quantity: 1
+                    }
+                ],
+                success_url: `${siteUrl}/pedido-seguimiento?ref=${shortRef}&email=${encodeURIComponent(cleanCustomerEmail)}&session_id={CHECKOUT_SESSION_ID}&payment=success`,
+                cancel_url: `${siteUrl}/mi-cuenta?payment=cancelled`
+            }, stripeOptions);
+
+            // Persistir enlace generado en admin_notes
+            try {
+                const existingAdminNotes = order.admin_notes || '';
+                const paymentTag = `[PAYMENT_LINK:${JSON.stringify({ url: session.url, session_id: session.id, created_at: new Date().toISOString() })}]`;
+                let updatedAdminNotes = existingAdminNotes;
+                if (/\[PAYMENT_LINK:[\s\S]*?\]/.test(updatedAdminNotes)) {
+                    updatedAdminNotes = updatedAdminNotes.replace(/\[PAYMENT_LINK:[\s\S]*?\]/, paymentTag);
+                } else {
+                    updatedAdminNotes = updatedAdminNotes ? `${paymentTag}\n${updatedAdminNotes}` : paymentTag;
+                }
+                await supabase.from('orders').update({ admin_notes: updatedAdminNotes }).eq('id', order.id);
+            } catch (err) {
+                console.warn('[Stripe Checkout Session] Could not update admin_notes:', err);
+            }
+
+            return res.status(200).json({
+                success: true,
+                url: session.url,
+                sessionId: session.id,
+                shortRef
+            });
+        }
+
+        // CONFIRMAR PAGO DE SESIÓN STRIPE CHECKOUT (REDIRECCIÓN TRAS PAGO EXITOSO)
+        if (body.action === 'confirm-checkout-session') {
+            const currentSessionId = sessionId || body.sessionId;
+            if (!currentSessionId) {
+                return res.status(400).json({ error: 'Se requiere sessionId de Stripe.' });
+            }
+
+            const session = await stripe.checkout.sessions.retrieve(currentSessionId, stripeOptions);
+            if (!session) {
+                return res.status(404).json({ error: 'Sesión de Stripe no encontrada.' });
+            }
+
+            if (session.payment_status !== 'paid') {
+                return res.status(400).json({ error: `El pago aún no está completado en Stripe. Estado actual: ${session.payment_status}` });
+            }
+
+            const sessionOrderId = session.client_reference_id || session.metadata?.orderId;
+            if (orderId && sessionOrderId && orderId !== sessionOrderId) {
+                return res.status(400).json({ error: 'La sesión de pago no corresponde al pedido indicado.' });
+            }
+
+            const targetOrderId = sessionOrderId || orderId;
+            if (!targetOrderId) {
+                return res.status(400).json({ error: 'No se pudo asociar la sesión a un pedido.' });
+            }
+
+            const { data: currentOrder } = await supabase
+                .from('orders')
+                .select('id, status, payment_status')
+                .eq('id', targetOrderId)
+                .maybeSingle();
+
+            const paymentId = (typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id) || currentSessionId;
+            const advancedStatuses = ['PROCESSING', 'READY_TO_SHIP', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+            const nextStatus = (currentOrder && advancedStatuses.includes(String(currentOrder.status || '').toUpperCase()))
+                ? currentOrder.status
+                : 'PAID';
+
+            const { data: updatedOrder, error: updateErr } = await supabase
+                .from('orders')
+                .update({
+                    status: nextStatus,
+                    payment_status: 'PAID',
+                    payment_id: paymentId
+                })
+                .eq('id', targetOrderId)
+                .select('id, status, payment_status, payment_id, total')
+                .maybeSingle();
+
+            if (updateErr) {
+                console.error('[Stripe Session Confirm] DB error:', updateErr.message);
+                return res.status(500).json({ error: updateErr.message });
+            }
+
+            console.log(`[Stripe Session Confirm] Order ${targetOrderId} marked as PAID via session ${currentSessionId}`);
+
+            // GA4 server purchase event
+            try {
+                await sendServerPurchaseEvent(supabase, targetOrderId, {
+                    clientTracked: Boolean(body.clientTracked),
+                    gaClientId: body.gaClientId || null
+                });
+            } catch (err) {
+                console.warn('[Stripe Session Confirm] GA4 error:', err);
+            }
+
+            return res.status(200).json({ success: true, order: updatedOrder });
+        }
+
+        // COMPROBAR ESTADO DE PAGO EN STRIPE
+        if (body.action === 'check-payment-status') {
+            if (!orderId) {
+                return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
+            }
+
+            const { data: order, error: orderErr } = await supabase
+                .from('orders')
+                .select('id, status, payment_status, payment_id, admin_notes')
+                .eq('id', orderId)
+                .maybeSingle();
+
+            if (orderErr || !order) {
+                return res.status(404).json({ error: 'Pedido no encontrado.' });
+            }
+
+            const paidStatuses = ['PAID', 'PROCESSING', 'READY_TO_SHIP', 'SHIPPED', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'];
+            if (paidStatuses.includes(String(order.status || '').toUpperCase()) || String(order.payment_status || '').toUpperCase() === 'PAID') {
+                return res.status(200).json({
+                    success: true,
+                    isPaid: true,
+                    status: order.status,
+                    payment_status: order.payment_status,
+                    payment_id: order.payment_id
+                });
+            }
+
+            // Buscar si tiene session_id en admin_notes
+            let recordedSessionId = null;
+            const match = String(order.admin_notes || '').match(/\[PAYMENT_LINK:([\s\S]*?)\]/);
+            if (match) {
+                try {
+                    const parsed = JSON.parse(match[1]);
+                    recordedSessionId = parsed.session_id;
+                } catch (e) {}
+            }
+
+            if (recordedSessionId) {
+                try {
+                    const session = await stripe.checkout.sessions.retrieve(recordedSessionId, stripeOptions);
+                    if (session && session.payment_status === 'paid') {
+                        const paymentId = (typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id) || recordedSessionId;
+                        const { data: updatedOrder } = await supabase
+                            .from('orders')
+                            .update({
+                                status: 'PAID',
+                                payment_status: 'PAID',
+                                payment_id: paymentId
+                            })
+                            .eq('id', order.id)
+                            .select('id, status, payment_status, payment_id')
+                            .maybeSingle();
+
+                        try {
+                            await sendServerPurchaseEvent(supabase, order.id, { clientTracked: false });
+                        } catch (e) {}
+
+                        return res.status(200).json({
+                            success: true,
+                            isPaid: true,
+                            status: updatedOrder?.status || 'PAID',
+                            payment_status: 'PAID',
+                            payment_id: paymentId
+                        });
+                    }
+                } catch (sessErr) {
+                    console.warn('[check-payment-status] Session lookup error:', sessErr.message);
+                }
+            }
+
+            return res.status(200).json({
+                success: true,
+                isPaid: false,
+                status: order.status,
+                payment_status: order.payment_status
+            });
+        }
 
         if (!orderId) {
             return res.status(400).json({ error: 'Se requiere un ID de pedido válido.' });
