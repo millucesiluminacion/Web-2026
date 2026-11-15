@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import {
     Search, Package, Truck, ExternalLink, FileText, FileCheck2,
-    Receipt, Clock, CheckCircle2, AlertCircle, Loader2, MapPin, X
+    Receipt, Clock, CheckCircle2, AlertCircle, Loader2, MapPin, X, CreditCard
 } from 'lucide-react';
 import { supabase } from '../lib/supabaseClient';
 import {
@@ -36,6 +36,11 @@ export default function OrderTrackingPage() {
     const [order, setOrder] = useState(null);
     const [generatingPdf, setGeneratingPdf] = useState(false);
 
+    // Online Payment states
+    const [paymentSuccessMsg, setPaymentSuccessMsg] = useState('');
+    const [isConfirmingStripe, setIsConfirmingStripe] = useState(false);
+    const [isStartingPayment, setIsStartingPayment] = useState(false);
+
     // Modal "Pedir Factura"
     const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
     const [invoiceForm, setInvoiceForm] = useState({
@@ -48,9 +53,38 @@ export default function OrderTrackingPage() {
     useEffect(() => {
         const initialRef = searchParams.get('ref');
         const initialEmail = searchParams.get('email');
-        if (initialRef && initialEmail) {
-            lookupOrder(initialRef, initialEmail);
+        const sessionId = searchParams.get('session_id');
+        const paymentParam = searchParams.get('payment');
+
+        async function init() {
+            if (sessionId && paymentParam === 'success') {
+                try {
+                    setIsConfirmingStripe(true);
+                    const res = await fetch('/api/create-payment-intent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'confirm-checkout-session',
+                            sessionId
+                        })
+                    });
+                    const confirmData = await res.json();
+                    if (confirmData?.success) {
+                        setPaymentSuccessMsg('¡Pago verificado con éxito! Tu pedido ha sido confirmado y entra directamente en preparación.');
+                    }
+                } catch (e) {
+                    console.warn('[OrderTracking] Error confirming stripe session:', e);
+                } finally {
+                    setIsConfirmingStripe(false);
+                }
+            }
+
+            if (initialRef && initialEmail) {
+                lookupOrder(initialRef, initialEmail);
+            }
         }
+
+        init();
     }, []);
 
     const lookupOrder = async (refInput, emailInput) => {
@@ -97,6 +131,32 @@ export default function OrderTrackingPage() {
     const handleSubmit = (e) => {
         e.preventDefault();
         lookupOrder(orderRef, email);
+    };
+
+    const handlePayOrder = async () => {
+        if (!order) return;
+        try {
+            setIsStartingPayment(true);
+            const res = await fetch('/api/create-payment-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'create-checkout-session',
+                    orderId: order.id
+                })
+            });
+            const data = await res.json();
+            if (data?.url) {
+                window.location.href = data.url;
+            } else {
+                alert(data?.error || 'No se pudo generar la pasarela de pago.');
+            }
+        } catch (e) {
+            console.error('Error starting checkout:', e);
+            alert('Error al iniciar el pago con tarjeta: ' + e.message);
+        } finally {
+            setIsStartingPayment(false);
+        }
     };
 
     const handleDownloadTicket = async () => {
@@ -217,9 +277,49 @@ export default function OrderTrackingPage() {
                     )}
                 </form>
 
+                {/* Notificación de Pago Exitoso */}
+                {paymentSuccessMsg && (
+                    <div className="mb-6 p-6 bg-emerald-50 border-2 border-emerald-200 rounded-3xl flex items-center gap-4 text-emerald-900 shadow-sm animate-in fade-in duration-300">
+                        <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
+                        <div>
+                            <h4 className="font-black text-sm uppercase italic">¡Pago Recibido con Éxito!</h4>
+                            <p className="text-xs font-bold text-emerald-700 mt-0.5">{paymentSuccessMsg}</p>
+                        </div>
+                    </div>
+                )}
+
                 {/* Resultado del Pedido */}
                 {order && (
                     <div className="bg-white rounded-[2.5rem] p-6 md:p-10 border border-gray-100 shadow-sm space-y-6 animate-in fade-in duration-300">
+                        {/* Banner Pago Pendiente con Tarjeta si no está pagado */}
+                        {!canDownloadTicket && order.status !== 'CANCELLED' && (
+                            <div className="p-6 bg-gradient-to-r from-slate-900 via-brand-carbon to-blue-950 rounded-3xl text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-xl border border-white/10">
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-400">Abono Pendiente</p>
+                                    </div>
+                                    <h4 className="text-lg font-black uppercase italic tracking-tight">Completa el pago de tu pedido</h4>
+                                    <p className="text-xs text-gray-300 mt-1 max-w-xl">
+                                        Para que nuestro equipo empiece a preparar tu paquete, pulsa en el botón para pagar con tu tarjeta en la pasarela oficial y segura de Stripe.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handlePayOrder}
+                                    disabled={isStartingPayment}
+                                    className="w-full md:w-auto px-8 py-4 bg-primary hover:bg-primary/90 text-white rounded-2xl text-xs font-black uppercase italic tracking-widest transition-all flex items-center justify-center gap-3 shadow-lg active:scale-95 disabled:opacity-50 shrink-0"
+                                >
+                                    {isStartingPayment ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <CreditCard className="w-4 h-4" />
+                                    )}
+                                    Pagar {Number(order.total || 0).toFixed(2)} € con Tarjeta &rarr;
+                                </button>
+                            </div>
+                        )}
+
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
                             <div>
                                 <div className="flex items-center gap-3 mb-2">

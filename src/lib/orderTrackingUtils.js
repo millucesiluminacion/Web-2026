@@ -51,7 +51,27 @@ function stripMetadataTags(text = '') {
         .replace(/\[TRACKING:[\s\S]*?\]\n?/g, '')
         .replace(/\[INVOICE_REQ:[\s\S]*?\]\n?/g, '')
         .replace(/\[OFFICIAL_INVOICE:[\s\S]*?\]\n?/g, '')
+        .replace(/\[PAYMENT_LINK:[\s\S]*?\]\n?/g, '')
+        .replace(/\[GA4_PURCHASE_SYNCED\]\n?/g, '')
         .trim();
+}
+
+/**
+ * Extrae metadatos de enlace de pago online (Stripe Checkout Session):
+ * url, session_id, created_at
+ */
+export function parseOrderPaymentMeta(order) {
+    if (!order) return null;
+    const combined = `${order.notes || ''}\n${order.admin_notes || ''}`;
+    const match = combined.match(/\[PAYMENT_LINK:([\s\S]*?)\]/);
+    if (match) {
+        try {
+            return JSON.parse(match[1]);
+        } catch (e) {
+            console.warn('[orderTrackingUtils] Error parsing PAYMENT_LINK JSON:', e);
+        }
+    }
+    return null;
 }
 
 /**
@@ -249,10 +269,15 @@ export function parseOrderTracking(order) {
 export function serializeOrderTracking(tracking, existingNotes = '', rawExistingAdminNotes = '') {
     const sourceForTags = rawExistingAdminNotes || existingNotes || '';
     const officialMatch = String(sourceForTags).match(/\[OFFICIAL_INVOICE:[\s\S]*?\]/);
+    const paymentMatch = String(sourceForTags).match(/\[PAYMENT_LINK:[\s\S]*?\]/);
+    const ga4Match = String(sourceForTags).match(/\[GA4_PURCHASE_SYNCED\]/);
     const cleanNotes = stripMetadataTags(existingNotes);
     const hasData = tracking && (tracking.carrier || tracking.number || tracking.url);
 
     const parts = [];
+    if (paymentMatch) {
+        parts.push(paymentMatch[0]);
+    }
     if (hasData) {
         parts.push('[TRACKING:' + JSON.stringify({
             carrier: tracking.carrier || '',
@@ -262,6 +287,9 @@ export function serializeOrderTracking(tracking, existingNotes = '', rawExisting
     }
     if (officialMatch) {
         parts.push(officialMatch[0]);
+    }
+    if (ga4Match) {
+        parts.push(ga4Match[0]);
     }
     if (cleanNotes) {
         parts.push(cleanNotes);
@@ -279,8 +307,10 @@ export async function saveOrderTracking(supabase, orderId, tracking, currentNote
 
     const sourceForTags = rawExistingAdminNotes || currentNotes || '';
     const officialMatch = String(sourceForTags).match(/\[OFFICIAL_INVOICE:[\s\S]*?\]/);
+    const paymentMatch = String(sourceForTags).match(/\[PAYMENT_LINK:[\s\S]*?\]/);
+    const ga4Match = String(sourceForTags).match(/\[GA4_PURCHASE_SYNCED\]/);
     const cleanHumanNotes = stripMetadataTags(currentNotes);
-    const adminNotesWithoutTracking = [officialMatch ? officialMatch[0] : '', cleanHumanNotes].filter(Boolean).join('\n');
+    const adminNotesWithoutTracking = [paymentMatch ? paymentMatch[0] : '', officialMatch ? officialMatch[0] : '', ga4Match ? ga4Match[0] : '', cleanHumanNotes].filter(Boolean).join('\n');
 
     // 1. Intentar actualizar columnas nativas
     try {

@@ -30,6 +30,7 @@ export default function AccountPage() {
     const [isDataLoading, setIsDataLoading] = useState(false);
     const [expandedOrderId, setExpandedOrderId] = useState(null);
     const [downloadingTicketId, setDownloadingTicketId] = useState(null);
+    const [payingOrderId, setPayingOrderId] = useState(null);
 
     // "Pedir Factura" modal state
     const [invoiceModalOrder, setInvoiceModalOrder] = useState(null);
@@ -120,6 +121,32 @@ export default function AccountPage() {
             alert('No se pudo generar el ticket en PDF. Por favor, inténtalo de nuevo.');
         } finally {
             setDownloadingTicketId(null);
+        }
+    };
+
+    const handlePayWithStripe = async (order) => {
+        if (!order) return;
+        try {
+            setPayingOrderId(order.id);
+            const res = await fetch('/api/create-payment-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'create-checkout-session',
+                    orderId: order.id
+                })
+            });
+            const data = await res.json();
+            if (data?.url) {
+                window.location.href = data.url;
+            } else {
+                alert(data?.error || 'No se pudo generar la pasarela de pago seguro.');
+            }
+        } catch (err) {
+            console.error('Error starting Stripe checkout:', err);
+            alert('Error al iniciar el pago con tarjeta: ' + err.message);
+        } finally {
+            setPayingOrderId(null);
         }
     };
 
@@ -435,6 +462,8 @@ export default function AccountPage() {
                                             badgeClass: 'bg-amber-100 text-amber-700'
                                         };
                                         const isCancelled = order.status === 'CANCELLED' || order.status === 'RETURNED';
+                                        const isCardMethod = !order.payment_method || ['STRIPE', 'TARJETA', 'TARJETA_TIENDA'].includes(String(order.payment_method).toUpperCase());
+                                        const canPayOnline = !canDownloadTicket && !isCancelled && isCardMethod;
 
                                         return (
                                             <div key={order.id} className="bg-white rounded-[3rem] border border-gray-100 shadow-luxury overflow-hidden group hover:border-primary/20 transition-all">
@@ -568,6 +597,22 @@ export default function AccountPage() {
                                                 {!isCancelled && (
                                                     <div className="px-8 lg:px-10 py-5 bg-gray-50/70 border-t border-gray-100 flex flex-wrap items-center justify-between gap-4">
                                                         <div className="flex flex-wrap items-center gap-3">
+                                                            {canPayOnline && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handlePayWithStripe(order)}
+                                                                    disabled={payingOrderId === order.id}
+                                                                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-2xl text-[10px] font-black uppercase italic tracking-widest transition-all flex items-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+                                                                >
+                                                                    {payingOrderId === order.id ? (
+                                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                                    ) : (
+                                                                        <CreditCard className="w-4 h-4" />
+                                                                    )}
+                                                                    Pagar con Tarjeta ({Number(order.total || 0).toFixed(2)} €)
+                                                                </button>
+                                                            )}
+
                                                             {canDownloadTicket ? (
                                                                 <button
                                                                     type="button"

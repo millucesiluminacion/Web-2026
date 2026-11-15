@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 
-import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag, ExternalLink, Send, Receipt, FileText, FileCheck2, Upload, CheckCircle2 } from 'lucide-react';
+import { Search, Loader2, Eye, Truck, Clock, X, MapPin, Package, CreditCard as CardIcon, Plus, Trash2, ChevronRight, Download, Printer, Trash, User, Pencil, Mail, ShoppingBag, ExternalLink, Send, Receipt, FileText, FileCheck2, Upload, CheckCircle2, Copy, Check, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { calculateProductPrice } from '../../lib/pricingUtils';
-import { CARRIER_PRESETS, buildTrackingUrl, parseOrderTracking, serializeOrderTracking, saveOrderTracking, parseOrderInvoiceMeta, saveOfficialInvoiceMeta, saveOrderInvoiceRequest, serializeInvoiceRequestInNotes } from '../../lib/orderTrackingUtils';
+import { CARRIER_PRESETS, buildTrackingUrl, parseOrderTracking, serializeOrderTracking, saveOrderTracking, parseOrderInvoiceMeta, saveOfficialInvoiceMeta, saveOrderInvoiceRequest, serializeInvoiceRequestInNotes, parseOrderPaymentMeta } from '../../lib/orderTrackingUtils';
 import { generateOrderTicketPDF } from '../../lib/pdfGenerator';
 
 export default function OrdersList() {
@@ -40,6 +40,11 @@ export default function OrdersList() {
     const [isEditingFiscalData, setIsEditingFiscalData] = useState(false);
     const [adminFiscalForm, setAdminFiscalForm] = useState({ company_name: '', vat_id: '', fiscal_address: '' });
     const [isSavingFiscalData, setIsSavingFiscalData] = useState(false);
+
+    // Stripe Payment Link states
+    const [isGeneratingPaymentLink, setIsGeneratingPaymentLink] = useState(false);
+    const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+    const [copiedPaymentOrderId, setCopiedPaymentOrderId] = useState(null);
 
     // Pagination state
     const [page, setPage] = useState(1);
@@ -619,6 +624,27 @@ export default function OrdersList() {
 
             if (itemsError) throw itemsError;
 
+            // 2c. Generar enlace de pago automático en Stripe si es pago con tarjeta y no está pagado
+            let paymentLinkUrl = null;
+            if (['STRIPE', 'TARJETA', 'TARJETA_TIENDA'].includes(String(orderForm.payment_method || '').toUpperCase()) && orderForm.status !== 'PAID') {
+                try {
+                    const sessionRes = await fetch('/api/create-payment-intent', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'create-checkout-session',
+                            orderId: order.id
+                        })
+                    });
+                    const sessionData = await sessionRes.json();
+                    if (sessionData?.url) {
+                        paymentLinkUrl = sessionData.url;
+                    }
+                } catch (e) {
+                    console.warn('[OrdersList] Error generando enlace Stripe para pedido:', e);
+                }
+            }
+
             // 3. Trigger Email Notifications
             try {
                 const itemsHtml = cart.map(item => `
@@ -633,6 +659,24 @@ export default function OrdersList() {
                 `).join('');
 
                 const ivaAmount = total * 0.17355;
+                const paymentCtaHtml = paymentLinkUrl ? `
+                    <div style="margin-top: 30px; padding: 25px 20px; background: #0f172a; border-radius: 16px; text-align: center; color: #ffffff;">
+                        <p style="margin: 0 0 6px 0; font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #f59e0b; font-weight: 800;">Abono Seguro con Tarjeta</p>
+                        <h3 style="margin: 0 0 8px 0; font-size: 18px; color: #ffffff; font-weight: 900; font-style: italic;">Paga tu pedido online</h3>
+                        <p style="margin: 0 0 20px 0; font-size: 13px; color: #94a3b8; line-height: 1.5;">Hemos activado una pasarela de pago segura en Stripe para tu pedido. Pulsa en el siguiente botón para abonarlo cómodamente con tu tarjeta de crédito o débito:</p>
+                        <table border="0" cellpadding="0" cellspacing="0" align="center" style="margin: 0 auto;">
+                            <tr>
+                                <td align="center" bgcolor="#2563eb" style="border-radius: 12px; background-color: #2563eb;">
+                                    <a href="${paymentLinkUrl}" target="_blank" style="display: inline-block; padding: 16px 36px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; font-weight: 900; color: #ffffff !important; text-decoration: none; border-radius: 12px; text-transform: uppercase; letter-spacing: 0.5px;">
+                                        💳 Pagar ${total.toFixed(2)}€ con Tarjeta &rarr;
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="margin: 16px 0 0 0; font-size: 11px; color: #64748b;">🔒 Conexión cifrada de 256 bits procesada de forma segura por Stripe</p>
+                    </div>
+                ` : '';
+
                 const orderDetailsHtml = `
                     <div style="margin-top: 30px; border: 1px solid #f0f0f0; border-radius: 16px; overflow: hidden;">
                         <div style="background-color: #fafafa; padding: 15px 20px; border-bottom: 1px solid #f0f0f0;">
@@ -669,6 +713,7 @@ export default function OrdersList() {
                             </table>
                         </div>
                     </div>
+                    ${paymentCtaHtml}
                 `;
 
                 // 1. Send to Customer
@@ -735,10 +780,99 @@ export default function OrdersList() {
 
             setIsCreateModalOpen(false);
             fetchOrders();
+
+            if (paymentLinkUrl) {
+                try {
+                    await navigator.clipboard.writeText(paymentLinkUrl);
+                    alert(`✅ Pedido #${order.id.slice(0, 8).toUpperCase()} creado con éxito.\n\nSe ha generado el enlace de pago seguro de Stripe y se ha enviado por correo al cliente.\n\nAdemás, el enlace se ha copiado a tu portapapeles por si deseas enviarlo directamente por WhatsApp.`);
+                } catch (clipErr) {
+                    alert(`✅ Pedido #${order.id.slice(0, 8).toUpperCase()} creado con éxito.\n\nSe ha generado el enlace de pago seguro de Stripe y se ha enviado por correo al cliente.`);
+                }
+            }
         } catch (error) {
             alert('Error al crear pedido: ' + error.message);
         } finally {
             setIsCreating(false);
+        }
+    }
+
+    async function handleGenerateOrCopyPaymentLink(order) {
+        if (!order) return;
+        const paymentMeta = parseOrderPaymentMeta(order);
+        if (paymentMeta?.url) {
+            try {
+                await navigator.clipboard.writeText(paymentMeta.url);
+                setCopiedPaymentOrderId(order.id);
+                setTimeout(() => setCopiedPaymentOrderId(null), 3000);
+            } catch (e) {
+                prompt('Copia este enlace de pago:', paymentMeta.url);
+            }
+            return;
+        }
+
+        try {
+            setIsGeneratingPaymentLink(true);
+            const res = await fetch('/api/create-payment-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'create-checkout-session',
+                    orderId: order.id
+                })
+            });
+            const data = await res.json();
+            if (data.url) {
+                try {
+                    await navigator.clipboard.writeText(data.url);
+                    setCopiedPaymentOrderId(order.id);
+                    setTimeout(() => setCopiedPaymentOrderId(null), 3000);
+                } catch (e) {
+                    prompt('Enlace de pago generado con éxito. Cópialo aquí:', data.url);
+                }
+                const { data: refreshedOrder } = await supabase.from('orders').select('*').eq('id', order.id).maybeSingle();
+                if (refreshedOrder) {
+                    setSelectedOrder(refreshedOrder);
+                    setOrders(prev => prev.map(o => o.id === order.id ? refreshedOrder : o));
+                }
+            } else {
+                alert(data.error || 'No se pudo generar el enlace de pago de Stripe.');
+            }
+        } catch (err) {
+            console.error('Error generating payment link:', err);
+            alert('Error al generar enlace de pago: ' + err.message);
+        } finally {
+            setIsGeneratingPaymentLink(false);
+        }
+    }
+
+    async function handleCheckPaymentStatus(order) {
+        if (!order) return;
+        try {
+            setIsCheckingPayment(true);
+            const res = await fetch('/api/create-payment-intent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'check-payment-status',
+                    orderId: order.id
+                })
+            });
+            const data = await res.json();
+            if (data.isPaid) {
+                alert('¡El pedido ya figura como PAGADO en Stripe! El estado se ha actualizado automáticamente.');
+                const { data: refreshedOrder } = await supabase.from('orders').select('*').eq('id', order.id).maybeSingle();
+                if (refreshedOrder) {
+                    setSelectedOrder(refreshedOrder);
+                    setOrders(prev => prev.map(o => o.id === order.id ? refreshedOrder : o));
+                }
+            } else {
+                alert('El pago todavía no se ha completado en Stripe.');
+            }
+        } catch (err) {
+            console.error('Error checking payment:', err);
+            alert('Error al consultar estado en Stripe: ' + err.message);
+        } finally {
+            setIsCheckingPayment(false);
         }
     }
 
@@ -1574,6 +1708,23 @@ export default function OrdersList() {
                                         <div className="flex items-center gap-2">
                                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
                                             <span className="text-[9px] font-black text-gray-400 uppercase italic tracking-widest font-outfit">{formatPaymentMethod(order.payment_method)}</span>
+                                            {order.status !== 'PAID' && order.payment_status !== 'PAID' && order.status !== 'CANCELLED' && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleGenerateOrCopyPaymentLink(order);
+                                                    }}
+                                                    title={copiedPaymentOrderId === order.id ? '¡Copiado!' : 'Copiar enlace de pago Stripe'}
+                                                    className="p-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 transition-colors flex items-center justify-center"
+                                                >
+                                                    {copiedPaymentOrderId === order.id ? (
+                                                        <Check className="w-3 h-3 text-emerald-600" />
+                                                    ) : (
+                                                        <Copy className="w-3 h-3" />
+                                                    )}
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-7">
@@ -2205,9 +2356,75 @@ export default function OrdersList() {
                                             </div>
                                             <h3 className="font-black text-sm text-brand-carbon uppercase italic tracking-tight font-outfit">Transacción</h3>
                                         </div>
-                                        <div className="bg-brand-carbon p-8 rounded-[2rem] text-white shadow- luxury">
-                                            <p className="text-[10px] font-black text-primary uppercase italic mb-1.5 font-outfit tracking-widest">{formatPaymentMethod(selectedOrder.payment_method)}</p>
-                                            <p className="text-[9px] font-bold text-white/40 uppercase tracking-[.3em] font-outfit">ID: {selectedOrder.payment_id || 'PROCESO_MANUAL'}</p>
+                                        <div className="bg-brand-carbon p-8 rounded-[2rem] text-white shadow-luxury space-y-4">
+                                            <div>
+                                                <p className="text-[10px] font-black text-primary uppercase italic mb-1.5 font-outfit tracking-widest">{formatPaymentMethod(selectedOrder.payment_method)}</p>
+                                                <p className="text-[9px] font-bold text-white/40 uppercase tracking-[.3em] font-outfit">ID: {selectedOrder.payment_id || 'PROCESO_MANUAL'}</p>
+                                            </div>
+
+                                            {/* Pasarela y enlace Stripe para pedidos pendientes */}
+                                            {selectedOrder.status !== 'PAID' && selectedOrder.payment_status !== 'PAID' && selectedOrder.status !== 'CANCELLED' && (
+                                                <div className="pt-4 border-t border-white/10 space-y-3">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[9px] font-black uppercase text-amber-400 tracking-wider">Pasarela Online Stripe</span>
+                                                        <span className="text-[9px] font-bold text-amber-400/80">Pendiente de cobro</span>
+                                                    </div>
+
+                                                    <div className="flex flex-col gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleGenerateOrCopyPaymentLink(selectedOrder)}
+                                                            disabled={isGeneratingPaymentLink}
+                                                            className="w-full py-3 px-4 bg-primary hover:bg-primary/90 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 shadow-sm disabled:opacity-50"
+                                                        >
+                                                            {isGeneratingPaymentLink ? (
+                                                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                            ) : copiedPaymentOrderId === selectedOrder.id ? (
+                                                                <Check className="w-3.5 h-3.5 text-white" />
+                                                            ) : (
+                                                                <Copy className="w-3.5 h-3.5" />
+                                                            )}
+                                                            {copiedPaymentOrderId === selectedOrder.id
+                                                                ? '¡Enlace Copiado al Portapapeles!'
+                                                                : parseOrderPaymentMeta(selectedOrder)?.url
+                                                                ? 'Copiar Enlace de Pago'
+                                                                : 'Generar Enlace de Pago'}
+                                                        </button>
+
+                                                        {parseOrderPaymentMeta(selectedOrder)?.url && (
+                                                            <a
+                                                                href={parseOrderPaymentMeta(selectedOrder).url}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="w-full py-2.5 px-4 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 text-center"
+                                                            >
+                                                                <ExternalLink className="w-3.5 h-3.5" /> Abrir Pasarela de Pago
+                                                            </a>
+                                                        )}
+
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCheckPaymentStatus(selectedOrder)}
+                                                            disabled={isCheckingPayment}
+                                                            className="w-full py-2.5 px-4 bg-transparent hover:bg-white/5 border border-white/20 text-white/70 hover:text-white rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                                                        >
+                                                            {isCheckingPayment ? (
+                                                                <Loader2 className="w-3 h-3 animate-spin" />
+                                                            ) : (
+                                                                <RefreshCw className="w-3 h-3" />
+                                                            )}
+                                                            Comprobar si ya está Pagado
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {(selectedOrder.status === 'PAID' || selectedOrder.payment_status === 'PAID') && (
+                                                <div className="pt-3 border-t border-white/10 flex items-center gap-2 text-emerald-400">
+                                                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider">Pago confirmado con éxito</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </section>
                                 </div>
