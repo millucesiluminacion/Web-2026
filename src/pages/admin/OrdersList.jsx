@@ -1029,11 +1029,27 @@ export default function OrdersList() {
         }
     }
 
+    async function deleteStorageInvoiceFile(invoiceUrl) {
+        if (!invoiceUrl) return;
+        try {
+            const marker = '/storage/v1/object/public/images/';
+            const idx = invoiceUrl.indexOf(marker);
+            if (idx === -1) return;
+            const storagePath = decodeURIComponent(invoiceUrl.slice(idx + marker.length).split('?')[0]);
+            if (storagePath && storagePath.startsWith('invoices/')) {
+                await supabase.storage.from('images').remove([storagePath]);
+            }
+        } catch (err) {
+            console.warn('No se pudo eliminar el archivo antiguo del storage:', err);
+        }
+    }
+
     async function handleUploadOfficialInvoice(file, targetOrder = selectedOrder) {
         if (!file || !targetOrder) return;
         if (file.size > 15 * 1024 * 1024) {
             return alert('El archivo PDF no debe superar los 15 MB.');
         }
+        const { officialInvoice: previousInvoice } = parseOrderInvoiceMeta(targetOrder);
         setIsUploadingOfficialInvoice(true);
         setUploadingOrderId(targetOrder.id);
         try {
@@ -1048,7 +1064,7 @@ export default function OrdersList() {
                 .from('images')
                 .getPublicUrl(filePath);
 
-            const customNotes = selectedOrder?.id === targetOrder.id ? adminNotes : undefined;
+            const customNotes = selectedOrder?.id === targetOrder.id ? adminNotes : null;
             const { updatedAdminNotes } = await saveOfficialInvoiceMeta(
                 supabase,
                 targetOrder,
@@ -1060,12 +1076,18 @@ export default function OrdersList() {
                 customNotes
             );
 
+            if (previousInvoice?.url && previousInvoice.url !== publicUrl) {
+                await deleteStorageInvoiceFile(previousInvoice.url);
+            }
+
             const updated = { ...targetOrder, admin_notes: updatedAdminNotes };
             setOrders(prev => prev.map(o => o.id === targetOrder.id ? updated : o));
             if (selectedOrder?.id === targetOrder.id) {
                 setSelectedOrder(updated);
             }
-            alert('✅ Factura Oficial (TPV) adjuntada al pedido. El cliente ya puede descargarla desde su perfil.');
+            alert(previousInvoice?.url
+                ? '✅ Factura Oficial (TPV) reemplazada correctamente.'
+                : '✅ Factura Oficial (TPV) adjuntada al pedido. El cliente ya puede descargarla desde su perfil.');
         } catch (err) {
             console.error('Error uploading official invoice:', err);
             alert('Error al subir la factura oficial: ' + err.message);
@@ -1095,14 +1117,22 @@ export default function OrdersList() {
         }
     }
 
-    async function handleRemoveOfficialInvoice() {
-        if (!selectedOrder) return;
-        if (!window.confirm('¿Seguro que deseas desvincular el PDF de factura oficial de este pedido?')) return;
+    async function handleRemoveOfficialInvoice(targetOrder = selectedOrder) {
+        const orderObj = (targetOrder && targetOrder.id) ? targetOrder : selectedOrder;
+        if (!orderObj) return;
+        if (!window.confirm('¿Seguro que deseas eliminar el PDF de factura oficial de este pedido?')) return;
         try {
-            const { updatedAdminNotes } = await saveOfficialInvoiceMeta(supabase, selectedOrder, null, adminNotes);
-            const updated = { ...selectedOrder, admin_notes: updatedAdminNotes };
-            setOrders(orders.map(o => o.id === selectedOrder.id ? updated : o));
-            setSelectedOrder(updated);
+            const { officialInvoice: previousInvoice } = parseOrderInvoiceMeta(orderObj);
+            const customNotes = selectedOrder?.id === orderObj.id ? adminNotes : null;
+            const { updatedAdminNotes } = await saveOfficialInvoiceMeta(supabase, orderObj, null, customNotes);
+            if (previousInvoice?.url) {
+                await deleteStorageInvoiceFile(previousInvoice.url);
+            }
+            const updated = { ...orderObj, admin_notes: updatedAdminNotes };
+            setOrders(prev => prev.map(o => o.id === orderObj.id ? updated : o));
+            if (selectedOrder?.id === orderObj.id) {
+                setSelectedOrder(updated);
+            }
         } catch (err) {
             alert('Error al eliminar factura adjunta: ' + err.message);
         }
@@ -1758,15 +1788,45 @@ export default function OrdersList() {
                                                         </button>
 
                                                         {officialInvoice?.url ? (
-                                                            <a
-                                                                href={officialInvoice.url}
-                                                                target="_blank"
-                                                                rel="noreferrer"
-                                                                title="Ver Factura Oficial TPV (PDF)"
-                                                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[8px] font-black uppercase tracking-wider transition-all shadow-sm"
-                                                            >
-                                                                <ExternalLink className="w-2.5 h-2.5" /> Ver TPV
-                                                            </a>
+                                                            <>
+                                                                <a
+                                                                    href={officialInvoice.url}
+                                                                    target="_blank"
+                                                                    rel="noreferrer"
+                                                                    title={`Ver Factura Oficial TPV (${officialInvoice.filename || 'PDF'})`}
+                                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[8px] font-black uppercase tracking-wider transition-all shadow-sm"
+                                                                >
+                                                                    <ExternalLink className="w-2.5 h-2.5" /> Ver TPV
+                                                                </a>
+                                                                <label
+                                                                    title="Cambiar / Reemplazar Factura Oficial TPV (PDF)"
+                                                                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[8px] font-black uppercase tracking-wider transition-all cursor-pointer ${isUploadingThis ? 'opacity-50 pointer-events-none' : ''}`}
+                                                                >
+                                                                    {isUploadingThis ? (
+                                                                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                                                    ) : (
+                                                                        <><RefreshCw className="w-2.5 h-2.5" /> Cambiar</>
+                                                                    )}
+                                                                    <input
+                                                                        type="file"
+                                                                        accept="application/pdf"
+                                                                        className="hidden"
+                                                                        onChange={(e) => {
+                                                                            const file = e.target.files?.[0];
+                                                                            if (file) handleUploadOfficialInvoice(file, order);
+                                                                            e.target.value = '';
+                                                                        }}
+                                                                    />
+                                                                </label>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleRemoveOfficialInvoice(order)}
+                                                                    title="Eliminar Factura Oficial TPV adjunta"
+                                                                    className="inline-flex items-center justify-center p-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-all"
+                                                                >
+                                                                    <Trash2 className="w-2.5 h-2.5" />
+                                                                </button>
+                                                            </>
                                                         ) : (
                                                             <label
                                                                 title="Subir Factura Oficial emitida en TPV (PDF)"
@@ -2138,20 +2198,39 @@ export default function OrdersList() {
                                                                         </span>
                                                                         <button
                                                                             type="button"
-                                                                            onClick={handleRemoveOfficialInvoice}
-                                                                            className="text-[9px] font-black text-red-500 hover:text-red-700 uppercase tracking-wider shrink-0"
+                                                                            onClick={() => handleRemoveOfficialInvoice(selectedOrder)}
+                                                                            className="inline-flex items-center gap-1 text-[9px] font-black text-red-500 hover:text-red-700 uppercase tracking-wider shrink-0"
                                                                         >
-                                                                            Quitar
+                                                                            <Trash2 className="w-3 h-3" /> Borrar
                                                                         </button>
                                                                     </div>
-                                                                    <a
-                                                                        href={officialInvoice.url}
-                                                                        target="_blank"
-                                                                        rel="noreferrer"
-                                                                        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black uppercase text-[9px] tracking-widest transition-all flex items-center justify-center gap-1.5"
-                                                                    >
-                                                                        <ExternalLink className="w-3 h-3" /> Ver Factura TPV Subida
-                                                                    </a>
+                                                                    <div className="grid grid-cols-2 gap-2">
+                                                                        <a
+                                                                            href={officialInvoice.url}
+                                                                            target="_blank"
+                                                                            rel="noreferrer"
+                                                                            className="py-2 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black uppercase text-[9px] tracking-widest transition-all flex items-center justify-center gap-1.5"
+                                                                        >
+                                                                            <ExternalLink className="w-3 h-3" /> Ver PDF
+                                                                        </a>
+                                                                        <label className={`py-2 px-3 bg-white hover:bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg font-black uppercase text-[9px] tracking-widest transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isUploadingOfficialInvoice ? 'opacity-50 pointer-events-none' : ''}`}>
+                                                                            {isUploadingOfficialInvoice ? (
+                                                                                <><Loader2 className="w-3 h-3 animate-spin" /> Subiendo...</>
+                                                                            ) : (
+                                                                                <><RefreshCw className="w-3 h-3" /> Cambiar PDF</>
+                                                                            )}
+                                                                            <input
+                                                                                type="file"
+                                                                                accept="application/pdf"
+                                                                                className="hidden"
+                                                                                onChange={(e) => {
+                                                                                    const file = e.target.files?.[0];
+                                                                                    if (file) handleUploadOfficialInvoice(file, selectedOrder);
+                                                                                    e.target.value = '';
+                                                                                }}
+                                                                            />
+                                                                        </label>
+                                                                    </div>
                                                                 </div>
                                                             ) : (
                                                                 <label className={`w-full py-3 px-4 rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50 text-indigo-700 font-black uppercase text-[10px] tracking-widest transition-all flex items-center justify-center gap-2 cursor-pointer ${isUploadingOfficialInvoice ? 'opacity-50 pointer-events-none' : ''}`}>
